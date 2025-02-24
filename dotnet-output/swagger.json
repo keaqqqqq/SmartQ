@@ -1,0 +1,95 @@
+{
+  "openapi" : "3.0.0",
+  "info" : {
+    "version" : "1.0.0",
+    "title" : "Reservation API",
+    "description" : "API for managing restaurant reservations"
+  },
+  "servers" : [ {
+    "url" : "http://localhost:5050/v1",
+    "description" : "Local Development Server"
+  } ],
+  "paths" : {
+    "/reservations" : {
+      "post" : {
+        "summary" : "Create a new reservation",
+        "tags" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "Reservation created successfully",
+            "headers" : { }
+          },
+          "400" : {
+            "description" : "Bad request, invalid data"
+          }
+        },
+        "operationId" : "reservation_id",
+        "description" : "Allow customers to book tables for specific time slots",
+        "parameters" : [ {
+          "schema" : {
+            "type" : "string"
+          },
+          "in" : "header",
+          "name" : "Reservation"
+        } ],
+        "requestBody" : {
+          "content" : { },
+          "description" : ""
+        }
+      }
+    }
+  },
+  "components" : {
+    "requestBodies" : {
+      "Reservation" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "type" : "object",
+              "properties" : {
+                "name" : {
+                  "type" : "string",
+                  "x-stoplight" : {
+                    "id" : "qdtqdsuid1qcc"
+                  }
+                },
+                "contact_number" : {
+                  "type" : "string",
+                  "x-stoplight" : {
+                    "id" : "m40cbndaua726"
+                  }
+                },
+                "number_of_guests" : {
+                  "type" : "integer",
+                  "x-stoplight" : {
+                    "id" : "d0wi0iftecqb0"
+                  }
+                },
+                "date" : {
+                  "type" : "string",
+                  "x-stoplight" : {
+                    "id" : "ba4loo6dv9quf"
+                  },
+                  "format" : "date"
+                },
+                "time" : {
+                  "type" : "string",
+                  "x-stoplight" : {
+                    "id" : "1kttc8xmgmwlw"
+                  },
+                  "format" : "time"
+                },
+                "" : {
+                  "type" : "string",
+                  "x-stoplight" : {
+                    "id" : "r4h0q1u42ri9t"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
