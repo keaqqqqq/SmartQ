@@ -1,0 +1,549 @@
+import React, { useState } from 'react';
+
+const QueueManagement = () => {
+  // Sample data for the outlet
+  const outlet = {
+    id: "outlet-123",
+    name: "Ocean View Restaurant - Downtown",
+    location: "123 Main Street, Downtown",
+    currentCapacity: 85,
+    maxCapacity: 120
+  };
+
+  // Sample queue data
+  const initialQueue = [
+    {
+      id: "queue-123",
+      outletId: "outlet-123",
+      customerName: "John Smith",
+      customerPhone: "+1234567890",
+      guestCount: 4,
+      joinedAt: "2025-03-15T18:15:00Z",
+      position: 1,
+      estimatedWaitTime: 10,
+      status: "ready",
+      specialRequests: "Table near window",
+      lastNotified: "2025-03-15T18:40:00Z"
+    },
+    {
+      id: "queue-124",
+      outletId: "outlet-123",
+      customerName: "Emily Johnson",
+      customerPhone: "+1234567891",
+      guestCount: 2,
+      joinedAt: "2025-03-15T18:20:00Z",
+      position: 2,
+      estimatedWaitTime: 15,
+      status: "waiting",
+      specialRequests: "",
+      lastNotified: null
+    },
+    {
+      id: "queue-125",
+      outletId: "outlet-123",
+      customerName: "Michael Brown",
+      customerPhone: "+1234567892",
+      guestCount: 6,
+      joinedAt: "2025-03-15T18:25:00Z",
+      position: 3,
+      estimatedWaitTime: 25,
+      status: "waiting",
+      specialRequests: "High chair needed",
+      lastNotified: null
+    },
+    {
+      id: "queue-126",
+      outletId: "outlet-123",
+      customerName: "Sarah Williams",
+      customerPhone: "+1234567893",
+      guestCount: 3,
+      joinedAt: "2025-03-15T18:30:00Z",
+      position: 4,
+      estimatedWaitTime: 30,
+      status: "waiting",
+      specialRequests: "",
+      lastNotified: null
+    },
+    {
+      id: "queue-127",
+      outletId: "outlet-123",
+      customerName: "Robert Davis",
+      customerPhone: "+1234567894",
+      guestCount: 5,
+      joinedAt: "2025-03-15T18:05:00Z",
+      position: null,
+      estimatedWaitTime: null,
+      status: "seated",
+      specialRequests: "Allergy to nuts",
+      lastNotified: "2025-03-15T18:35:00Z"
+    }
+  ];
+
+  // State
+  const [queue, setQueue] = useState(initialQueue);
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [currentEntry, setCurrentEntry] = useState(null);
+
+  // Filter queue entries
+  const filteredQueue = queue.filter(entry => {
+    const statusMatch = selectedStatus === "all" || entry.status === selectedStatus;
+    const searchMatch = searchTerm === "" || 
+      entry.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.customerPhone.includes(searchTerm);
+    
+    return statusMatch && searchMatch;
+  });
+
+  // Sort queue entries
+  const sortedQueue = [...filteredQueue].sort((a, b) => {
+    // Sort by status first (waiting and ready at top)
+    if ((a.status === "waiting" || a.status === "ready") && 
+        (b.status !== "waiting" && b.status !== "ready")) {
+      return -1;
+    }
+    if ((b.status === "waiting" || b.status === "ready") && 
+        (a.status !== "waiting" && a.status !== "ready")) {
+      return 1;
+    }
+    
+    // Then sort by position for waiting and ready
+    if ((a.status === "waiting" || a.status === "ready") && 
+        (b.status === "waiting" || b.status === "ready")) {
+      return a.position - b.position;
+    }
+    
+    // Finally sort by joined time for others
+    return new Date(a.joinedAt) - new Date(b.joinedAt);
+  });
+
+  // Call next customer
+  const handleCallNext = (entry) => {
+    const updatedQueue = queue.map(item => 
+      item.id === entry.id 
+        ? {...item, status: "ready", lastNotified: new Date().toISOString()} 
+        : item
+    );
+    setQueue(updatedQueue);
+    
+    // Show notification confirmation (in a real app would trigger a WhatsApp message)
+    alert(`${entry.customerName} has been called. A notification has been sent.`);
+  };
+
+  // Seat a customer
+  const handleSeatCustomer = (entry) => {
+    const updatedQueue = queue.map(item => 
+      item.id === entry.id 
+        ? {...item, status: "seated", position: null, estimatedWaitTime: null} 
+        : item
+    );
+    setQueue(updatedQueue);
+    
+    // Recalculate positions after removing someone
+    recalculatePositions();
+  };
+
+  // Mark as left
+  const handleMarkLeft = (entry) => {
+    const updatedQueue = queue.map(item => 
+      item.id === entry.id 
+        ? {...item, status: "left", position: null, estimatedWaitTime: null} 
+        : item
+    );
+    setQueue(updatedQueue);
+    
+    // Recalculate positions after removing someone
+    recalculatePositions();
+  };
+
+  // Remove from queue
+  const handleRemoveFromQueue = (entryId) => {
+    setQueue(queue.filter(item => item.id !== entryId));
+    
+    // Recalculate positions after removing someone
+    recalculatePositions();
+  };
+
+  // Recalculate queue positions
+  const recalculatePositions = () => {
+    const waitingAndReady = queue.filter(entry => 
+      entry.status === "waiting" || entry.status === "ready"
+    ).sort((a, b) => a.position - b.position);
+    
+    const updatedQueue = queue.map(entry => {
+      if (entry.status !== "waiting" && entry.status !== "ready") {
+        return entry;
+      }
+      
+      const newPosition = waitingAndReady.findIndex(e => e.id === entry.id) + 1;
+      const estimatedTime = newPosition * 10 + (entry.guestCount > 4 ? 5 : 0);
+      
+      return {
+        ...entry,
+        position: newPosition,
+        estimatedWaitTime: estimatedTime
+      };
+    });
+    
+    setQueue(updatedQueue);
+  };
+
+  // Format time ago
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date();
+    const date = new Date(timestamp);
+    const diffMs = now - date;
+    const diffMins = Math.round(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins === 1) return '1 minute ago';
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    
+    return date.toLocaleDateString();
+  };
+
+  // Render status badge
+  const renderStatusBadge = (status) => {
+    const statusColors = {
+      waiting: "bg-yellow-100 text-yellow-800",
+      ready: "bg-green-100 text-green-800",
+      seated: "bg-blue-100 text-blue-800",
+      left: "bg-gray-100 text-gray-800"
+    };
+    
+    return (
+      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[status] || "bg-gray-100 text-gray-800"}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">{outlet.name} - Queue Management</h1>
+            <p className="text-gray-600">{outlet.location}</p>
+            <div className="mt-2 bg-blue-50 border border-blue-200 rounded-md p-2">
+              <p className="text-sm text-blue-700">
+                Current capacity: {outlet.currentCapacity}/{outlet.maxCapacity} ({Math.round((outlet.currentCapacity/outlet.maxCapacity)*100)}%)
+              </p>
+            </div>
+          </div>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={() => setShowAddModal(true)}
+          >
+            Add to Queue
+          </button>
+        </div>
+        
+        {/* Queue Statistics */}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Total in Queue</h2>
+              <p className="text-3xl font-bold text-blue-600">
+                {queue.filter(e => e.status === "waiting" || e.status === "ready").length}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Ready to Seat</h2>
+              <p className="text-3xl font-bold text-green-600">
+                {queue.filter(e => e.status === "ready").length}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Average Wait Time</h2>
+              <p className="text-3xl font-bold text-indigo-600">
+                {Math.round(queue
+                  .filter(e => e.status === "waiting" || e.status === "ready")
+                  .reduce((sum, entry) => sum + (entry.estimatedWaitTime || 0), 0) / 
+                  Math.max(1, queue.filter(e => e.status === "waiting" || e.status === "ready").length)
+                )} min
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Seated Today</h2>
+              <p className="text-3xl font-bold text-purple-600">
+                {queue.filter(e => e.status === "seated").length}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Filters */}
+        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="all">All Statuses</option>
+                <option value="waiting">Waiting</option>
+                <option value="ready">Ready</option>
+                <option value="seated">Seated</option>
+                <option value="left">Left</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name or phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Queue Table */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Position
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Customer
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Party
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Wait Time
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {sortedQueue.map((entry) => (
+                <tr key={entry.id} className={entry.status === "ready" ? "bg-green-50" : ""}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {entry.position ? (
+                      <div className="text-sm font-bold text-gray-900">#{entry.position}</div>
+                    ) : (
+                      <div className="text-sm text-gray-500">-</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{entry.customerName}</div>
+                    <div className="text-sm text-gray-500">{entry.customerPhone}</div>
+                    {entry.specialRequests && (
+                      <div className="text-xs text-gray-500 italic mt-1">Note: {entry.specialRequests}</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {entry.guestCount} {entry.guestCount === 1 ? 'person' : 'people'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {entry.estimatedWaitTime ? (
+                      <div className="text-sm font-medium text-gray-900">
+                        {entry.estimatedWaitTime} min
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">-</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatTimeAgo(entry.joinedAt)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {renderStatusBadge(entry.status)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    {entry.status === "waiting" && (
+                      <>
+                        <button 
+                          className="text-green-600 hover:text-green-900 mr-3"
+                          onClick={() => handleCallNext(entry)}
+                        >
+                          Call
+                        </button>
+                        <button 
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          onClick={() => {
+                            setCurrentEntry(entry);
+                            setShowEditModal(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          className="text-red-600 hover:text-red-900"
+                          onClick={() => handleMarkLeft(entry)}
+                        >
+                          Left
+                        </button>
+                      </>
+                    )}
+                    
+                    {entry.status === "ready" && (
+                      <>
+                        <button 
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          onClick={() => handleSeatCustomer(entry)}
+                        >
+                          Seat
+                        </button>
+                        <button 
+                          className="text-orange-600 hover:text-orange-900 mr-3"
+                          onClick={() => {
+                            setCurrentEntry(entry);
+                            setShowNotifyModal(true);
+                          }}
+                        >
+                          Notify
+                        </button>
+                        <button 
+                          className="text-red-600 hover:text-red-900"
+                          onClick={() => handleMarkLeft(entry)}
+                        >
+                          Left
+                        </button>
+                      </>
+                    )}
+                    
+                    {(entry.status === "seated" || entry.status === "left") && (
+                      <button 
+                        className="text-gray-600 hover:text-gray-900"
+                        onClick={() => handleRemoveFromQueue(entry.id)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {sortedQueue.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                    No customers found in the queue.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Modal placeholders - in a real implementation these would be complete forms */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">Add Customer to Queue</h2>
+              <p className="mb-4">Form would contain fields for customer name, phone, party size, and special requests</p>
+              <div className="flex justify-end">
+                <button 
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                  onClick={() => setShowAddModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    // In a real app would call handleAddCustomer with form data
+                  }}
+                >
+                  Add to Queue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {showEditModal && currentEntry && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">Edit Queue Entry</h2>
+              <p className="mb-4">Form to edit {currentEntry.customerName}'s information</p>
+              <div className="flex justify-end">
+                <button 
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setCurrentEntry(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setCurrentEntry(null);
+                  }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {showNotifyModal && currentEntry && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">Send Notification</h2>
+              <p className="mb-4">Form to send a notification to {currentEntry.customerName}</p>
+              <div className="flex justify-end">
+                <button 
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                  onClick={() => {
+                    setShowNotifyModal(false);
+                    setCurrentEntry(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  onClick={() => {
+                    alert(`Notification sent to ${currentEntry.customerName}`);
+                    setShowNotifyModal(false);
+                    setCurrentEntry(null);
+                  }}
+                >
+                  Send Notification
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default QueueManagement;
