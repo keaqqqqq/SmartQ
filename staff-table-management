@@ -1,0 +1,619 @@
+import React from 'react';
+
+function TableManagement() {
+  // Sample outlet data
+  const outlet = {
+    id: "outlet-123",
+    name: "Ocean View Restaurant - Downtown",
+    location: "123 Main Street, Downtown"
+  };
+  
+  // Sample table data
+  const [tables, setTables] = React.useState([
+    {
+      id: "T1",
+      outletId: "outlet-123",
+      tableNumber: "T1",
+      section: "Main Floor",
+      seatingCapacity: 2,
+      status: "available",
+      reservationId: null,
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T17:00:00Z",
+      notes: null
+    },
+    {
+      id: "T2",
+      outletId: "outlet-123",
+      tableNumber: "T2",
+      section: "Main Floor",
+      seatingCapacity: 2,
+      status: "occupied",
+      reservationId: null,
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T18:15:00Z",
+      notes: "Walk-in customers"
+    },
+    {
+      id: "T3",
+      outletId: "outlet-123",
+      tableNumber: "T3",
+      section: "Main Floor",
+      seatingCapacity: 4,
+      status: "reserved",
+      reservationId: "res-456",
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T12:00:00Z",
+      notes: "Reservation at 7:30 PM"
+    },
+    {
+      id: "T4",
+      outletId: "outlet-123",
+      tableNumber: "T4",
+      section: "Window",
+      seatingCapacity: 4,
+      status: "cleaning",
+      reservationId: null,
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T18:45:00Z",
+      notes: null
+    },
+    {
+      id: "T5",
+      outletId: "outlet-123",
+      tableNumber: "T5",
+      section: "Window",
+      seatingCapacity: 4,
+      status: "available",
+      reservationId: null,
+      combinedWith: ["T6"],
+      temporaryGroupName: "T5+T6",
+      lastStatusChange: "2025-03-15T17:30:00Z",
+      notes: null
+    },
+    {
+      id: "T6",
+      outletId: "outlet-123",
+      tableNumber: "T6",
+      section: "Window",
+      seatingCapacity: 4,
+      status: "available",
+      reservationId: null,
+      combinedWith: ["T5"],
+      temporaryGroupName: "T5+T6",
+      lastStatusChange: "2025-03-15T17:30:00Z",
+      notes: null
+    },
+    {
+      id: "T7",
+      outletId: "outlet-123",
+      tableNumber: "T7",
+      section: "Patio",
+      seatingCapacity: 6,
+      status: "occupied",
+      reservationId: "res-789",
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T18:30:00Z",
+      notes: null
+    },
+    {
+      id: "T8",
+      outletId: "outlet-123",
+      tableNumber: "T8",
+      section: "Patio",
+      seatingCapacity: 6,
+      status: "maintenance",
+      reservationId: null,
+      combinedWith: [],
+      temporaryGroupName: null,
+      lastStatusChange: "2025-03-15T16:00:00Z",
+      notes: "Broken chair"
+    }
+  ]);
+  
+  // State
+  const [activeSection, setActiveSection] = React.useState('all');
+  const [activeStatus, setActiveStatus] = React.useState('all');
+  const [selectedTables, setSelectedTables] = React.useState([]);
+  const [showStatusModal, setShowStatusModal] = React.useState(false);
+  const [currentTable, setCurrentTable] = React.useState(null);
+  const [showCombineModal, setShowCombineModal] = React.useState(false);
+  
+  // Get unique sections
+  const sections = ['all', ...new Set(tables.map(table => table.section))];
+  
+  // Filter tables
+  const filteredTables = tables.filter(table => {
+    const sectionMatch = activeSection === 'all' || table.section === activeSection;
+    const statusMatch = activeStatus === 'all' || table.status === activeStatus;
+    return sectionMatch && statusMatch;
+  });
+  
+  // Group tables by section
+  const tablesBySection = {};
+  filteredTables.forEach(table => {
+    if (!tablesBySection[table.section]) {
+      tablesBySection[table.section] = [];
+    }
+    tablesBySection[table.section].push(table);
+  });
+  
+  // Count tables by status
+  const tableCounts = {
+    total: tables.length,
+    available: tables.filter(t => t.status === 'available').length,
+    occupied: tables.filter(t => t.status === 'occupied').length,
+    reserved: tables.filter(t => t.status === 'reserved').length,
+    maintenance: tables.filter(t => t.status === 'maintenance' || t.status === 'cleaning').length
+  };
+  
+  // Toggle table selection
+  const toggleTableSelection = (tableId) => {
+    if (selectedTables.includes(tableId)) {
+      setSelectedTables(selectedTables.filter(id => id !== tableId));
+    } else {
+      setSelectedTables([...selectedTables, tableId]);
+    }
+  };
+  
+  // Clear all selections
+  const clearSelection = () => {
+    setSelectedTables([]);
+  };
+  
+  // Update table status
+  const updateTableStatus = (table, newStatus) => {
+    // In a real app, this would call your API
+    setTables(tables.map(t => 
+      t.id === table.id ? 
+        {...t, status: newStatus, lastStatusChange: new Date().toISOString()} : 
+        t
+    ));
+  };
+  
+  // Combine tables
+  const combineTables = () => {
+    if (selectedTables.length < 2) return;
+    
+    // In a real app, this would call your API
+    const groupName = selectedTables.sort().join('+');
+    
+    const updatedTables = tables.map(table => {
+      if (selectedTables.includes(table.id)) {
+        return {
+          ...table,
+          combinedWith: selectedTables.filter(id => id !== table.id),
+          temporaryGroupName: groupName,
+          lastStatusChange: new Date().toISOString()
+        };
+      }
+      return table;
+    });
+    
+    setTables(updatedTables);
+    setSelectedTables([]);
+    setShowCombineModal(false);
+  };
+  
+  // Separate tables
+  const separateTables = () => {
+    // In a real app, this would call your API
+    const tablesToSeparate = new Set();
+    
+    // Find all tables that need to be separated (including combined ones)
+    selectedTables.forEach(id => {
+      tablesToSeparate.add(id);
+      const table = tables.find(t => t.id === id);
+      if (table && table.combinedWith.length > 0) {
+        table.combinedWith.forEach(combinedId => tablesToSeparate.add(combinedId));
+      }
+    });
+    
+    // Update tables
+    setTables(tables.map(table => {
+      if (tablesToSeparate.has(table.id)) {
+        return {
+          ...table,
+          combinedWith: [],
+          temporaryGroupName: null,
+          lastStatusChange: new Date().toISOString()
+        };
+      }
+      return table;
+    }));
+    
+    setSelectedTables([]);
+  };
+  
+  // Get appropriate color for table status
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'available': return 'bg-green-100 border-green-500';
+      case 'occupied': return 'bg-red-100 border-red-500';
+      case 'reserved': return 'bg-blue-100 border-blue-500';
+      case 'cleaning': return 'bg-yellow-100 border-yellow-500';
+      case 'maintenance': return 'bg-gray-100 border-gray-500';
+      default: return 'bg-white border-gray-300';
+    }
+  };
+  
+  // Format time
+  const formatTime = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  // Render status badge
+  const renderStatusBadge = (status) => {
+    const statusColors = {
+      available: "bg-green-100 text-green-800",
+      occupied: "bg-red-100 text-red-800",
+      reserved: "bg-blue-100 text-blue-800",
+      cleaning: "bg-yellow-100 text-yellow-800",
+      maintenance: "bg-gray-100 text-gray-800"
+    };
+    
+    return (
+      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[status] || "bg-gray-100 text-gray-800"}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+  
+  // Show status change modal
+  const showChangeStatus = (table) => {
+    setCurrentTable(table);
+    setShowStatusModal(true);
+  };
+  
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">{outlet.name} - Table Management</h1>
+            <p className="text-gray-600">{outlet.location}</p>
+          </div>
+          
+          {/* Action buttons */}
+          <div className="space-x-2">
+            {selectedTables.length > 0 && (
+              <>
+                <button
+                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                  onClick={clearSelection}
+                >
+                  Clear Selection ({selectedTables.length})
+                </button>
+                
+                {selectedTables.length >= 2 && (
+                  <button
+                    className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    onClick={() => setShowCombineModal(true)}
+                  >
+                    Combine Tables
+                  </button>
+                )}
+                
+                {selectedTables.some(id => {
+                  const table = tables.find(t => t.id === id);
+                  return table && table.combinedWith.length > 0;
+                }) && (
+                  <button
+                    className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                    onClick={separateTables}
+                  >
+                    Separate Tables
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        
+        {/* Table status summary */}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Total Tables</h2>
+              <p className="text-3xl font-bold text-gray-900">{tableCounts.total}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Available</h2>
+              <p className="text-3xl font-bold text-green-600">{tableCounts.available}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Occupied</h2>
+              <p className="text-3xl font-bold text-red-600">{tableCounts.occupied}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Reserved</h2>
+              <p className="text-3xl font-bold text-blue-600">{tableCounts.reserved}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-2">Maintenance</h2>
+              <p className="text-3xl font-bold text-gray-600">{tableCounts.maintenance}</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Filters */}
+        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+              <select
+                value={activeSection}
+                onChange={(e) => setActiveSection(e.target.value)}
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                {sections.map(section => (
+                  <option key={section} value={section}>
+                    {section === 'all' ? 'All Sections' : section}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={activeStatus}
+                onChange={(e) => setActiveStatus(e.target.value)}
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="all">All Statuses</option>
+                <option value="available">Available</option>
+                <option value="occupied">Occupied</option>
+                <option value="reserved">Reserved</option>
+                <option value="cleaning">Cleaning</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        {/* Table layout - Grid view */}
+        <div className="mb-6">
+          {Object.keys(tablesBySection).map(section => (
+            <div key={section} className="mb-8">
+              <h2 className="text-xl font-medium text-gray-900 mb-4">{section}</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {tablesBySection[section].map(table => {
+                  // Determine if this is a combined table
+                  const isCombined = table.combinedWith && table.combinedWith.length > 0;
+                  const isFirstInGroup = isCombined && 
+                    !table.combinedWith.some(id => id < table.id);
+                  
+                  // Skip rendering tables that are part of a combined group but not the primary one
+                  if (isCombined && !isFirstInGroup && !selectedTables.includes(table.id)) {
+                    return null;
+                  }
+                  
+                  // Calculate total seating capacity for combined tables
+                  let totalCapacity = table.seatingCapacity;
+                  if (isCombined) {
+                    table.combinedWith.forEach(id => {
+                      const combinedTable = tables.find(t => t.id === id);
+                      if (combinedTable) {
+                        totalCapacity += combinedTable.seatingCapacity;
+                      }
+                    });
+                  }
+                  
+                  return (
+                    <div 
+                      key={table.id}
+                      className={`
+                        relative p-4 border-2 rounded-lg cursor-pointer
+                        ${getStatusColor(table.status)}
+                        ${selectedTables.includes(table.id) ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
+                        ${isCombined ? 'col-span-2' : ''}
+                      `}
+                      onClick={() => toggleTableSelection(table.id)}
+                      onDoubleClick={() => showChangeStatus(table)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="text-lg font-bold">
+                            {table.temporaryGroupName || table.tableNumber}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {totalCapacity} {totalCapacity === 1 ? 'seat' : 'seats'}
+                          </div>
+                        </div>
+                        {renderStatusBadge(table.status)}
+                      </div>
+                      {table.notes && (
+                        <div className="mt-2 text-xs text-gray-500">{table.notes}</div>
+                      )}
+                      {table.reservationId && (
+                        <div className="mt-1 text-xs text-blue-600">Reservation #{table.reservationId}</div>
+                      )}
+                      <div className="mt-2 text-xs text-gray-400">
+                        Last updated: {formatTime(table.lastStatusChange)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Table List */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <input 
+                    type="checkbox" 
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    checked={selectedTables.length === filteredTables.length && filteredTables.length > 0}
+                    onChange={() => {
+                      if (selectedTables.length === filteredTables.length) {
+                        setSelectedTables([]);
+                      } else {
+                        setSelectedTables(filteredTables.map(t => t.id));
+                      }
+                    }}
+                  />
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Table
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Section
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Capacity
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Notes
+                </th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredTables.map((table) => (
+                <tr key={table.id} className={selectedTables.includes(table.id) ? "bg-blue-50" : ""}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input 
+                      type="checkbox" 
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      checked={selectedTables.includes(table.id)}
+                      onChange={() => toggleTableSelection(table.id)}
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {table.temporaryGroupName || table.tableNumber}
+                    </div>
+                    {table.combinedWith.length > 0 && (
+                      <div className="text-xs text-gray-500">
+                        Combined with: {table.combinedWith.join(', ')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {table.section}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {table.seatingCapacity} {table.seatingCapacity === 1 ? 'seat' : 'seats'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {renderStatusBadge(table.status)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {table.notes || "-"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button 
+                      className="text-indigo-600 hover:text-indigo-900"
+                      onClick={() => showChangeStatus(table)}
+                    >
+                      Change Status
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Status change modal */}
+        {showStatusModal && currentTable && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">
+                Change Status for Table {currentTable.tableNumber}
+              </h2>
+              <div className="space-y-4 mb-4">
+                <button 
+                  className="w-full p-2 border rounded flex items-center bg-green-50 hover:bg-green-100"
+                  onClick={() => updateTableStatus(currentTable, 'available')}
+                >
+                  <div className="w-4 h-4 bg-green-500 rounded-full mr-2"></div>
+                  <span>Mark as Available</span>
+                </button>
+                <button 
+                  className="w-full p-2 border rounded flex items-center bg-red-50 hover:bg-red-100"
+                  onClick={() => updateTableStatus(currentTable, 'occupied')}
+                >
+                  <div className="w-4 h-4 bg-red-500 rounded-full mr-2"></div>
+                  <span>Mark as Occupied</span>
+                </button>
+                <button 
+                  className="w-full p-2 border rounded flex items-center bg-blue-50 hover:bg-blue-100"
+                  onClick={() => updateTableStatus(currentTable, 'reserved')}
+                >
+                  <div className="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
+                  <span>Mark as Reserved</span>
+                </button>
+                <button 
+                  className="w-full p-2 border rounded flex items-center bg-yellow-50 hover:bg-yellow-100"
+                  onClick={() => updateTableStatus(currentTable, 'cleaning')}
+                >
+                  <div className="w-4 h-4 bg-yellow-500 rounded-full mr-2"></div>
+                  <span>Mark as Cleaning</span>
+                </button>
+                <button 
+                  className="w-full p-2 border rounded flex items-center bg-gray-50 hover:bg-gray-100"
+                  onClick={() => updateTableStatus(currentTable, 'maintenance')}
+                >
+                  <div className="w-4 h-4 bg-gray-500 rounded-full mr-2"></div>
+                  <span>Mark as Maintenance</span>
+                </button>
+              </div>
+              <button 
+                className="w-full p-2 border rounded bg-gray-200 hover:bg-gray-300"
+                onClick={() => setShowStatusModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Combine tables modal */}
+        {showCombineModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">Combine Tables</h2>
+              <p className="mb-4">
+                You are about to combine {selectedTables.length} tables: {selectedTables.join(', ')}
+              </p>
+              <div className="flex justify-end">
+                <button 
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                  onClick={() => setShowCombineModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  onClick={combineTables}
+                >
+                  Combine Tables
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default TableManagement;
