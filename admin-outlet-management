@@ -1,0 +1,578 @@
+import React, { useState } from 'react';
+
+const OutletManagement = () => {
+  // Sample data
+  const sampleOutlets = [
+    {
+      id: 'outlet-123',
+      name: 'Ocean View Restaurant - Downtown',
+      location: '123 Main Street, Downtown',
+      outletType: 'Restaurant',
+      capacity: 120,
+      tables: 30,
+      queueEnabled: true,
+      createdAt: '2025-01-10T10:00:00Z'
+    },
+    {
+      id: 'outlet-456',
+      name: 'Ocean View Restaurant - Beachside',
+      location: '456 Beach Drive, Oceanfront',
+      outletType: 'Restaurant',
+      capacity: 80,
+      tables: 20,
+      queueEnabled: true,
+      createdAt: '2025-01-15T11:30:00Z'
+    },
+    {
+      id: 'outlet-789',
+      name: 'Ocean View Restaurant - Harborfront',
+      location: '789 Harbor Road, Marina District',
+      outletType: 'Restaurant',
+      capacity: 100,
+      tables: 25,
+      queueEnabled: false,
+      createdAt: '2025-02-01T09:15:00Z'
+    }
+  ];
+  
+  // State
+  const [outlets, setOutlets] = useState(sampleOutlets);
+  const [view, setView] = useState('list'); // 'list', 'create', 'edit', 'view'
+  const [currentOutlet, setCurrentOutlet] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [outletToDelete, setOutletToDelete] = useState(null);
+  
+  // Create a new outlet template
+  const createOutletTemplate = {
+    name: '',
+    location: '',
+    outletType: 'Restaurant',
+    capacity: 50,
+    queueEnabled: true,
+    operatingHours: {
+      monday: { open: '10:00', close: '22:00' },
+      tuesday: { open: '10:00', close: '22:00' },
+      wednesday: { open: '10:00', close: '22:00' },
+      thursday: { open: '10:00', close: '22:00' },
+      friday: { open: '10:00', close: '23:00' },
+      saturday: { open: '10:00', close: '23:00' },
+      sunday: { open: '10:00', close: '22:00' }
+    },
+    tables: [],
+    reservationSlotDuration: 60,
+    maxAdvanceReservationTime: 14,
+    minAdvanceReservationTime: 1,
+    contact: {
+      phone: '',
+      email: ''
+    },
+    bookingRestrictions: {
+      maxReservationPerCustomer: 3
+    },
+    specialRequirements: [],
+    reservationCancellationPolicy: 'Cancellations must be made at least 2 hours before reservation time.'
+  };
+  
+  // Handler functions
+  const handleCreateOutlet = () => {
+    setView('create');
+    setCurrentOutlet({...createOutletTemplate});
+  };
+  
+  const handleViewOutlet = (outlet) => {
+    setView('view');
+    // In a real app, you'd fetch the full outlet details from the API
+    setCurrentOutlet({
+      ...outlet,
+      operatingHours: {
+        monday: { open: '10:00', close: '22:00' },
+        tuesday: { open: '10:00', close: '22:00' },
+        wednesday: { open: '10:00', close: '22:00' },
+        thursday: { open: '10:00', close: '22:00' },
+        friday: { open: '10:00', close: '23:00' },
+        saturday: { open: '10:00', close: '23:00' },
+        sunday: { open: '10:00', close: '22:00' }
+      },
+      tables: [
+        { tableId: 'T1', seatingCapacity: 2 },
+        { tableId: 'T2', seatingCapacity: 2 },
+        { tableId: 'T3', seatingCapacity: 4 },
+        { tableId: 'T4', seatingCapacity: 4 },
+        { tableId: 'T5', seatingCapacity: 6 }
+      ],
+      reservationSlotDuration: 60,
+      maxAdvanceReservationTime: 14,
+      minAdvanceReservationTime: 1,
+      contact: {
+        phone: '+1234567890',
+        email: 'location@oceanview.com'
+      },
+      bookingRestrictions: {
+        maxReservationPerCustomer: 3
+      },
+      specialRequirements: ['High Chair', 'Window Seating'],
+      reservationCancellationPolicy: 'Cancellations must be made at least 2 hours before reservation time.'
+    });
+  };
+  
+  const handleEditOutlet = (outlet) => {
+    setView('edit');
+    // In a real app, you'd fetch the full outlet details from the API
+    setCurrentOutlet({
+      ...outlet,
+      operatingHours: {
+        monday: { open: '10:00', close: '22:00' },
+        tuesday: { open: '10:00', close: '22:00' },
+        wednesday: { open: '10:00', close: '22:00' },
+        thursday: { open: '10:00', close: '22:00' },
+        friday: { open: '10:00', close: '23:00' },
+        saturday: { open: '10:00', close: '23:00' },
+        sunday: { open: '10:00', close: '22:00' }
+      },
+      tables: [
+        { tableId: 'T1', seatingCapacity: 2 },
+        { tableId: 'T2', seatingCapacity: 2 },
+        { tableId: 'T3', seatingCapacity: 4 },
+        { tableId: 'T4', seatingCapacity: 4 },
+        { tableId: 'T5', seatingCapacity: 6 }
+      ],
+      reservationSlotDuration: 60,
+      maxAdvanceReservationTime: 14,
+      minAdvanceReservationTime: 1,
+      contact: {
+        phone: '+1234567890',
+        email: 'location@oceanview.com'
+      },
+      bookingRestrictions: {
+        maxReservationPerCustomer: 3
+      },
+      specialRequirements: ['High Chair', 'Window Seating'],
+      reservationCancellationPolicy: 'Cancellations must be made at least 2 hours before reservation time.'
+    });
+  };
+  
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setCurrentOutlet(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+  
+  const handleBackToList = () => {
+    setView('list');
+    setCurrentOutlet(null);
+  };
+  
+  const handleDeleteClick = (outlet) => {
+    setOutletToDelete(outlet);
+    setShowDeleteModal(true);
+  };
+  
+  const confirmDelete = () => {
+    // In a real app, you'd call the API to delete the outlet
+    setOutlets(outlets.filter(o => o.id !== outletToDelete.id));
+    setShowDeleteModal(false);
+    setOutletToDelete(null);
+  };
+  
+  const handleCreateSubmit = (e) => {
+    e.preventDefault();
+    // In a real app, you'd call the API to create a new outlet
+    const newOutlet = {
+      id: `outlet-${Date.now()}`,
+      ...currentOutlet,
+      tables: currentOutlet.tables.length, // For list view
+      createdAt: new Date().toISOString()
+    };
+    setOutlets([...outlets, newOutlet]);
+    setView('list');
+  };
+  
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    // In a real app, you'd call the API to update the outlet
+    setOutlets(outlets.map(o => o.id === currentOutlet.id ? {
+      ...currentOutlet,
+      tables: currentOutlet.tables.length // For list view
+    } : o));
+    setView('list');
+  };
+  
+  // Render the outlet list view
+  const renderOutletList = () => (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Outlet Management</h1>
+        <button 
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          onClick={handleCreateOutlet}
+        >
+          Add New Outlet
+        </button>
+      </div>
+      
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Name
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Location
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Type
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Capacity
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Queue
+              </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {outlets.map((outlet) => (
+              <tr key={outlet.id}>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="font-medium text-gray-900">{outlet.name}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-gray-500">{outlet.location}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-gray-500">{outlet.outletType}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-gray-500">{outlet.capacity} seats</div>
+                  <div className="text-gray-500">{outlet.tables} tables</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${outlet.queueEnabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {outlet.queueEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button 
+                    className="text-blue-600 hover:text-blue-900 mr-3"
+                    onClick={() => handleViewOutlet(outlet)}
+                  >
+                    View
+                  </button>
+                  <button 
+                    className="text-blue-600 hover:text-blue-900 mr-3"
+                    onClick={() => handleEditOutlet(outlet)}
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    className="text-red-600 hover:text-red-900"
+                    onClick={() => handleDeleteClick(outlet)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {outlets.length === 0 && (
+              <tr>
+                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  No outlets found. Click "Add New Outlet" to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  
+  // Render the outlet detail view
+  const renderOutletView = () => {
+    if (!currentOutlet) return null;
+    
+    return (
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <button
+              className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+              onClick={handleBackToList}
+            >
+              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
+              </svg>
+              Back to List
+            </button>
+            <h1 className="text-2xl font-bold mt-2">{currentOutlet.name}</h1>
+            <p className="text-gray-600">{currentOutlet.location}</p>
+          </div>
+          <div>
+            <button 
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mr-2"
+              onClick={() => handleEditOutlet(currentOutlet)}
+            >
+              Edit Outlet
+            </button>
+            <button 
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              onClick={() => handleDeleteClick(currentOutlet)}
+            >
+              Delete Outlet
+            </button>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow-md rounded-lg overflow-hidden p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-medium text-gray-900 mb-4">General Information</h2>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-gray-500 text-sm">Type:</span>
+                  <p>{currentOutlet.outletType}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Capacity:</span>
+                  <p>{currentOutlet.capacity} seats</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Queue Management:</span>
+                  <p>{currentOutlet.queueEnabled ? 'Enabled' : 'Disabled'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Contact:</span>
+                  <p>{currentOutlet.contact.phone}</p>
+                  <p>{currentOutlet.contact.email}</p>
+                </div>
+              </div>
+              
+              <h2 className="text-lg font-medium text-gray-900 mt-6 mb-4">Reservation Settings</h2>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-gray-500 text-sm">Reservation Slot Duration:</span>
+                  <p>{currentOutlet.reservationSlotDuration} minutes</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Max Advance Reservation:</span>
+                  <p>{currentOutlet.maxAdvanceReservationTime} days</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Min Advance Reservation:</span>
+                  <p>{currentOutlet.minAdvanceReservationTime} hours</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Max Reservations Per Customer:</span>
+                  <p>{currentOutlet.bookingRestrictions.maxReservationPerCustomer}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-sm">Cancellation Policy:</span>
+                  <p>{currentOutlet.reservationCancellationPolicy}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Operating Hours</h2>
+              <div className="space-y-2">
+                {Object.entries(currentOutlet.operatingHours).map(([day, hours]) => (
+                  <div key={day} className="flex justify-between">
+                    <span className="capitalize">{day}:</span>
+                    <span>{hours.open} - {hours.close}</span>
+                  </div>
+                ))}
+              </div>
+              
+              <h2 className="text-lg font-medium text-gray-900 mt-6 mb-4">Tables</h2>
+              <div className="space-y-2">
+                {currentOutlet.tables.map((table) => (
+                  <div key={table.tableId} className="flex justify-between">
+                    <span>Table {table.tableId}:</span>
+                    <span>{table.seatingCapacity} seats</span>
+                  </div>
+                ))}
+              </div>
+              
+              <h2 className="text-lg font-medium text-gray-900 mt-6 mb-4">Special Requirements</h2>
+              <div className="flex flex-wrap gap-2">
+                {currentOutlet.specialRequirements.map((req, index) => (
+                  <span key={index} className="px-3 py-1 bg-gray-100 rounded-full text-gray-800">
+                    {req}
+                  </span>
+                ))}
+                {currentOutlet.specialRequirements.length === 0 && (
+                  <p className="text-gray-500">No special requirements defined.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  // Render a simple form for editing outlets
+  // (In a real app, this would be more detailed with all the fields from your schema)
+  const renderOutletForm = () => {
+    if (!currentOutlet) return null;
+    
+    const isEdit = view === 'edit';
+    
+    return (
+      <div>
+        <div className="mb-6">
+          <button
+            className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+            onClick={handleBackToList}
+          >
+            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to List
+          </button>
+          <h1 className="text-2xl font-bold mt-2">{isEdit ? 'Edit Outlet' : 'Create New Outlet'}</h1>
+        </div>
+        
+        <form onSubmit={isEdit ? handleEditSubmit : handleCreateSubmit} className="bg-white shadow-md rounded-lg overflow-hidden p-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Outlet Name</label>
+              <input
+                type="text"
+                name="name"
+                value={currentOutlet.name}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Location</label>
+              <input
+                type="text"
+                name="location"
+                value={currentOutlet.location}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Type</label>
+              <select
+                name="outletType"
+                value={currentOutlet.outletType}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                required
+              >
+                <option value="Restaurant">Restaurant</option>
+                <option value="Cafe">Cafe</option>
+                <option value="Bar">Bar</option>
+                <option value="Food Truck">Food Truck</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Capacity</label>
+              <input
+                type="number"
+                name="capacity"
+                value={currentOutlet.capacity}
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                required
+                min="1"
+              />
+            </div>
+            
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="queueEnabled"
+                name="queueEnabled"
+                checked={currentOutlet.queueEnabled}
+                onChange={(e) => setCurrentOutlet(prev => ({
+                  ...prev,
+                  queueEnabled: e.target.checked
+                }))}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="queueEnabled" className="ml-2 block text-sm text-gray-900">
+                Enable Queue Management
+              </label>
+            </div>
+            
+            <div className="pt-5">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  {isEdit ? 'Update Outlet' : 'Create Outlet'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    );
+  };
+  
+  // Delete confirmation modal
+  const renderDeleteModal = () => {
+    if (!showDeleteModal || !outletToDelete) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Deletion</h3>
+          <p className="text-gray-500 mb-4">
+            Are you sure you want to delete outlet "{outletToDelete.name}"? This action cannot be undone.
+          </p>
+          <div className="flex justify-end">
+            <button
+              className="mr-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              onClick={() => setShowDeleteModal(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+              onClick={confirmDelete}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-6xl mx-auto">
+        {view === 'list' && renderOutletList()}
+        {view === 'view' && renderOutletView()}
+        {(view === 'create' || view === 'edit') && renderOutletForm()}
+        {renderDeleteModal()}
+      </div>
+    </div>
+  );
+};
+
+export default OutletManagement;
