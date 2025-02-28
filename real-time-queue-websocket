@@ -1,0 +1,322 @@
+import React, { useState, useEffect } from 'react';
+
+const RealtimeQueueStatus = () => {
+  const [queueData, setQueueData] = useState({
+    id: "queue-7890",
+    outletId: "outlet-123",
+    customerName: "John Smith",
+    customerPhone: "+1234567890",
+    guestCount: 3,
+    joinedAt: "2025-03-15T18:30:00Z",
+    position: 5,
+    estimatedWaitTime: 25,
+    status: "waiting",
+    specialRequests: "High chair needed"
+  });
+  
+  const [socket, setSocket] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [updates, setUpdates] = useState([]);
+  const [notification, setNotification] = useState(null);
+  
+  // Simulated WebSocket connection (in a real app, this would connect to your backend)
+  useEffect(() => {
+    // Simulate WebSocket connection
+    console.log("Connecting to WebSocket...");
+    
+    // Mock WebSocket
+    const mockSocket = {
+      onmessage: null,
+      send: (data) => console.log("Sending data:", data),
+      close: () => {
+        console.log("WebSocket closed");
+        setConnected(false);
+      }
+    };
+    
+    setSocket(mockSocket);
+    setConnected(true);
+    
+    // Simulate receiving WebSocket messages
+    const messageInterval = setInterval(() => {
+      if (mockSocket.onmessage) {
+        const updateTypes = [
+          {
+            type: "queue_position",
+            data: {
+              position: Math.max(1, queueData.position - 1),
+              previousPosition: queueData.position,
+              message: "Your queue position has improved!"
+            }
+          },
+          {
+            type: "queue_wait_time",
+            data: {
+              waitTime: Math.max(5, queueData.estimatedWaitTime - 5),
+              previousWaitTime: queueData.estimatedWaitTime,
+              message: "Your estimated wait time has decreased!"
+            }
+          }
+        ];
+        
+        // Pick a random update type
+        const updateType = updateTypes[Math.floor(Math.random() * updateTypes.length)];
+        
+        // Simulate a WebSocket message
+        mockSocket.onmessage({
+          data: JSON.stringify({
+            ...updateType,
+            queueId: queueData.id,
+            timestamp: new Date().toISOString()
+          })
+        });
+      }
+    }, 15000); // Update every 15 seconds in the demo
+    
+    return () => {
+      clearInterval(messageInterval);
+      if (mockSocket) mockSocket.close();
+    };
+  }, [queueData]);
+  
+  // WebSocket message handler
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      console.log("Received WebSocket message:", message);
+      
+      // Add to updates list
+      setUpdates(prev => [message, ...prev].slice(0, 5));
+      
+      // Update queue data based on message type
+      if (message.type === "queue_position") {
+        setQueueData(prev => ({
+          ...prev,
+          position: message.data.position
+        }));
+        
+        // Show notification
+        setNotification({
+          message: message.data.message || "Your position in the queue has changed.",
+          type: message.data.position < message.data.previousPosition ? "success" : "info"
+        });
+      } 
+      else if (message.type === "queue_wait_time") {
+        setQueueData(prev => ({
+          ...prev,
+          estimatedWaitTime: message.data.waitTime
+        }));
+        
+        // Show notification
+        setNotification({
+          message: message.data.message || "Your estimated wait time has changed.",
+          type: message.data.waitTime < message.data.previousWaitTime ? "success" : "warning"
+        });
+      }
+      else if (message.type === "queue_status") {
+        setQueueData(prev => ({
+          ...prev,
+          status: message.data.status
+        }));
+        
+        // Show notification
+        setNotification({
+          message: message.data.message || `Your status has changed to ${message.data.status}.`,
+          type: message.data.status === "ready" ? "success" : "info"
+        });
+      }
+      
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => setNotification(null), 5000);
+    };
+  }, [socket]);
+  
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-center mb-6">Real-time Queue Status</h1>
+        
+        {/* Connection Status */}
+        <div className={`text-center mb-4 px-4 py-2 rounded-md ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className="inline-block h-3 w-3 rounded-full mr-2 align-middle" 
+                style={{ backgroundColor: connected ? '#10B981' : '#EF4444' }}></span>
+          {connected ? 'Connected to live updates' : 'Disconnected - trying to reconnect...'}
+        </div>
+        
+        {/* Notification */}
+        {notification && (
+          <div className={`mb-4 p-4 rounded-md ${
+            notification.type === 'success' ? 'bg-green-100 border-l-4 border-green-400 text-green-700' :
+            notification.type === 'warning' ? 'bg-yellow-100 border-l-4 border-yellow-400 text-yellow-700' :
+            'bg-blue-100 border-l-4 border-blue-400 text-blue-700'
+          }`}>
+            <div className="flex">
+              <div className="flex-shrink-0">
+                {notification.type === 'success' ? (
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                ) : notification.type === 'warning' ? (
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+              <div className="ml-3">
+                <p className="text-sm">{notification.message}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Main Content */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="bg-blue-50 rounded-lg p-6 mb-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-blue-900">Your Queue Status</h3>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                queueData.status === "ready" ? "bg-green-100 text-green-800" :
+                queueData.status === "waiting" ? "bg-yellow-100 text-yellow-800" :
+                "bg-gray-100 text-gray-800"
+              }`}>
+                {queueData.status.toUpperCase()}
+              </span>
+            </div>
+            
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-blue-700">Position in Queue</p>
+                <p className="text-3xl font-bold text-blue-900">{queueData.position}</p>
+              </div>
+              <div>
+                <p className="text-sm text-blue-700">Estimated Wait Time</p>
+                <p className="text-3xl font-bold text-blue-900">{queueData.estimatedWaitTime} min</p>
+              </div>
+            </div>
+            
+            <div className="mt-6">
+              <div className="w-full bg-blue-200 rounded-full h-4">
+                <div 
+                  className="bg-blue-600 h-4 rounded-full" 
+                  style={{ width: `${Math.max(5, 100 - (queueData.position * 10))}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <div className="mt-6 text-center">
+              <p className="text-blue-700">
+                {queueData.status === "ready" 
+                  ? "Your table is ready! Please proceed to the host stand."
+                  : "We'll notify you when your table is almost ready!"}
+              </p>
+            </div>
+          </div>
+          
+          {/* Real-time updates log */}
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Recent Updates</h3>
+            {updates.length > 0 ? (
+              <div className="space-y-2">
+                {updates.map((update, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-md text-sm">
+                    <div className="flex justify-between text-gray-500">
+                      <span>{update.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                      <span>{new Date(update.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <p className="mt-1 text-gray-700">
+                      {update.data.message || 
+                       (update.type === 'queue_position' 
+                         ? `Position changed from ${update.data.previousPosition} to ${update.data.position}` 
+                         : `Wait time changed from ${update.data.previousWaitTime} to ${update.data.waitTime} minutes`)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No updates yet. Updates will appear here as they happen.</p>
+            )}
+          </div>
+        </div>
+        
+        {/* Demo Controls (would not be in the actual app) */}
+        <div className="mt-6 p-4 border border-gray-200 rounded-md">
+          <h3 className="font-medium text-gray-900 mb-2">Demo Controls</h3>
+          <p className="text-sm text-gray-500 mb-4">These buttons simulate WebSocket messages (for demonstration only)</p>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+              onClick={() => {
+                if (socket && socket.onmessage) {
+                  socket.onmessage({
+                    data: JSON.stringify({
+                      type: "queue_position",
+                      queueId: queueData.id,
+                      data: {
+                        position: Math.max(1, queueData.position - 1),
+                        previousPosition: queueData.position,
+                        message: "Your queue position has improved!"
+                      },
+                      timestamp: new Date().toISOString()
+                    })
+                  });
+                }
+              }}
+            >
+              Simulate Position Change
+            </button>
+            <button 
+              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+              onClick={() => {
+                if (socket && socket.onmessage) {
+                  socket.onmessage({
+                    data: JSON.stringify({
+                      type: "queue_wait_time",
+                      queueId: queueData.id,
+                      data: {
+                        waitTime: Math.max(5, queueData.estimatedWaitTime - 5),
+                        previousWaitTime: queueData.estimatedWaitTime,
+                        message: "Your estimated wait time has decreased!"
+                      },
+                      timestamp: new Date().toISOString()
+                    })
+                  });
+                }
+              }}
+            >
+              Simulate Wait Time Update
+            </button>
+            <button 
+              className="px-3 py-2 bg-green-100 text-green-700 rounded-md hover:bg-green-200"
+              onClick={() => {
+                if (socket && socket.onmessage) {
+                  socket.onmessage({
+                    data: JSON.stringify({
+                      type: "queue_status",
+                      queueId: queueData.id,
+                      data: {
+                        status: "ready",
+                        previousStatus: queueData.status,
+                        message: "Your table is ready! Please proceed to the host stand."
+                      },
+                      timestamp: new Date().toISOString()
+                    })
+                  });
+                }
+              }}
+            >
+              Simulate Table Ready
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RealtimeQueueStatus;
