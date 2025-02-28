@@ -1,0 +1,567 @@
+import React, { useState } from 'react';
+
+const ReservationSystem = () => {
+  const [activeTab, setActiveTab] = useState('outlet-details');
+
+  // Sample data (this would come from your API in a real implementation)
+  const outletData = {
+    id: "outlet-123",
+    name: "Ocean View Restaurant",
+    location: "123 Beach Drive",
+    outletType: "Restaurant",
+    operatingHours: {
+      monday: { open: "11:00", close: "22:00" },
+      tuesday: { open: "11:00", close: "22:00" },
+      wednesday: { open: "11:00", close: "22:00" },
+      thursday: { open: "11:00", close: "23:00" },
+      friday: { open: "11:00", close: "23:00" },
+      saturday: { open: "10:00", close: "23:00" },
+      sunday: { open: "10:00", close: "22:00" }
+    },
+    contact: {
+      phone: "+1234567890",
+      email: "reservations@oceanview.com"
+    }
+  };
+
+  const availableSlots = [
+    { time: "17:00", available: true },
+    { time: "17:30", available: false },
+    { time: "18:00", available: true },
+    { time: "18:30", available: true },
+    { time: "19:00", available: false },
+    { time: "19:30", available: true },
+    { time: "20:00", available: true },
+    { time: "20:30", available: true }
+  ];
+
+  const reservationData = {
+    id: "res-456",
+    outletId: "outlet-123",
+    customerName: "John Smith",
+    customerPhone: "+0987654321",
+    guestCount: 4,
+    reservationTime: "2025-03-15T19:30:00Z",
+    tables: ["T5"],
+    status: "confirmed",
+    specialRequests: "Window seating preferred",
+    createdAt: "2025-03-10T14:22:00Z",
+    updatedAt: "2025-03-10T14:22:00Z"
+  };
+
+  const renderOutletDetails = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">{outletData.name}</h2>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <p className="text-gray-700">
+            <span className="font-medium">Location:</span> {outletData.location}
+          </p>
+          <p className="text-gray-700">
+            <span className="font-medium">Type:</span> {outletData.outletType}
+          </p>
+          <p className="text-gray-700">
+            <span className="font-medium">Contact:</span>
+          </p>
+          <p className="ml-4 text-gray-700">Phone: {outletData.contact.phone}</p>
+          <p className="ml-4 text-gray-700">Email: {outletData.contact.email}</p>
+        </div>
+        <div>
+          <p className="font-medium text-gray-700 mb-2">Operating Hours:</p>
+          <div className="space-y-1">
+            {Object.entries(outletData.operatingHours).map(([day, hours]) => (
+              <div key={day} className="flex">
+                <span className="w-24 capitalize text-gray-700">{day}:</span>
+                <span className="text-gray-700">{hours.open} - {hours.close}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCheckAvailability = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Check Availability</h2>
+      <div className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input 
+              type="date" 
+              className="px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue="2025-03-15" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+            <select 
+              className="px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue="4"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num} {num === 1 ? 'person' : 'people'}</option>
+              ))}
+            </select>
+          </div>
+          <div className="self-end">
+            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+              Check Availability
+            </button>
+          </div>
+        </div>
+        
+        <h3 className="font-medium text-gray-800 mb-2">Available Time Slots for March 15, 2025</h3>
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+          {availableSlots.map(slot => (
+            <button
+              key={slot.time}
+              disabled={!slot.available}
+              className={`px-3 py-2 rounded-md text-center ${
+                slot.available 
+                  ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {slot.time}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCreateReservation = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Make a Reservation</h2>
+      <form className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input 
+              type="text" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your name" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <input 
+              type="tel" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your phone number" 
+            />
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input 
+              type="date" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+            <select 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="17:00">5:00 PM</option>
+              <option value="17:30">5:30 PM</option>
+              <option value="18:00">6:00 PM</option>
+              <option value="18:30">6:30 PM</option>
+              <option value="19:00">7:00 PM</option>
+              <option value="19:30">7:30 PM</option>
+              <option value="20:00">8:00 PM</option>
+              <option value="20:30">8:30 PM</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+            <select 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num} {num === 1 ? 'person' : 'people'}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests (Optional)</label>
+          <textarea 
+            className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            rows="3"
+            placeholder="Any special requests or preferences?"
+          ></textarea>
+        </div>
+        
+        <div className="text-right">
+          <button 
+            type="submit" 
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            Confirm Reservation
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderViewReservation = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">View Reservation</h2>
+      <div className="mb-6">
+        <div className="max-w-lg mx-auto">
+          <div className="mb-4 p-4 border border-gray-200 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Find Your Reservation</h3>
+            </div>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Reservation ID" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+              />
+              <input 
+                type="tel" 
+                placeholder="Phone Number" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+              />
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Find
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="border-t pt-4">
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-blue-700">
+                Your reservation has been confirmed. Reservation ID: <span className="font-medium">{reservationData.id}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Reservation Details</h3>
+            <div className="space-y-2 text-gray-700">
+              <p><span className="font-medium">Name:</span> {reservationData.customerName}</p>
+              <p><span className="font-medium">Phone:</span> {reservationData.customerPhone}</p>
+              <p>
+                <span className="font-medium">Date & Time:</span> {' '}
+                {new Date(reservationData.reservationTime).toLocaleString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: 'numeric'
+                })}
+              </p>
+              <p><span className="font-medium">Party Size:</span> {reservationData.guestCount} people</p>
+              <p><span className="font-medium">Status:</span> <span className="text-green-600 capitalize">{reservationData.status}</span></p>
+              {reservationData.specialRequests && (
+                <p><span className="font-medium">Special Requests:</span> {reservationData.specialRequests}</p>
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Restaurant Information</h3>
+            <div className="space-y-2 text-gray-700">
+              <p><span className="font-medium">Name:</span> {outletData.name}</p>
+              <p><span className="font-medium">Location:</span> {outletData.location}</p>
+              <p><span className="font-medium">Contact:</span> {outletData.contact.phone}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderUpdateReservation = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Update Reservation</h2>
+      <div className="mb-6">
+        <div className="max-w-lg mx-auto">
+          <div className="mb-4 p-4 border border-gray-200 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Find Your Reservation</h3>
+            </div>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Reservation ID" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                defaultValue={reservationData.id}
+              />
+              <input 
+                type="tel" 
+                placeholder="Phone Number" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                defaultValue={reservationData.customerPhone}
+              />
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Find
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <form className="space-y-4 border-t pt-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input 
+              type="text" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm bg-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue={reservationData.customerName}
+              readOnly
+            />
+            <p className="mt-1 text-sm text-gray-500">Name cannot be changed</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <input 
+              type="tel" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm bg-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue={reservationData.customerPhone}
+              readOnly
+            />
+            <p className="mt-1 text-sm text-gray-500">Phone cannot be changed</p>
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input 
+              type="date" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue="2025-03-15"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+            <select 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue="19:30"
+            >
+              <option value="17:00">5:00 PM</option>
+              <option value="17:30">5:30 PM</option>
+              <option value="18:00">6:00 PM</option>
+              <option value="18:30">6:30 PM</option>
+              <option value="19:00">7:00 PM</option>
+              <option value="19:30">7:30 PM</option>
+              <option value="20:00">8:00 PM</option>
+              <option value="20:30">8:30 PM</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+            <select 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              defaultValue={reservationData.guestCount}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num} {num === 1 ? 'person' : 'people'}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests (Optional)</label>
+          <textarea 
+            className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            rows="3"
+            placeholder="Any special requests or preferences?"
+            defaultValue={reservationData.specialRequests}
+          ></textarea>
+        </div>
+        
+        <div className="text-right">
+          <button 
+            type="submit" 
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            Update Reservation
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderCancelReservation = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Cancel Reservation</h2>
+      <div className="mb-6">
+        <div className="max-w-lg mx-auto">
+          <div className="mb-4 p-4 border border-gray-200 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Find Your Reservation</h3>
+            </div>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Reservation ID" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                defaultValue={reservationData.id}
+              />
+              <input 
+                type="tel" 
+                placeholder="Phone Number" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                defaultValue={reservationData.customerPhone}
+              />
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Find
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="border-t pt-4">
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">
+                Are you sure you want to cancel this reservation? This action cannot be undone.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Reservation Details</h3>
+            <div className="space-y-2 text-gray-700">
+              <p><span className="font-medium">Name:</span> {reservationData.customerName}</p>
+              <p><span className="font-medium">Phone:</span> {reservationData.customerPhone}</p>
+              <p>
+                <span className="font-medium">Date & Time:</span> {' '}
+                {new Date(reservationData.reservationTime).toLocaleString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: 'numeric'
+                })}
+              </p>
+              <p><span className="font-medium">Party Size:</span> {reservationData.guestCount} people</p>
+              <p><span className="font-medium">Status:</span> <span className="text-green-600 capitalize">{reservationData.status}</span></p>
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Cancellation Policy</h3>
+            <p className="text-gray-700 mb-2">
+              Please review our cancellation policy before proceeding:
+            </p>
+            <ul className="list-disc pl-5 text-gray-700 space-y-1">
+              <li>Cancellations made less than 2 hours before reservation time may result in restrictions on future bookings.</li>
+              <li>If you need to modify your reservation instead of cancelling, please use the "Update Reservation" option.</li>
+              <li>For parties of 6 or more, please call the restaurant directly to cancel.</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-3">
+          <button 
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+            onClick={() => setActiveTab('view-reservation')}
+          >
+            Go Back
+          </button>
+          <button 
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+          >
+            Cancel Reservation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-center mb-6">F&B Reservation System</h1>
+        
+        {/* Tab Navigation */}
+        <div className="flex mb-4 overflow-x-auto border-b">
+          <button 
+            className={`px-4 py-2 ${activeTab === 'outlet-details' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('outlet-details')}
+          >
+            Outlet Details
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'check-availability' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('check-availability')}
+          >
+            Check Availability
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'create-reservation' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('create-reservation')}
+          >
+            Make Reservation
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'view-reservation' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('view-reservation')}
+          >
+            View Reservation
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'update-reservation' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('update-reservation')}
+          >
+            Update Reservation
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'cancel-reservation' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('cancel-reservation')}
+          >
+            Cancel Reservation
+          </button>
+        </div>
+        
+        {/* Content Sections */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          {activeTab === 'outlet-details' && renderOutletDetails()}
+          {activeTab === 'check-availability' && renderCheckAvailability()}
+          {activeTab === 'create-reservation' && renderCreateReservation()}
+          {activeTab === 'view-reservation' && renderViewReservation()}
+          {activeTab === 'update-reservation' && renderUpdateReservation()}
+          {activeTab === 'cancel-reservation' && renderCancelReservation()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ReservationSystem;
