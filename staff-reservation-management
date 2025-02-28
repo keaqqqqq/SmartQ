@@ -1,0 +1,416 @@
+import React from 'react';
+
+const ReservationManagement = () => {
+  const [reservations, setReservations] = React.useState([
+    {
+      id: "res-123",
+      outletId: "outlet-123",
+      customerName: "John Smith",
+      customerPhone: "+1234567890",
+      customerEmail: "john.smith@example.com",
+      guestCount: 4,
+      reservationTime: "2025-03-15T19:30:00Z",
+      tables: ["T5", "T6"],
+      status: "confirmed",
+      specialRequests: "Window seating preferred",
+      source: "customer",
+      notes: "Anniversary dinner",
+      createdBy: "customer",
+      createdAt: "2025-03-10T14:30:00Z",
+      updatedAt: "2025-03-10T14:30:00Z"
+    },
+    {
+      id: "res-124",
+      outletId: "outlet-123",
+      customerName: "Emily Johnson",
+      customerPhone: "+1234567891",
+      customerEmail: "emily.j@example.com",
+      guestCount: 2,
+      reservationTime: "2025-03-15T18:00:00Z",
+      tables: ["T3"],
+      status: "seated",
+      specialRequests: "",
+      source: "customer",
+      notes: "",
+      createdBy: "customer",
+      createdAt: "2025-03-09T10:15:00Z",
+      updatedAt: "2025-03-15T18:05:00Z"
+    },
+    {
+      id: "res-125",
+      outletId: "outlet-123",
+      customerName: "Michael Brown",
+      customerPhone: "+1234567892",
+      customerEmail: "",
+      guestCount: 6,
+      reservationTime: "2025-03-15T20:00:00Z",
+      tables: ["T8", "T9"],
+      status: "pending",
+      specialRequests: "High chair needed",
+      source: "phone",
+      notes: "First time visitor",
+      createdBy: "staff-101",
+      createdAt: "2025-03-12T11:45:00Z",
+      updatedAt: "2025-03-12T11:45:00Z"
+    },
+    {
+      id: "res-126",
+      outletId: "outlet-123",
+      customerName: "Sarah Williams",
+      customerPhone: "+1234567893",
+      customerEmail: "sarah.w@example.com",
+      guestCount: 3,
+      reservationTime: "2025-03-15T19:00:00Z",
+      tables: ["T4"],
+      status: "cancelled",
+      specialRequests: "",
+      source: "customer",
+      notes: "Cancelled due to illness",
+      createdBy: "customer",
+      createdAt: "2025-03-08T09:30:00Z",
+      updatedAt: "2025-03-14T15:20:00Z"
+    },
+    {
+      id: "res-127",
+      outletId: "outlet-123",
+      customerName: "Robert Davis",
+      customerPhone: "+1234567894",
+      customerEmail: "robert.d@example.com",
+      guestCount: 2,
+      reservationTime: "2025-03-15T17:30:00Z",
+      tables: ["T2"],
+      status: "completed",
+      specialRequests: "Allergic to nuts",
+      source: "customer",
+      notes: "",
+      createdBy: "customer",
+      createdAt: "2025-03-10T16:45:00Z",
+      updatedAt: "2025-03-15T19:45:00Z"
+    }
+  ]);
+  
+  const [currentDate, setCurrentDate] = React.useState(new Date().toISOString().split('T')[0]);
+  const [selectedStatus, setSelectedStatus] = React.useState("all");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [editingReservation, setEditingReservation] = React.useState(null);
+  const [showCreateModal, setShowCreateModal] = React.useState(false);
+  const [showStatusModal, setShowStatusModal] = React.useState(false);
+  const [showNotifyModal, setShowNotifyModal] = React.useState(false);
+  
+  const outlet = {
+    id: "outlet-123",
+    name: "Ocean View Restaurant - Downtown",
+    location: "123 Main Street, Downtown"
+  };
+  
+  // Filter reservations by date, status, and search term
+  const filteredReservations = reservations.filter(res => {
+    const resDate = new Date(res.reservationTime).toISOString().split('T')[0];
+    const matchesDate = resDate === currentDate;
+    const matchesStatus = selectedStatus === "all" || res.status === selectedStatus;
+    const matchesSearch = searchTerm === "" || 
+      res.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      res.customerPhone.includes(searchTerm);
+    
+    return matchesDate && matchesStatus && matchesSearch;
+  });
+  
+  // Sort reservations by time
+  const sortedReservations = [...filteredReservations].sort((a, b) => 
+    new Date(a.reservationTime) - new Date(b.reservationTime)
+  );
+  
+  // Render status badge with appropriate color
+  const renderStatusBadge = (status) => {
+    const statusColors = {
+      pending: "bg-yellow-100 text-yellow-800",
+      confirmed: "bg-green-100 text-green-800",
+      seated: "bg-blue-100 text-blue-800",
+      completed: "bg-purple-100 text-purple-800",
+      cancelled: "bg-red-100 text-red-800",
+      "no-show": "bg-gray-100 text-gray-800"
+    };
+    
+    return (
+      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[status] || "bg-gray-100 text-gray-800"}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+  
+  // Format time from ISO string
+  const formatTime = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">{outlet.name}</h1>
+            <p className="text-gray-600">{outlet.location}</p>
+          </div>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={() => setShowCreateModal(true)}
+          >
+            New Reservation
+          </button>
+        </div>
+        
+        {/* Filters */}
+        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={currentDate}
+                onChange={(e) => setCurrentDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="seated">Seated</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="no-show">No-show</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name or phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Reservation List */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Time
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Customer
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Party
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tables
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Source
+                </th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {sortedReservations.map((reservation) => (
+                <tr key={reservation.id} className={
+                  reservation.status === 'cancelled' || reservation.status === 'no-show' 
+                    ? 'bg-gray-50 text-gray-500' 
+                    : ''
+                }>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {formatTime(reservation.reservationTime)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{reservation.customerName}</div>
+                    <div className="text-sm text-gray-500">{reservation.customerPhone}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {reservation.guestCount} {reservation.guestCount === 1 ? 'person' : 'people'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {reservation.tables.join(', ')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {renderStatusBadge(reservation.status)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {reservation.source}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button 
+                      className="text-blue-600 hover:text-blue-900 mr-3"
+                      onClick={() => setEditingReservation(reservation)}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="text-indigo-600 hover:text-indigo-900 mr-3"
+                      onClick={() => {
+                        setEditingReservation(reservation);
+                        setShowStatusModal(true);
+                      }}
+                    >
+                      Status
+                    </button>
+                    <button 
+                      className="text-green-600 hover:text-green-900"
+                      onClick={() => {
+                        setEditingReservation(reservation);
+                        setShowNotifyModal(true);
+                      }}
+                    >
+                      Notify
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {sortedReservations.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                    No reservations found for the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {/* Modal placeholders - in a real app these would be implemented with proper forms */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-lg font-bold mb-4">Create New Reservation</h2>
+            <p className="mb-4">Form would go here with fields for customer details, party size, date/time, etc.</p>
+            <div className="flex justify-end">
+              <button 
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {editingReservation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-lg font-bold mb-4">Edit Reservation</h2>
+            <p className="mb-4">Form would go here to edit {editingReservation.customerName}'s reservation</p>
+            <div className="flex justify-end">
+              <button 
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                onClick={() => setEditingReservation(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={() => setEditingReservation(null)}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showStatusModal && editingReservation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-lg font-bold mb-4">Update Status</h2>
+            <p className="mb-4">Form to update status for {editingReservation.customerName}'s reservation</p>
+            <div className="flex justify-end">
+              <button 
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setEditingReservation(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setEditingReservation(null);
+                }}
+              >
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showNotifyModal && editingReservation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-lg font-bold mb-4">Send Notification</h2>
+            <p className="mb-4">Form to send notification to {editingReservation.customerName}</p>
+            <div className="flex justify-end">
+              <button 
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2"
+                onClick={() => {
+                  setShowNotifyModal(false);
+                  setEditingReservation(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={() => {
+                  setShowNotifyModal(false);
+                  setEditingReservation(null);
+                }}
+              >
+                Send Notification
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ReservationManagement;
