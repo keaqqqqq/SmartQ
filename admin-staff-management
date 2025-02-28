@@ -1,0 +1,458 @@
+import React, { useState } from 'react';
+
+const StaffManagement = () => {
+  const [staffList, setStaffList] = useState([
+    {
+      id: 'staff-1',
+      outletId: 'outlet-123',
+      username: 'john.manager',
+      name: 'John Manager',
+      email: 'john@oceanview.com',
+      phone: '+1234567890',
+      role: 'manager',
+      createdAt: '2025-01-15T10:30:00Z',
+      updatedAt: '2025-01-15T10:30:00Z'
+    },
+    {
+      id: 'staff-2',
+      outletId: 'outlet-123',
+      username: 'sarah.host',
+      name: 'Sarah Host',
+      email: 'sarah@oceanview.com',
+      phone: '+1234567891',
+      role: 'host',
+      createdAt: '2025-01-20T14:15:00Z',
+      updatedAt: '2025-01-20T14:15:00Z'
+    },
+    {
+      id: 'staff-3',
+      outletId: 'outlet-123',
+      username: 'mike.server',
+      name: 'Mike Server',
+      email: 'mike@oceanview.com',
+      phone: '+1234567892',
+      role: 'server',
+      createdAt: '2025-02-05T09:45:00Z',
+      updatedAt: '2025-02-05T09:45:00Z'
+    }
+  ]);
+  
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState(null);
+  
+  // Sample outlet data
+  const outlet = {
+    id: 'outlet-123',
+    name: 'Ocean View Restaurant',
+    location: '123 Beach Drive'
+  };
+  
+  const [newStaff, setNewStaff] = useState({
+    username: '',
+    password: '',
+    name: '',
+    email: '',
+    phone: '',
+    role: 'server'
+  });
+  
+  const handleInputChange = (e, formType) => {
+    const { name, value } = e.target;
+    if (formType === 'new') {
+      setNewStaff(prev => ({ ...prev, [name]: value }));
+    } else if (formType === 'edit') {
+      setEditingStaff(prev => ({ ...prev, [name]: value }));
+    }
+  };
+  
+  const handleAddSubmit = (e) => {
+    e.preventDefault();
+    // In a real app, this would call the API to create a new staff member
+    const newStaffMember = {
+      id: `staff-${Date.now()}`,
+      outletId: outlet.id,
+      ...newStaff,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    setStaffList(prev => [...prev, newStaffMember]);
+    setNewStaff({
+      username: '',
+      password: '',
+      name: '',
+      email: '',
+      phone: '',
+      role: 'server'
+    });
+    setShowAddForm(false);
+  };
+  
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    // In a real app, this would call the API to update the staff member
+    setStaffList(prev => 
+      prev.map(staff => 
+        staff.id === editingStaff.id 
+          ? { ...editingStaff, updatedAt: new Date().toISOString() } 
+          : staff
+      )
+    );
+    setEditingStaff(null);
+  };
+  
+  const handleEditClick = (staff) => {
+    setEditingStaff({ ...staff });
+  };
+  
+  const handleDeleteClick = (staff) => {
+    setStaffToDelete(staff);
+    setShowDeleteModal(true);
+  };
+  
+  const confirmDelete = () => {
+    // In a real app, this would call the API to delete the staff member
+    setStaffList(prev => prev.filter(staff => staff.id !== staffToDelete.id));
+    setShowDeleteModal(false);
+    setStaffToDelete(null);
+  };
+  
+  const roleLabels = {
+    manager: { label: 'Manager', color: 'bg-purple-100 text-purple-800' },
+    host: { label: 'Host', color: 'bg-blue-100 text-blue-800' },
+    server: { label: 'Server', color: 'bg-green-100 text-green-800' }
+  };
+  
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">Staff Management</h1>
+            <p className="text-gray-600">
+              {outlet.name} - {outlet.location}
+            </p>
+          </div>
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onClick={() => setShowAddForm(true)}
+          >
+            Add Staff Member
+          </button>
+        </div>
+        
+        {/* Staff List */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Username
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Contact
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created
+                </th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {staffList.map((staff) => (
+                <tr key={staff.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="font-medium text-gray-900">{staff.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-gray-500">{staff.username}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-gray-500">{staff.email}</div>
+                    <div className="text-gray-500">{staff.phone}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${roleLabels[staff.role].color}`}>
+                      {roleLabels[staff.role].label}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(staff.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button 
+                      className="text-blue-600 hover:text-blue-900 mr-3"
+                      onClick={() => handleEditClick(staff)}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDeleteClick(staff)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {staffList.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    No staff members found. Click "Add Staff Member" to create one.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Add Staff Form Modal */}
+        {showAddForm && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Add New Staff Member</h3>
+                <button 
+                  className="text-gray-400 hover:text-gray-500"
+                  onClick={() => setShowAddForm(false)}
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleAddSubmit}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={newStaff.name}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Username</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={newStaff.username}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Password</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={newStaff.password}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={newStaff.email}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={newStaff.phone}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <select
+                      name="role"
+                      value={newStaff.role}
+                      onChange={(e) => handleInputChange(e, 'new')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    >
+                      <option value="manager">Manager</option>
+                      <option value="host">Host</option>
+                      <option value="server">Server</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    className="mr-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    onClick={() => setShowAddForm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  >
+                    Create Staff Member
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        
+        {/* Edit Staff Form Modal */}
+        {editingStaff && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Edit Staff Member</h3>
+                <button 
+                  className="text-gray-400 hover:text-gray-500"
+                  onClick={() => setEditingStaff(null)}
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleEditSubmit}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={editingStaff.name}
+                      onChange={(e) => handleInputChange(e, 'edit')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Username</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={editingStaff.username}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-100"
+                      disabled
+                    />
+                    <p className="mt-1 text-sm text-gray-500">Username cannot be changed</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">New Password (leave blank to keep unchanged)</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={editingStaff.password || ''}
+                      onChange={(e) => handleInputChange(e, 'edit')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={editingStaff.email}
+                      onChange={(e) => handleInputChange(e, 'edit')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={editingStaff.phone}
+                      onChange={(e) => handleInputChange(e, 'edit')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <select
+                      name="role"
+                      value={editingStaff.role}
+                      onChange={(e) => handleInputChange(e, 'edit')}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      required
+                    >
+                      <option value="manager">Manager</option>
+                      <option value="host">Host</option>
+                      <option value="server">Server</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    className="mr-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    onClick={() => setEditingStaff(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  >
+                    Update Staff Member
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && staffToDelete && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Deletion</h3>
+              <p className="text-gray-500 mb-4">
+                Are you sure you want to delete staff member "{staffToDelete.name}"? This action cannot be undone.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  className="mr-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  onClick={() => setShowDeleteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                  onClick={confirmDelete}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default StaffManagement;
