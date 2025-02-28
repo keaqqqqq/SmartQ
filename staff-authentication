@@ -1,0 +1,151 @@
+import React, { useState } from 'react';
+
+const StaffLogin = () => {
+  const [loginData, setLoginData] = useState({
+    username: '',
+    password: '',
+    outletId: ''
+  });
+  
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  
+  // Sample outlet data for the dropdown
+  const outlets = [
+    { id: 'outlet-123', name: 'Ocean View Restaurant - Downtown' },
+    { id: 'outlet-456', name: 'Ocean View Restaurant - Beachside' },
+    { id: 'outlet-789', name: 'Ocean View Restaurant - Harborfront' }
+  ];
+  
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setLoginData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear any previous error when user is typing
+    if (error) setError('');
+  };
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      // For demo purposes - normally would validate with API
+      if (loginData.username === 'demo' && loginData.password === 'password') {
+        // Successful login
+        setLoginSuccess(true);
+        setError('');
+      } else {
+        // Failed login
+        setError('Invalid username or password');
+        setLoginSuccess(false);
+      }
+      setLoading(false);
+    }, 1000);
+  };
+  
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col justify-center">
+      <div className="max-w-md w-full mx-auto">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Staff Login</h1>
+            <p className="text-gray-600">Enter your credentials to access the portal</p>
+          </div>
+          
+          {loginSuccess && (
+            <div className="mb-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4">
+              <p>Login successful! Redirecting to dashboard...</p>
+            </div>
+          )}
+          
+          {error && (
+            <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4">
+              <p>{error}</p>
+            </div>
+          )}
+          
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                Username
+              </label>
+              <input
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                id="username"
+                type="text"
+                placeholder="Username"
+                name="username"
+                value={loginData.username}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="mb-6">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                Password
+              </label>
+              <input
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                id="password"
+                type="password"
+                placeholder="******************"
+                name="password"
+                value={loginData.password}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="mb-6">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="outletId">
+                Outlet (Optional)
+              </label>
+              <select
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                id="outletId"
+                name="outletId"
+                value={loginData.outletId}
+                onChange={handleInputChange}
+              >
+                <option value="">Select an outlet</option>
+                {outlets.map(outlet => (
+                  <option key={outlet.id} value={outlet.id}>
+                    {outlet.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-gray-600 text-xs italic mt-1">
+                Selecting an outlet will take you directly to that location after login
+              </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Logging in...' : 'Sign In'}
+              </button>
+            </div>
+          </form>
+          
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Forgot your password? Contact your admin for assistance.
+            </p>
+          </div>
+        </div>
+        
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-500">
+            Demo credentials: username "demo", password "password"
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StaffLogin;
