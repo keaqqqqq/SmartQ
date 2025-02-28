@@ -1,0 +1,338 @@
+import React, { useState } from 'react';
+
+const QueueManagement = () => {
+  const [activeTab, setActiveTab] = useState('join-queue');
+  
+  // Sample data 
+  const outletData = {
+    id: "outlet-123",
+    name: "Ocean View Restaurant",
+    location: "123 Beach Drive",
+    queueEnabled: true,
+    estimatedWaitTime: 35, // minutes
+    currentQueueLength: 12
+  };
+  
+  const queueEntryData = {
+    id: "queue-7890",
+    outletId: "outlet-123",
+    customerName: "John Smith",
+    customerPhone: "+1234567890",
+    guestCount: 3,
+    joinedAt: "2025-03-15T18:30:00Z",
+    position: 5,
+    estimatedWaitTime: 25,
+    status: "waiting",
+    specialRequests: "High chair needed"
+  };
+  
+  // Join Queue Form
+  const renderJoinQueue = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Join the Queue at {outletData.name}</h2>
+      
+      <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-700">Current Queue Information</h3>
+            <div className="mt-2 text-sm text-blue-700">
+              <p>Current queue length: <strong>{outletData.currentQueueLength} parties</strong></p>
+              <p>Estimated wait time: <strong>~{outletData.estimatedWaitTime} minutes</strong></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <form className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input 
+              type="text" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your name" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <input 
+              type="tel" 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your phone number" 
+            />
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+            <select 
+              className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num} {num === 1 ? 'person' : 'people'}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests (Optional)</label>
+          <textarea 
+            className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            rows="3"
+            placeholder="Any special requests or preferences?"
+          ></textarea>
+        </div>
+        
+        <div className="text-right">
+          <button 
+            type="submit" 
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            Join Queue
+          </button>
+        </div>
+      </form>
+      
+      <div className="mt-6 pt-6 border-t">
+        <h3 className="font-medium text-gray-900 mb-2">What to expect</h3>
+        <ol className="list-decimal pl-5 space-y-2 text-gray-700">
+          <li>After joining the queue, you'll receive a confirmation with your queue number.</li>
+          <li>You can use your phone number and queue ID to check your status anytime.</li>
+          <li>You'll receive a notification when your table is almost ready.</li>
+          <li>If you need to leave, you can remove yourself from the queue.</li>
+        </ol>
+      </div>
+    </div>
+  );
+  
+  // Check Queue Status
+  const renderCheckStatus = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Check Your Queue Status</h2>
+      
+      <div className="mb-6">
+        <div className="max-w-lg mx-auto">
+          <div className="mb-4 p-4 border border-gray-200 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Find Your Queue Entry</h3>
+            </div>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Queue ID" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                defaultValue={queueEntryData.id}
+              />
+              <input 
+                type="tel" 
+                placeholder="Phone Number" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                defaultValue={queueEntryData.customerPhone}
+              />
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Find
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="border-t pt-6">
+        <div className="bg-blue-50 rounded-lg p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium text-blue-900">Your Queue Status</h3>
+            <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+              {queueEntryData.status.toUpperCase()}
+            </span>
+          </div>
+          
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-blue-700">Position in Queue</p>
+              <p className="text-3xl font-bold text-blue-900">{queueEntryData.position}</p>
+            </div>
+            <div>
+              <p className="text-sm text-blue-700">Estimated Wait Time</p>
+              <p className="text-3xl font-bold text-blue-900">{queueEntryData.estimatedWaitTime} min</p>
+            </div>
+          </div>
+          
+          <div className="mt-6">
+            <div className="w-full bg-blue-200 rounded-full h-4">
+              <div 
+                className="bg-blue-600 h-4 rounded-full" 
+                style={{ width: `${Math.max(5, 100 - (queueEntryData.position * 10))}%` }}
+              ></div>
+            </div>
+          </div>
+          
+          <div className="mt-6 text-center">
+            <p className="text-blue-700">We'll notify you when your table is almost ready!</p>
+          </div>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Your Information</h3>
+            <div className="space-y-2 text-gray-700">
+              <p><span className="font-medium">Name:</span> {queueEntryData.customerName}</p>
+              <p><span className="font-medium">Phone:</span> {queueEntryData.customerPhone}</p>
+              <p><span className="font-medium">Party Size:</span> {queueEntryData.guestCount} people</p>
+              <p><span className="font-medium">Joined At:</span> {' '}
+                {new Date(queueEntryData.joinedAt).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: 'numeric'
+                })}
+              </p>
+              {queueEntryData.specialRequests && (
+                <p><span className="font-medium">Special Requests:</span> {queueEntryData.specialRequests}</p>
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Restaurant Information</h3>
+            <div className="space-y-2 text-gray-700">
+              <p><span className="font-medium">Name:</span> {outletData.name}</p>
+              <p><span className="font-medium">Location:</span> {outletData.location}</p>
+            </div>
+            <div className="mt-4">
+              <p className="text-sm text-gray-500">If your plans have changed and you need to leave the queue, please click the button below:</p>
+              <button 
+                className="mt-2 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                onClick={() => setActiveTab('leave-queue')}
+              >
+                Leave Queue
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  
+  // Leave Queue
+  const renderLeaveQueue = () => (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Leave Queue</h2>
+      
+      <div className="mb-6">
+        <div className="max-w-lg mx-auto">
+          <div className="mb-4 p-4 border border-gray-200 rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-medium">Find Your Queue Entry</h3>
+            </div>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Queue ID" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                defaultValue={queueEntryData.id}
+              />
+              <input 
+                type="tel" 
+                placeholder="Phone Number" 
+                className="flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                defaultValue={queueEntryData.customerPhone}
+              />
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Find
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="border-t pt-6">
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">
+                Are you sure you want to leave the queue? This action cannot be undone and you'll lose your current position.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-gray-50 p-4 rounded-md mb-6">
+          <h3 className="font-medium text-gray-900 mb-2">Queue Information</h3>
+          <div className="space-y-2 text-gray-700">
+            <p><span className="font-medium">Name:</span> {queueEntryData.customerName}</p>
+            <p><span className="font-medium">Phone:</span> {queueEntryData.customerPhone}</p>
+            <p><span className="font-medium">Queue Position:</span> {queueEntryData.position}</p>
+            <p><span className="font-medium">Wait Time:</span> Approximately {queueEntryData.estimatedWaitTime} minutes</p>
+            <p><span className="font-medium">Restaurant:</span> {outletData.name}</p>
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-3">
+          <button 
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+            onClick={() => setActiveTab('check-status')}
+          >
+            Cancel
+          </button>
+          <button 
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+          >
+            Confirm Leave Queue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+  
+  // Main render
+  return (
+    <div className="bg-gray-50 min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-center mb-6">
+          {outletData.name} - Queue Management
+        </h1>
+        
+        {/* Tab Navigation */}
+        <div className="flex mb-4 overflow-x-auto border-b">
+          <button 
+            className={`px-4 py-2 ${activeTab === 'join-queue' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('join-queue')}
+          >
+            Join Queue
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'check-status' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('check-status')}
+          >
+            Check Status
+          </button>
+          <button 
+            className={`px-4 py-2 ${activeTab === 'leave-queue' ? 'text-blue-600 border-b-2 border-blue-600 font-medium' : 'text-gray-500'}`} 
+            onClick={() => setActiveTab('leave-queue')}
+          >
+            Leave Queue
+          </button>
+        </div>
+        
+        {/* Content Sections */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          {activeTab === 'join-queue' && renderJoinQueue()}
+          {activeTab === 'check-status' && renderCheckStatus()}
+          {activeTab === 'leave-queue' && renderLeaveQueue()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default QueueManagement;
