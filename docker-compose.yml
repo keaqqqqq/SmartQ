@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Database
+  mariadb:
+    image: mariadb:latest
+    container_name: fb_reservation_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-fb_reservation}
+      MYSQL_USER: ${DB_USERNAME:-fbuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fbpassword}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - fb_reservation_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API
+  api:
+    build:
+      context: .
+      dockerfile: F&BReservation.API/Dockerfile
+    container_name: fb_reservation_api
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-5000}:80"
+      - "${API_HTTPS_PORT:-5001}:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=${DB_DATABASE:-fb_reservation};User=${DB_USERNAME:-fbuser};Password=${DB_PASSWORD:-fbpassword};
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+    networks:
+      - fb_reservation_network
+
+  # Portal
+  portal:
+    build:
+      context: .
+      dockerfile: F&BReservation.Portal/Dockerfile
+    container_name: fb_reservation_portal
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${PORTAL_PORT:-5002}:80"
+      - "${PORTAL_HTTPS_PORT:-5003}:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
+      - API_BASE_URL=http://api
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+    networks:
+      - fb_reservation_network
+
+networks:
+  fb_reservation_network:
+    driver: bridge
+
+volumes:
+  mariadb_data:
+    driver: local
