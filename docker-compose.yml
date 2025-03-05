@@ -53,7 +53,11 @@ services:
       depends_on:
         - api
       ports:
-        - "${PORTAL_PORT:-5002}:80"
+        - "${PORTAL_HTTPS_PORT:-5003}:80"
+      environment:
+        - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
+        - API_BASE_URL=http://api
+        - ASPNETCORE_URLS=http://+:80
       networks:
         - fb_reservation_network
 
