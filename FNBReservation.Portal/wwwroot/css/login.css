@@ -1,0 +1,57 @@
+﻿body {
+}
+/* Login page specific styles */
+.login-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #2193b0, #6dd5ed);
+    padding: 1rem;
+}
+
+.login-card {
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.login-image-container {
+    height: 100%;
+    overflow: hidden;
+}
+
+.login-image {
+    height: 100%;
+    min-height: 300px;
+    background-image: url('/images/night-lighthouse.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+}
+
+    /* If you don't have the exact image, you can use a gradient placeholder */
+    .login-image:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg, #1e3c72, #2a5298);
+        z-index: -1;
+    }
+
+.primary-text {
+    color: #1E88E5;
+    font-weight: 600;
+}
+
+.primary-divider {
+    background-color: #1E88E5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+    .login-image {
+        min-height: 200px;
+    }
+}
