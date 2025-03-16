@@ -1,7 +1,16 @@
 ﻿@page "/"
+<head>
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+</head>
 
-<PageTitle>Home</PageTitle>
+<MudCheckBox T="bool" @bind-Checked="Basic_CheckBox1"></MudCheckBox>
+<MudCheckBox T="bool" @bind-Checked="Basic_CheckBox2" Color="Color.Primary"></MudCheckBox>
+<MudCheckBox T="bool" @bind-Checked="Basic_CheckBox3" Color="Color.Secondary"></MudCheckBox>
+<MudCheckBox T="bool" @bind-Checked="Basic_CheckBox4"></MudCheckBox>
 
-<h1>Hello, world!</h1>
-
-Welcome Raymond and KQ to your new app.
+@code {
+    public bool Basic_CheckBox1 { get; set; } = true;
+    public bool Basic_CheckBox2 { get; set; } = false;
+    public bool Basic_CheckBox3 { get; set; } = false;
+    public bool Basic_CheckBox4 { get; set; } = true;
+}

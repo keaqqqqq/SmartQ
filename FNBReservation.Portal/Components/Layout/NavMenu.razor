@@ -1,30 +1,79 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">FNBReservation.Portal</a>
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager NavigationManager
+
+<MudDrawer Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1" Variant="@DrawerVariant.Mini"
+           DisableOverlay="true" OpenMiniOnHover="true">
+    <MudDrawerHeader>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center">
+            <MudImage Src="/images/logo.png" Alt="SmartQ Logo" Width="40" Height="40" />
+            <MudText Typo="Typo.h6" Class="ml-2">SmartQ</MudText>
+        </MudStack>
+    </MudDrawerHeader>
+    <MudNavMenu>
+        <MudText Typo="Typo.subtitle2" Color="Color.Dark" Class="mx-4 my-2">Main Menu</MudText>
+
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+            Dashboard
+        </MudNavLink>
+
+        <MudNavLink Href="/booking" Icon="@Icons.Material.Filled.CalendarToday">
+            Booking
+        </MudNavLink>
+
+        <MudNavLink Href="/customers" Icon="@Icons.Material.Filled.People">
+            Customers
+        </MudNavLink>
+
+        <MudNavLink Href="/staff" Icon="@Icons.Material.Filled.PersonOutline"
+                    Disabled="@(!_canAccessStaffModule)">
+            Staff
+        </MudNavLink>
+
+        <MudNavLink Href="/analytics" Icon="@Icons.Material.Filled.BarChart">
+            Analytics
+        </MudNavLink>
+
+        <MudNavLink Href="/outlets" Icon="@Icons.Material.Filled.Store">
+            Outlet
+        </MudNavLink>
+
+        <MudDivider Class="my-2" />
+
+        <MudText Typo="Typo.subtitle2" Color="Color.Dark" Class="mx-4 my-2">Preferences</MudText>
+
+        <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">
+            Settings
+        </MudNavLink>
+    </MudNavMenu>
+
+    <div class="mud-drawer-footer">
+        <MudStack Spacing="2" Class="pa-2">
+            <!-- Simplified user profile section without AuthorizeView -->
+            <MudPaper Elevation="0" Class="py-2 px-1">
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudAvatar Color="Color.Success" Size="Size.Medium">
+                        CQ
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body1">Chu Kea Qiu</MudText>
+                        <MudText Typo="Typo.caption">Admin</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
     </div>
-</div>
+</MudDrawer>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+@code {
+    private bool _drawerOpen = true;
+    private bool _canAccessStaffModule = true; // Hardcoded for now
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+    [Parameter]
+    public EventCallback<bool> DrawerToggled { get; set; }
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+    public void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+        DrawerToggled.InvokeAsync(_drawerOpen);
+    }
+}
