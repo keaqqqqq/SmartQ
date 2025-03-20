@@ -11,8 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Components\Pages\Outlet\" />
-    <Folder Include="Components\Pages\Reservation\" />
+    <Folder Include="Models\" />
+    <Folder Include="Shared\" />
   </ItemGroup>
 
 </Project>

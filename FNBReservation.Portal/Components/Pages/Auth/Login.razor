@@ -36,9 +36,12 @@
                                           AdornmentIcon="@Icons.Material.Filled.Lock"
                                           AdornmentColor="Color.Primary" />
                         </div>
-                        <div class="mb-1 mt-5 d-flex align-center">
-                            <input type="checkbox" id="rememberMe" @bind="rememberMe" class="remember-checkbox" />
-                            <label for="rememberMe" class="ml-2 remember-label">Remember me</label>
+                        <div class="d-flex justify-space-between align-center mb-1 mt-5">
+                            <div class="d-flex align-center">
+                                <input type="checkbox" id="rememberMe" @bind="rememberMe" class="remember-checkbox" />
+                                <label for="rememberMe" class="ml-2 remember-label">Remember me</label>
+                            </div>
+                            <MudLink Href="/forgot-password" Underline="Underline.Always" Color="Color.Primary">Forgot password?</MudLink>
                         </div>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" FullWidth="true"
                                    ButtonType="ButtonType.Submit" Class="mt-auto login-button">
