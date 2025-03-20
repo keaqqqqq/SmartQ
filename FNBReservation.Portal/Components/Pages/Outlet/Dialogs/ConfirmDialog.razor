@@ -1,0 +1,75 @@
+﻿@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudText>@ContentText</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="@Color" Variant="Variant.Filled" OnClick="Submit">@ButtonText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private MudDialogInstance MudDialog { get; set; }
+
+    [Parameter]
+    public StaffMember StaffMember { get; set; }
+
+    [Parameter]
+    public int OutletId { get; set; }
+
+    [Parameter]
+    public string OutletName { get; set; }
+
+    private StaffUpdateRequest model = new();
+    private MudForm form;
+    private bool isValid;
+    private bool processing;
+
+    protected override void OnInitialized()
+    {
+        model.Id = StaffMember.Id;
+        model.Name = StaffMember.Name;
+        model.Username = StaffMember.Username;
+        model.Email = StaffMember.Email;
+        model.PhoneNumber = StaffMember.PhoneNumber;
+        model.Role = StaffMember.Role;
+        model.Password = "";
+        model.ConfirmPassword = "";
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Submit()
+    {
+        if (processing)
+            return;
+
+        processing = true;
+
+        try
+        {
+            await form.Validate();
+
+            if (isValid)
+            {
+                var result = await StaffService.UpdateStaffAsync(model);
+                MudDialog.Close(DialogResult.Ok(result));
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle exceptions (could display an error message)
+            Console.Error.WriteLine($"Error updating staff: {ex.Message}");
+        }
+        finally
+        {
+            processing = false;
+        }
+    }
+}
