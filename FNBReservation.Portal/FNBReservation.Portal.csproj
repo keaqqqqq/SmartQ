@@ -11,7 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Components\Pages\Outlet\" />
     <Folder Include="Components\Pages\Reservation\" />
   </ItemGroup>
 

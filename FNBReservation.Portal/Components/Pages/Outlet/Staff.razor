@@ -1,0 +1,178 @@
+﻿@page "/outlet/staff"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject IStaffService StaffService
+@inject IOutletService OutletService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Staff Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Staff Management</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudSelect T="Outlet" Label="Outlet" Value="selectedOutlet" ValueChanged="OnOutletChanged" Variant="Variant.Outlined" FullWidth="true">
+                @foreach (var outlet in outlets)
+                {
+                    <MudSelectItem Value="@outlet">
+                        @outlet.Name - @outlet.Address
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex justify-end">
+            <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenAddStaffDialog" StartIcon="@Icons.Material.Filled.Add">
+                Add Staff
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="@filteredStaff" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading" 
+              LoadingProgressColor="Color.Primary" Filter="FilterFunc">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>NAME</MudTh>
+            <MudTh>USERNAME</MudTh>
+            <MudTh>CONTACT</MudTh>
+            <MudTh>ROLE</MudTh>
+            <MudTh>CREATED</MudTh>
+            <MudTh>ACTIONS</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">@context.Id</MudTd>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Username">@context.Username</MudTd>
+            <MudTd DataLabel="Contact">
+                <div>@context.Email</div>
+                <div>+@context.PhoneNumber</div>
+            </MudTd>
+            <MudTd DataLabel="Role">
+                <MudChip Color="@GetRoleColor(context.Role)" Size="Size.Small">@context.Role</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Created">@context.CreatedDate.ToShortDateString()</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditStaffDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteConfirmation(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+        <NoRecordsContent>
+            <MudText>No staff records found</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<StaffMember> staffMembers = new();
+    private List<Outlet> outlets = new();
+    private Outlet selectedOutlet;
+    private string searchString = "";
+    private bool isLoading = true;
+    
+    private List<StaffMember> filteredStaff => staffMembers
+        .Where(s => string.IsNullOrWhiteSpace(searchString) ||
+                    s.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                    s.Username.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                    s.Email.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                    s.PhoneNumber.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                    s.Role.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        outlets = await OutletService.GetOutletsAsync();
+        
+        if (outlets.Any())
+        {
+            selectedOutlet = outlets.First();
+            await LoadStaffForOutlet(selectedOutlet.Id);
+        }
+        
+        isLoading = false;
+    }
+
+    private async Task LoadStaffForOutlet(int outletId)
+    {
+        isLoading = true;
+        staffMembers = await StaffService.GetStaffByOutletAsync(outletId);
+        isLoading = false;
+    }
+
+    private async Task OnOutletChanged(Outlet outlet)
+    {
+        selectedOutlet = outlet;
+        await LoadStaffForOutlet(outlet.Id);
+    }
+
+    private Color GetRoleColor(string role) => role.ToLower() switch
+    {
+        "manager" => Color.Primary,
+        "host" => Color.Info,
+        "server" => Color.Success,
+        _ => Color.Default
+    };
+
+    private async Task OpenAddStaffDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["OutletId"] = selectedOutlet.Id,
+            ["OutletName"] = selectedOutlet.Name
+        };
+
+        var dialog = await DialogService.ShowAsync<AddStaffDialog>("Add Staff", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Staff member added successfully", Severity.Success);
+            await LoadStaffForOutlet(selectedOutlet.Id);
+        }
+    }
+
+    private async Task OpenEditStaffDialog(StaffMember staff)
+    {
+        var parameters = new DialogParameters
+        {
+            ["StaffMember"] = staff,
+            ["OutletId"] = selectedOutlet.Id,
+            ["OutletName"] = selectedOutlet.Name
+        };
+
+        var dialog = await DialogService.ShowAsync<EditStaffDialog>("Edit Staff", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Staff member updated successfully", Severity.Success);
+            await LoadStaffForOutlet(selectedOutlet.Id);
+        }
+    }
+
+    private async Task OpenDeleteConfirmation(StaffMember staff)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {staff.Name}? This action cannot be undone."
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await StaffService.DeleteStaffAsync(staff.Id);
+            Snackbar.Add("Staff member deleted successfully", Severity.Success);
+            await LoadStaffForOutlet(selectedOutlet.Id);
+        }
+    }
+}
