@@ -1,0 +1,326 @@
+﻿@using System.Net.Http.Json
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject IOutletService OutletService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Store" Class="mr-2" /> @(outlet?.Name ?? "Outlet Details")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (isLoading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (outlet == null)
+        {
+            <MudAlert Severity="Severity.Error">Failed to load outlet details.</MudAlert>
+        }
+        else
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                <MudTabPanel Text="Basic Info" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>ID:</strong></MudText>
+                                <MudText>@outlet.OutletId</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Status:</strong></MudText>
+                                <MudChip Color="@GetStatusColor(outlet.Status)" Size="Size.Small" T="string">@outlet.Status</MudChip>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Location:</strong></MudText>
+                                <MudText>@outlet.Location</MudText>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Contact Information:</strong></MudText>
+                                <MudList Dense="true" T="string">
+                                    <MudListItem Icon="@Icons.Material.Filled.Phone" T="string">
+                                        @(string.IsNullOrEmpty(outlet.Contact.Phone) ? "Not provided" : outlet.Contact.Phone)
+                                    </MudListItem>
+                                    <MudListItem Icon="@Icons.Material.Filled.Email" T="string">
+                                        @(string.IsNullOrEmpty(outlet.Contact.Email) ? "Not provided" : outlet.Contact.Email)
+                                    </MudListItem>
+                                    <MudListItem Icon="@Icons.Material.Filled.Language" T="string">
+                                        @(string.IsNullOrEmpty(outlet.Contact.Website) ? "Not provided" : outlet.Contact.Website)
+                                    </MudListItem>
+                                </MudList>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Reservation Settings" Icon="@Icons.Material.Filled.Settings">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Min Advance Reservation:</strong></MudText>
+                                <MudText>@outlet.MinAdvanceReservationTime hours</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Max Advance Reservation:</strong></MudText>
+                                <MudText>@outlet.MaxAdvanceReservationTime days</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-4" Elevation="0">
+                                <MudText Typo="Typo.subtitle1"><strong>Queue:</strong></MudText>
+                                <MudChip Color="@(outlet.QueueEnabled ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                                    @(outlet.QueueEnabled ? "Enabled" : "Disabled")
+                                </MudChip>
+                            </MudPaper>
+                        </MudItem>
+
+                        @if (outlet.SpecialRequirements.Any())
+                        {
+                            <MudItem xs="12">
+                                <MudPaper Class="pa-4" Elevation="0">
+                                    <MudText Typo="Typo.subtitle1"><strong>Special Requirements:</strong></MudText>
+                                    <MudList Clickable="false" Dense="true" T="string">
+                                        @foreach (var requirement in outlet.SpecialRequirements)
+                                        {
+                                            <MudListItem Icon="@Icons.Material.Filled.Check" T="string">@requirement</MudListItem>
+                                        }
+                                    </MudList>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Operating Hours" Icon="@Icons.Material.Filled.Schedule">
+                    <MudGrid>
+                        @foreach (var day in new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" })
+                        {
+                            var daySchedule = GetDaySchedule(day);
+                            <MudItem xs="12" sm="6">
+                                <MudPaper Class="pa-4" Elevation="0">
+                                    <MudText Typo="Typo.subtitle1"><strong>@day:</strong></MudText>
+                                    @if (daySchedule.IsOpen)
+                                    {
+                                        <MudText>@daySchedule.OpenTime - @daySchedule.CloseTime</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudChip Color="Color.Error" Size="Size.Small" T="string">Closed</MudChip>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Tables" Icon="@Icons.Material.Filled.TableRestaurant">
+                    @if (!outlet.Tables.Any())
+                    {
+                        <MudAlert Severity="Severity.Info">No tables configured for this outlet.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="@outlet.Tables" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Name</MudTh>
+                                <MudTh>Capacity</MudTh>
+                                <MudTh>Location</MudTh>
+                                <MudTh>Status</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Name">@context.Name</MudTd>
+                                <MudTd DataLabel="Capacity">@context.Capacity</MudTd>
+                                <MudTd DataLabel="Location">@context.Location</MudTd>
+                                <MudTd DataLabel="Status">
+                                    <MudChip Color="@GetTableStatusColor(context.Status)" Size="Size.Small" T="string">
+                                        @context.Status
+                                    </MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+
+                        <MudText Typo="Typo.body2" Class="mt-4">
+                            Total Capacity: @outlet.Tables.Sum(t => t.Capacity) seats across @outlet.Tables.Count tables
+                        </MudText>
+                    }
+                </MudTabPanel>
+
+                <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.History">
+                    @if (activityChanges == null || !activityChanges.Any())
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        <MudText Align="Align.Center">Loading activity...</MudText>
+                    }
+                    else if (activityChanges.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info">No activity recorded for this outlet.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTimeline>
+                            @foreach (var change in activityChanges)
+                            {
+                                <MudTimelineItem Color="GetActivityColor(change.ChangeType)" Icon="@GetActivityIcon(change.ChangeType)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.h6">@change.ChangeType</MudText>
+                                        <MudText Typo="Typo.body1">@change.Description</MudText>
+                                        <MudText Typo="Typo.caption">@change.ChangedBy on @change.ChangeDate.ToString("MMM dd, yyyy HH:mm:ss")</MudText>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Close()">Close</MudButton>
+        @if (outlet != null)
+        {
+            <MudButton Color="Color.Primary" OnClick="() => OpenEditDialog()">Edit</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public string? OutletId { get; set; }
+
+    private OutletDto? outlet;
+    private bool isLoading = true;
+    private List<OutletChangeDto>? activityChanges;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(OutletId))
+        {
+            await LoadOutletDetails();
+            await LoadOutletChanges();
+        }
+        else
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadOutletDetails()
+    {
+        try
+        {
+            isLoading = true;
+            outlet = await OutletService.GetOutletByIdAsync(OutletId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlet details: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadOutletChanges()
+    {
+        try
+        {
+            activityChanges = await OutletService.GetOutletChangesAsync(OutletId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlet activity: {ex.Message}", Severity.Error);
+            activityChanges = new List<OutletChangeDto>();
+        }
+    }
+
+    private DaySchedule GetDaySchedule(string day)
+    {
+        if (outlet == null) return new DaySchedule();
+
+        return day switch
+        {
+            "Monday" => outlet.OperatingHours.Monday,
+            "Tuesday" => outlet.OperatingHours.Tuesday,
+            "Wednesday" => outlet.OperatingHours.Wednesday,
+            "Thursday" => outlet.OperatingHours.Thursday,
+            "Friday" => outlet.OperatingHours.Friday,
+            "Saturday" => outlet.OperatingHours.Saturday,
+            "Sunday" => outlet.OperatingHours.Sunday,
+            _ => new DaySchedule()
+        };
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "active" => Color.Success,
+            "inactive" => Color.Error,
+            "maintenance" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetTableStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "available" => Color.Success,
+            "reserved" => Color.Primary,
+            "outofservice" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetActivityColor(string changeType)
+    {
+        return changeType.ToLower() switch
+        {
+            "create" => Color.Success,
+            "update" => Color.Info,
+            "delete" => Color.Error,
+            "status_change" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private string GetActivityIcon(string changeType)
+    {
+        return changeType.ToLower() switch
+        {
+            "create" => Icons.Material.Filled.Add,
+            "update" => Icons.Material.Filled.Edit,
+            "delete" => Icons.Material.Filled.Delete,
+            "status_change" => Icons.Material.Filled.Refresh,
+            _ => Icons.Material.Filled.Info
+        };
+    }
+
+    private void OpenEditDialog()
+    {
+        if (outlet == null) return;
+
+        var parameters = new DialogParameters
+            {
+                ["Outlet"] = outlet,
+                ["IsEdit"] = true
+            };
+
+        MudDialog.Close();
+        DialogService.Show<OutletFormDialog>("Edit Outlet", parameters);
+    }
+}

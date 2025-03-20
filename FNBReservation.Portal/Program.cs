@@ -1,5 +1,6 @@
 using MudBlazor.Services;
 using FNBReservation.Portal.Components;
+using FNBReservation.Portal.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveServerComponents();
 
+// Register the mock service
+builder.Services.AddSingleton<IOutletService, MockOutletService>();
 
 builder.Services.AddMudServices();
 
