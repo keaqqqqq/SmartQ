@@ -3,10 +3,10 @@
 
 <MudDrawer Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1" Variant="@DrawerVariant.Mini" 
            DisableOverlay="true" OpenMiniOnHover="true">
-    <MudDrawerHeader Style="padding-top: -10px; min-height: 56px;">
+    <MudDrawerHeader>
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center">
             <MudImage Src="/images/logo.png" Alt="SmartQ Logo" Width="40" Height="40" />
-            <MudText Typo="Typo.h6" Class="ml-2">SmartQ</MudText>
+            <MudText Typo="Typo.h6" Class="mt-2 ">SmartQ</MudText>
         </MudStack>
     </MudDrawerHeader>
     
@@ -54,14 +54,7 @@
             <MudPaper Class="rounded-lg py-4 px-2 mx-7 mb-2" Style="background-color: #f5f5f5;">
                 <MudStack AlignItems="AlignItems.Center" Spacing="1">
                     <MudAvatar Style="height: 80px; width: 80px; background-color: #aaf0d1;">
-                        @if (ProfileImageExists)
-                        {
-                            <MudImage Src="/images/profile.jpg" Alt="Profile" Class="rounded-circle" />
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.h4">CQ</MudText>
-                        }
+                        <MudImage Src="/images/profile.jpg" Alt="Profile" Class="rounded-circle" />
                     </MudAvatar>
                     <MudText Typo="Typo.h6" Align="Align.Center" Class="mt-2">Chu Kea Qiu</MudText>
                     <MudText Typo="Typo.subtitle2" Align="Align.Center" Color="Color.Dark">Admin</MudText>
@@ -75,30 +68,9 @@
 @code {
     private bool _drawerOpen = true;
     private bool _canAccessStaffModule = true; // Hardcoded for now
-    private bool ProfileImageExists { get; set; } = false; // Default to false, will check in OnInitialized
 
     [Parameter]
     public EventCallback<bool> DrawerToggled { get; set; }
-
-    protected override async Task OnInitializedAsync()
-    {
-        // You could implement actual file check logic here
-        // For example, checking if the file exists on the server
-        // This is a placeholder - replace with actual implementation
-        try
-        {
-            // Example only - this would need to be implemented properly
-            // var fileInfo = new FileInfo(Path.Combine(env.WebRootPath, "images", "profile.jpg"));
-            // ProfileImageExists = fileInfo.Exists;
-
-            // For development, just set this manually
-            ProfileImageExists = false; // Change to true to test with image
-        }
-        catch
-        {
-            ProfileImageExists = false;
-        }
-    }
 
     public void ToggleDrawer()
     {
