@@ -8,65 +8,80 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
-        <MudText Typo="Typo.h4">Outlet Management</MudText>
-        <MudSpacer />
-        <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
-        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Large" OnClick="OpenAddOutletDialog" aria-label="Add outlet" />
-    </MudStack>
+<MudBreakpointProvider>
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
+            <MudText Typo="Typo.h4">Outlet Management</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Large" OnClick="OpenAddOutletDialog" aria-label="Add outlet" />
+        </MudStack>
 
-    @if (isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
-    }
-    else
-    {
-        <MudTable Items="@outlets" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading" LoadingProgressColor="Color.Primary">
-            <HeaderContent>
-                <MudTh>ID</MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Location</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Capacity</MudTh>
-                <MudTh>Queue</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@context.OutletId</MudTd>
-                <MudTd>@context.Name</MudTd>
-                <MudTd>@context.Location</MudTd>
-                <MudTd>
-                    <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">@context.Status</MudChip>
-                </MudTd>
-                <MudTd>
-                    <div>@context.Tables.Count seats</div>
-                    <MudText Typo="Typo.caption">@context.Tables.Count tables</MudText>
-                </MudTd>
-                <MudTd>
-                    <MudChip Color="@(context.QueueEnabled ? Color.Success : Color.Error)" Size="Size.Small" T="string">
-                        @(context.QueueEnabled ? "Enabled" : "Disabled")
-                    </MudChip>
-                </MudTd>
-                <MudTd>
-                    <MudStack Row="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" OnClick="@(() => ViewOutletDetails(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditOutletDialog(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteDialog(context))" />
-                    </MudStack>
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText>No outlets found</MudText>
-            </NoRecordsContent>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
-    }
-</MudContainer>
+        @if (isLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else
+        {
+            <MudTable Items="@outlets" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading" LoadingProgressColor="Color.Primary">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Location</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Capacity</MudTh>
+                    <MudTh>Queue</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="context">
+                    <MudTd DataLabel="ID">@context.OutletId</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Location">@context.Location</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">@context.Status</MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Capacity">
+                        <div>@context.Tables.Sum(t => t.Capacity) seats</div>
+                        <MudText Typo="Typo.caption">@context.Tables.Count tables</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Queue">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@(context.QueueEnabled ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                                        @(context.QueueEnabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" OnClick="@(() => ViewOutletDetails(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditOutletDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteDialog(context))" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No outlets found</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+    </MudContainer>
+</MudBreakpointProvider>
 
 @code {
+    // Your existing code here
     private List<OutletDto> outlets = new();
     private bool isLoading = true;
     private string SearchTerm = "";

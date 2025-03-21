@@ -9,6 +9,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveServerComponents();
 
+
 // Register the mock service
 builder.Services.AddSingleton<IOutletService, MockOutletService>();
 
