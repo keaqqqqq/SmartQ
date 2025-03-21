@@ -1,0 +1,27 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## EXPLICIT INSTRUCTIONS FOR CODE ANALYSIS
+Please analyse the rules, and the project structure, especially the "src" folder. Generate code and files necessary to satisfy the platform-rules file. Change the UI/UX of the default JHipster template to match the requirements of the platform-rules file. 
+
+## EXPLICIT INSTRUCTIONS FOR CODE GENERATION
+Please generate complete webpage based on the requirements above. Prioritize working code over features. ENSURE ALL THE FEATURES MENTIONED ARE IMPLEMENTED
+
+1. Install necessary dependencies (ensure install packages that are not part of the default dependencies)
+2. Ensure all libraries and dependencies are installed correctly and built before executing
+3. Ensure that the project undergoes "./mvnw clean compile" before execution
+4. Ensure that there are no errors during compilation or execution
+5. Ensure that there are no formatting errors from "Prettier" by using the corrent script commands to compile them again
+6. Only execute when there are no more errors and all error checks and builds have been completed
+
+IMPORTANT: MAKE SURE THE FRONTEND OF THE APPLICATION IS RELATED AND SUITABLE FOR THE APPLICATION MENTIONED IN THE "platform-rules"
+
+IMPORTANT: DO NOT PROCEED WITH APPLICATION EXECUTION UNTIL ALL ERRORS ARE FOUND
+
+IMPORTANT: DO "./mvnw" TO CHECK FOR ERRORS AND FIX THEM BEFORE PROCEEDING
+
+IMPORTANT" DO "npm start" ONCE THERE ARE NO MORE ERRORS AND FIX THEM BEFORE LAUNCHING
+
+IMPORTANT: DO "npm run prettier:format" TO FIX ANY POSSIBLE LINTING OR FORMATTING ERRORS

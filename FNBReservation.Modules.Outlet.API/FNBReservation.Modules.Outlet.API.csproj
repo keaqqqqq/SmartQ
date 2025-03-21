@@ -1,0 +1,20 @@
+﻿<!-- FNBReservation.Modules.Outlet.API/FNBReservation.Modules.Outlet.API.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<PackageReference Include="Microsoft.AspNetCore.Authorization" Version="8.0.3" />
+		<PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.2.5" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FNBReservation.Modules.Outlet.Core\FNBReservation.Modules.Outlet.Core.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Outlet.Infrastructure\FNBReservation.Modules.Outlet.Infrastructure.csproj" />
+	</ItemGroup>
+</Project>
