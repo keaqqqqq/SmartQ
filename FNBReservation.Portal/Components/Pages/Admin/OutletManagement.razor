@@ -7,6 +7,7 @@
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@rendermode InteractiveServer
 
 <MudBreakpointProvider>
     <MudContainer MaxWidth="MaxWidth.ExtraLarge">
@@ -14,7 +15,6 @@
             <MudText Typo="Typo.h4">Outlet Management</MudText>
             <MudSpacer />
             <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
-            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Large" OnClick="OpenAddOutletDialog" aria-label="Add outlet" />
         </MudStack>
 
         @if (isLoading)
@@ -77,7 +77,25 @@
                 </PagerContent>
             </MudTable>
         }
+        <!-- Floating Action Button (FAB) -->
+        <MudFab Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Add"
+                Size="Size.Large"
+                OnClick="OpenAddOutletDialog"
+                Class="fab-button"
+                aria-label="Add outlet" />
     </MudContainer>
+
+    <style>
+        .fab-button {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10;
+        }
+    </style>
+
+
 </MudBreakpointProvider>
 
 @code {
@@ -180,7 +198,7 @@
     {
         var parameters = new DialogParameters
             {
-                ["ContentText"] = $"Are you sure you want to delete the outlet '{outlet.Name}'? This action cannot be undone.",
+                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the outlet <b>'{outlet.Name}'</b>? This action cannot be undone.",
                 ["ButtonText"] = "Delete",
                 ["Color"] = Color.Error
             };
