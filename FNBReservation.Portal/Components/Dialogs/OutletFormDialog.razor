@@ -5,7 +5,7 @@
 @inject ISnackbar Snackbar
 @rendermode InteractiveServer
 
-<MudDialog>
+<MudDialog MaxWidth="MaxWidth.ExtraLarge" Class="outlet-dialog">
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
@@ -38,13 +38,17 @@
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="6">
-                            <MudSwitch @bind-Checked="OutletModel.QueueEnabled" Label="Enable Queue Management" Color="Color.Primary" T="bool" />
-                        </MudItem>
-                        <MudItem xs="6">
-                            <MudSwitch @bind-Checked="OutletModel.SpecialRequirements" Label="Enable Special Requirements" Color="Color.Primary" T="bool" />
-                        </MudItem>
-                        <MudItem xs="6">
                             <MudTextField @bind-Value="OutletModel.Contact" Label="Contact Number" Variant="Variant.Outlined" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudGrid>
+                                <MudItem xs="6">
+                                    <MudSwitch @bind-Checked="OutletModel.QueueEnabled" Label="Enable Queue Management" Color="Color.Primary" T="bool" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudSwitch @bind-Checked="OutletModel.SpecialRequirements" Label="Enable Special Requirements" Color="Color.Primary" T="bool" />
+                                </MudItem>
+                            </MudGrid>
                         </MudItem>
                     </MudGrid>
                 </MudTabPanel>
@@ -107,6 +111,24 @@
     </DialogActions>
 </MudDialog>
 
+<style>
+    .outlet-dialog {
+        min-width: 800px;
+        width: 90vw;
+        max-width: 1200px;
+        max-height: 90vh;
+    }
+
+    @@media (max-width: 600px) {
+        .outlet-dialog
+
+    {
+        min-width: 100%;
+        width: 100%;
+    }
+
+    }
+</style>
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
 

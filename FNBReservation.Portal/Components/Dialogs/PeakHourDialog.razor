@@ -1,0 +1,165 @@
+﻿@using FNBReservation.Portal.Models
+@rendermode InteractiveServer
+
+<MudDialog Style="min-width: 650px; max-width: 800px;">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(EditMode ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            @(EditMode ? "Edit Peak Hour" : "Add Peak Hour")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="PeakHour.Name" Label="Name" Required
+                              Variant="Variant.Outlined" FullWidth="true" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudTimePicker Time="StartTimeSpan" TimeChanged="UpdateStartTime" Label="Start Time" Required
+                               TimeEditMode="TimeEditMode.Normal" Variant="Variant.Outlined"
+                               AmPm="true" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudTimePicker Time="EndTimeSpan" TimeChanged="UpdateEndTime" Label="End Time" Required
+                               TimeEditMode="TimeEditMode.Normal" Variant="Variant.Outlined"
+                               AmPm="true" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Days of Week</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    <MudCheckBox T="bool" Checked="Monday" CheckedChanged="UpdateMonday" Label="Monday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Tuesday" CheckedChanged="UpdateTuesday" Label="Tuesday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Wednesday" CheckedChanged="UpdateWednesday" Label="Wednesday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Thursday" CheckedChanged="UpdateThursday" Label="Thursday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Friday" CheckedChanged="UpdateFriday" Label="Friday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Saturday" CheckedChanged="UpdateSaturday" Label="Saturday" Color="Color.Primary" />
+                    <MudCheckBox T="bool" Checked="Sunday" CheckedChanged="UpdateSunday" Label="Sunday" Color="Color.Primary" />
+                </div>
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="PeakHour.ReservationAllocationPercent" Label="Reservation Allocation (%)" Required
+                                 Variant="Variant.Outlined" Min="0" Max="100" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudSwitch @bind-Checked="PeakHour.IsActive" Label="Active" Color="Color.Primary" T="bool" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Date="PeakHour.StartDate" DateChanged="UpdateStartDate" Label="Start Date (Optional)"
+                               Variant="Variant.Outlined" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Date="PeakHour.EndDate" DateChanged="UpdateEndDate" Label="End Date (Optional)"
+                               Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public PeakHour PeakHour { get; set; } = new();
+    [Parameter] public bool EditMode { get; set; } = false;
+
+    // Properties for time pickers
+    private TimeSpan? StartTimeSpan { get; set; }
+    private TimeSpan? EndTimeSpan { get; set; }
+
+    // Properties for days of week checkboxes
+    private bool Monday { get; set; }
+    private bool Tuesday { get; set; }
+    private bool Wednesday { get; set; }
+    private bool Thursday { get; set; }
+    private bool Friday { get; set; }
+    private bool Saturday { get; set; }
+    private bool Sunday { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Initialize time values
+        if (TimeSpan.TryParse(PeakHour.StartTime, out TimeSpan startTime))
+            StartTimeSpan = startTime;
+        else
+            StartTimeSpan = TimeSpan.FromHours(18); // Default to 6:00 PM
+
+        if (TimeSpan.TryParse(PeakHour.EndTime, out TimeSpan endTime))
+            EndTimeSpan = endTime;
+        else
+            EndTimeSpan = TimeSpan.FromHours(20); // Default to 8:00 PM
+
+        // Initialize days of week
+        var days = string.IsNullOrEmpty(PeakHour.DaysOfWeek)
+            ? new string[0]
+            : PeakHour.DaysOfWeek.Split(',');
+
+        Monday = days.Contains("1");
+        Tuesday = days.Contains("2");
+        Wednesday = days.Contains("3");
+        Thursday = days.Contains("4");
+        Friday = days.Contains("5");
+        Saturday = days.Contains("6");
+        Sunday = days.Contains("7");
+    }
+
+    private void UpdateStartTime(TimeSpan? time)
+    {
+        StartTimeSpan = time;
+        if (time.HasValue)
+            PeakHour.StartTime = $"{time.Value.Hours:D2}:{time.Value.Minutes:D2}:00";
+    }
+
+    private void UpdateEndTime(TimeSpan? time)
+    {
+        EndTimeSpan = time;
+        if (time.HasValue)
+            PeakHour.EndTime = $"{time.Value.Hours:D2}:{time.Value.Minutes:D2}:00";
+    }
+
+    private void UpdateStartDate(DateTime? date)
+    {
+        PeakHour.StartDate = date;
+    }
+
+    private void UpdateEndDate(DateTime? date)
+    {
+        PeakHour.EndDate = date;
+    }
+
+    private void UpdateMonday(bool value) => Monday = value;
+    private void UpdateTuesday(bool value) => Tuesday = value;
+    private void UpdateWednesday(bool value) => Wednesday = value;
+    private void UpdateThursday(bool value) => Thursday = value;
+    private void UpdateFriday(bool value) => Friday = value;
+    private void UpdateSaturday(bool value) => Saturday = value;
+    private void UpdateSunday(bool value) => Sunday = value;
+
+    private void Submit()
+    {
+        // Update days of week
+        var selectedDays = new List<string>();
+        if (Monday) selectedDays.Add("1");
+        if (Tuesday) selectedDays.Add("2");
+        if (Wednesday) selectedDays.Add("3");
+        if (Thursday) selectedDays.Add("4");
+        if (Friday) selectedDays.Add("5");
+        if (Saturday) selectedDays.Add("6");
+        if (Sunday) selectedDays.Add("7");
+
+        PeakHour.DaysOfWeek = string.Join(",", selectedDays);
+
+        MudDialog.Close(DialogResult.Ok(PeakHour));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

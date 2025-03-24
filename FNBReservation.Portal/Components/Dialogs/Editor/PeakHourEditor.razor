@@ -1,99 +1,51 @@
 ﻿@using FNBReservation.Portal.Models
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @rendermode InteractiveServer
 
-<MudContainer Class="pa-4">
-    <MudPaper Elevation="0" Class="pa-4">
-        <MudText Typo="Typo.subtitle1" Class="mb-4">Peak Hours Configuration</MudText>
-        <MudText Typo="Typo.body2" Class="mb-4">
-            Define peak hours for your outlet. During these times, special rules and capacity limits apply.
-        </MudText>
+<MudPaper Elevation="0" Class="pa-4">
+    <MudText Typo="Typo.subtitle1" Class="mb-4">Peak Hours Configuration</MudText>
 
-        <MudButton OnClick="AddPeakHour" Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mb-4">
-            Add Peak Hour
-        </MudButton>
-
-        @foreach (var (peakHour, index) in PeakHours.Select((p, i) => (p, i)))
-        {
-            <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px solid #e0e0e0; border-radius: 4px;">
-                <MudGrid>
-                    <MudItem xs="12">
-                        <MudTextField @bind-Value="peakHour.Name" Label="Name" Variant="Variant.Outlined" FullWidth="true" />
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudTimePicker Time="GetTimeSpan(peakHour.StartTime)" Label="Start Time"
-                                       TimeEditMode="TimeEditMode.Normal" Variant="Variant.Outlined" FullWidth="true"
-                                       AmPm="true" TimeChanged="@((TimeSpan? time) => UpdateStartTime(index, time))" />
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudTimePicker Time="GetTimeSpan(peakHour.EndTime)" Label="End Time"
-                                       TimeEditMode="TimeEditMode.Normal" Variant="Variant.Outlined" FullWidth="true"
-                                       AmPm="true" TimeChanged="@((TimeSpan? time) => UpdateEndTime(index, time))" />
-                    </MudItem>
-
-                    <MudItem xs="12">
-                        <MudText Typo="Typo.subtitle2">Days of Week</MudText>
-                        <div class="d-flex flex-wrap gap-2 mt-2">
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 1)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 1, val))"
-                                         Label="Mon" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 2)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 2, val))"
-                                         Label="Tue" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 3)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 3, val))"
-                                         Label="Wed" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 4)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 4, val))"
-                                         Label="Thu" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 5)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 5, val))"
-                                         Label="Fri" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 6)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 6, val))"
-                                         Label="Sat" Color="Color.Primary" T="bool" />
-                            <MudCheckBox Checked="@IsDaySelected(peakHour.DaysOfWeek, 7)"
-                                         CheckedChanged="@((bool val) => UpdateDayOfWeek(index, 7, val))"
-                                         Label="Sun" Color="Color.Primary" T="bool" />
-                        </div>
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudNumericField @bind-Value="peakHour.ReservationAllocationPercent" Label="Reservation Allocation (%)"
-                                         Variant="Variant.Outlined" Min="0" Max="100" FullWidth="true"
-                                         HelperText="Percentage of tables allocated for reservations during peak hours" />
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch @bind-Checked="peakHour.IsActive" Label="Active" Color="Color.Primary" T="bool" />
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudDatePicker @bind-Date="peakHour.StartDate" Label="Start Date"
-                                       Variant="Variant.Outlined" FullWidth="true" />
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6">
-                        <MudDatePicker @bind-Date="peakHour.EndDate" Label="End Date"
-                                       Variant="Variant.Outlined" FullWidth="true" />
-                    </MudItem>
-
-                    <MudItem xs="12" Class="d-flex justify-end">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                       Size="Size.Small" OnClick="@(() => RemovePeakHour(index))" />
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-        }
-
-        @if (!PeakHours.Any())
-        {
-            <MudAlert Severity="Severity.Info" Class="my-4">No peak hours defined yet. Click the Add Peak Hour button to get started.</MudAlert>
-        }
-    </MudPaper>
-</MudContainer>
+    <MudTable Items="@PeakHours" Dense="true" Hover="true" Bordered="true" Striped="true">
+        <ToolBarContent>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenPeakHourDialog" Class="ml-auto">Add Peak Hour</MudButton>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Days</MudTh>
+            <MudTh>Hours</MudTh>
+            <MudTh>Allocation</MudTh>
+            <MudTh>Active</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Days">@FormatDaysOfWeek(context.DaysOfWeek)</MudTd>
+            <MudTd DataLabel="Hours">@FormatTimeRange(context.StartTime, context.EndTime)</MudTd>
+            <MudTd DataLabel="Allocation">@context.ReservationAllocationPercent%</MudTd>
+            <MudTd DataLabel="Active">
+                <MudChip Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudStack Row="true">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="@(() => EditPeakHour(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => RemovePeakHour(context))" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center">No peak hours added yet. Click the Add Peak Hour button to get started.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
 
 @code {
     [Parameter]
@@ -102,49 +54,65 @@
     [Parameter]
     public EventCallback<List<PeakHour>> PeakHoursChanged { get; set; }
 
-    private bool IsDaySelected(string daysOfWeek, int day)
+    private PeakHour currentPeakHour = new();
+
+    private string FormatDaysOfWeek(string daysOfWeek)
     {
         if (string.IsNullOrEmpty(daysOfWeek))
-            return false;
+            return "None";
 
         var days = daysOfWeek.Split(',');
-        return days.Contains(day.ToString());
-    }
+        var dayNames = new List<string>();
 
-    private async Task UpdateDayOfWeek(int peakHourIndex, int day, bool isChecked)
-    {
-        if (peakHourIndex >= 0 && peakHourIndex < PeakHours.Count)
+        foreach (var day in days)
         {
-            var days = new List<string>();
-
-            if (!string.IsNullOrEmpty(PeakHours[peakHourIndex].DaysOfWeek))
+            if (int.TryParse(day, out int dayNumber))
             {
-                days = PeakHours[peakHourIndex].DaysOfWeek.Split(',').ToList();
+                dayNames.Add(dayNumber switch
+                {
+                    1 => "Mon",
+                    2 => "Tue",
+                    3 => "Wed",
+                    4 => "Thu",
+                    5 => "Fri",
+                    6 => "Sat",
+                    7 => "Sun",
+                    _ => day
+                });
             }
-
-            if (isChecked && !days.Contains(day.ToString()))
-            {
-                days.Add(day.ToString());
-            }
-            else if (!isChecked && days.Contains(day.ToString()))
-            {
-                days.Remove(day.ToString());
-            }
-
-            // Filter out empty entries and sort days
-            days = days.Where(d => !string.IsNullOrWhiteSpace(d)).OrderBy(d => int.Parse(d)).ToList();
-            PeakHours[peakHourIndex].DaysOfWeek = string.Join(",", days);
-
-            await PeakHoursChanged.InvokeAsync(PeakHours);
-            StateHasChanged();
         }
+
+        // Check if all days are selected
+        if (dayNames.Count == 7)
+        {
+            return "All Days";
+        }
+
+        return string.Join(", ", dayNames);
     }
 
-    private async Task AddPeakHour()
+    private string FormatTimeRange(string startTime, string endTime)
     {
-        var newPeakHour = new PeakHour
+        // Convert strings to TimeSpan and then format properly
+        if (TimeSpan.TryParse(startTime, out TimeSpan start) && TimeSpan.TryParse(endTime, out TimeSpan end))
+        {
+            // Create DateTime objects to get AM/PM formatting
+            var startDateTime = DateTime.Today.Add(start);
+            var endDateTime = DateTime.Today.Add(end);
+
+            return $"{startDateTime.ToString("hh:mm tt").ToLower()} - {endDateTime.ToString("hh:mm tt").ToLower()}";
+        }
+
+        // Fallback if parsing fails
+        return $"{startTime} - {endTime}";
+    }
+
+    private async Task OpenPeakHourDialog()
+    {
+        // Initialize a new peak hour with default values
+        currentPeakHour = new PeakHour
             {
-                Name = "New Peak Hour",
+                Name = "Dinner Peak Hour",
                 StartTime = "18:00:00",
                 EndTime = "20:00:00",
                 DaysOfWeek = "1,2,3,4,5,6,7", // Monday to Sunday
@@ -154,45 +122,78 @@
                 EndDate = DateTime.Now.AddDays(30)
             };
 
-        PeakHours.Add(newPeakHour);
-        await PeakHoursChanged.InvokeAsync(PeakHours);
-    }
+        var parameters = new DialogParameters
+            {
+                ["PeakHour"] = currentPeakHour,
+                ["EditMode"] = false
+            };
 
-    private async Task RemovePeakHour(int index)
-    {
-        if (index >= 0 && index < PeakHours.Count)
+        var dialog = await DialogService.ShowAsync<PeakHourDialog>("Add Peak Hour", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is PeakHour peakHour)
         {
-            PeakHours.RemoveAt(index);
+            PeakHours.Add(peakHour);
             await PeakHoursChanged.InvokeAsync(PeakHours);
+            Snackbar.Add("Peak hour added successfully", Severity.Success);
         }
     }
 
-    private TimeSpan? GetTimeSpan(string timeStr)
+    private async Task EditPeakHour(PeakHour peakHour)
     {
-        if (string.IsNullOrEmpty(timeStr))
-            return null;
+        // Make a copy of the peak hour to edit
+        currentPeakHour = new PeakHour
+            {
+                Name = peakHour.Name,
+                StartTime = peakHour.StartTime,
+                EndTime = peakHour.EndTime,
+                DaysOfWeek = peakHour.DaysOfWeek,
+                ReservationAllocationPercent = peakHour.ReservationAllocationPercent,
+                IsActive = peakHour.IsActive,
+                StartDate = peakHour.StartDate,
+                EndDate = peakHour.EndDate
+            };
 
-        if (TimeSpan.TryParse(timeStr, out TimeSpan result))
-            return result;
+        var parameters = new DialogParameters
+            {
+                ["PeakHour"] = currentPeakHour,
+                ["EditMode"] = true
+            };
 
-        return null;
-    }
+        var dialog = await DialogService.ShowAsync<PeakHourDialog>("Edit Peak Hour", parameters);
+        var result = await dialog.Result;
 
-    private async Task UpdateStartTime(int index, TimeSpan? time)
-    {
-        if (time.HasValue && index >= 0 && index < PeakHours.Count)
+        if (!result.Canceled && result.Data is PeakHour updatedPeakHour)
         {
-            PeakHours[index].StartTime = $"{time.Value.Hours:D2}:{time.Value.Minutes:D2}:{time.Value.Seconds:D2}";
-            await PeakHoursChanged.InvokeAsync(PeakHours);
+            var index = PeakHours.IndexOf(peakHour);
+            if (index >= 0)
+            {
+                PeakHours[index] = updatedPeakHour;
+                await PeakHoursChanged.InvokeAsync(PeakHours);
+                Snackbar.Add("Peak hour updated successfully", Severity.Success);
+            }
         }
     }
 
-    private async Task UpdateEndTime(int index, TimeSpan? time)
+    private async Task RemovePeakHour(PeakHour peakHour)
     {
-        if (time.HasValue && index >= 0 && index < PeakHours.Count)
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to remove the peak hour '{peakHour.Name}'?",
+                ["ButtonText"] = "Delete",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Peak Hour", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
         {
-            PeakHours[index].EndTime = $"{time.Value.Hours:D2}:{time.Value.Minutes:D2}:{time.Value.Seconds:D2}";
-            await PeakHoursChanged.InvokeAsync(PeakHours);
+            if (PeakHours.Remove(peakHour))
+            {
+                await PeakHoursChanged.InvokeAsync(PeakHours);
+                Snackbar.Add("Peak hour removed", Severity.Success);
+            }
         }
     }
 }
