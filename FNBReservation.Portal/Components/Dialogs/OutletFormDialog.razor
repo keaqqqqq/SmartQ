@@ -1,144 +1,107 @@
-﻿@using System.Net.Http.Json
+﻿@using System.ComponentModel.DataAnnotations
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
+@rendermode InteractiveServer
 
 <MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            @(IsEdit ? "Edit Outlet" : "Add New Outlet")
+        </MudText>
+    </TitleContent>
     <DialogContent>
-        <MudForm @ref="form" @bind-IsValid="@isValid">
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
-                <MudTabPanel Text="Basic Info">
+        <MudForm @ref="form" Model="@OutletModel" @bind-IsValid="@formIsValid">
+            <MudTabs Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                <MudTabPanel Text="Basic Info" Icon="@Icons.Material.Filled.Info">
                     <MudGrid>
                         <MudItem xs="12">
-                            <MudTextField @bind-Value="outlet.Name" Label="Outlet Name" Required="true" RequiredError="Name is required!" />
+                            <MudTextField @bind-Value="OutletModel.Name" Label="Outlet Name" Required RequiredError="Outlet name is required"
+                                          Variant="Variant.Outlined" FullWidth="true" />
                         </MudItem>
                         <MudItem xs="12">
-                            <MudTextField @bind-Value="outlet.Location" Label="Location" Required="true" RequiredError="Location is required!" />
+                            <MudTextField @bind-Value="OutletModel.Location" Label="Location" Required RequiredError="Location is required"
+                                          Variant="Variant.Outlined" FullWidth="true" />
                         </MudItem>
                         <MudItem xs="12">
-                            <MudSelect T="string" @bind-Value="outlet.Status" Label="Status" Required="true">
+                            <MudTextField @bind-Value="OutletModel.OperatingHours" Label="Operating Hours" Required RequiredError="Operating hours are required"
+                                          Variant="Variant.Outlined" FullWidth="true" Placeholder="e.g. 08:00 AM - 10:00 PM" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect @bind-Value="OutletModel.Status" Label="Status" Required RequiredError="Status is required"
+                                       Variant="Variant.Outlined" FullWidth="true" AnchorOrigin="Origin.BottomCenter">
                                 <MudSelectItem Value="@("Active")">Active</MudSelectItem>
                                 <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
                                 <MudSelectItem Value="@("Maintenance")">Maintenance</MudSelectItem>
                             </MudSelect>
                         </MudItem>
-                        <MudItem xs="12" sm="6">
-                            <MudTextField @bind-Value="outlet.Contact.Phone" Label="Phone Number" />
+                        <MudItem xs="6">
+                            <MudSwitch @bind-Checked="OutletModel.QueueEnabled" Label="Enable Queue Management" Color="Color.Primary" T="bool" />
                         </MudItem>
-                        <MudItem xs="12" sm="6">
-                            <MudTextField @bind-Value="outlet.Contact.Email" Label="Email" />
+                        <MudItem xs="6">
+                            <MudSwitch @bind-Checked="OutletModel.SpecialRequirements" Label="Enable Special Requirements" Color="Color.Primary" T="bool" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="OutletModel.Contact" Label="Contact Number" Variant="Variant.Outlined" FullWidth="true" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Reservation Settings" Icon="@Icons.Material.Filled.CalendarToday">
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.MinAdvanceReservationTime" Label="Min Reservation Time (hours)"
+                                             Variant="Variant.Outlined" Min="1" Max="24" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.MaxAdvanceReservationTime" Label="Max Reservation Time (days)"
+                                             Variant="Variant.Outlined" Min="1" Max="90" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.ReservationAllocationPercent" Label="Reservation Allocation (%)"
+                                             Variant="Variant.Outlined" Min="0" Max="100" FullWidth="true"
+                                             HelperText="Percentage of tables allocated for reservations" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.DefaultDiningDurationMinutes" Label="Default Dining Duration (minutes)"
+                                             Variant="Variant.Outlined" Min="30" Max="240" FullWidth="true" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Location" Icon="@Icons.Material.Filled.LocationOn">
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.Latitude" Label="Latitude"
+                                             Variant="Variant.Outlined" FullWidth="true" Step="0.0001" Format="F6" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="OutletModel.Longitude" Label="Longitude"
+                                             Variant="Variant.Outlined" FullWidth="true" Step="0.0001" Format="F6" />
                         </MudItem>
                         <MudItem xs="12">
-                            <MudTextField @bind-Value="outlet.Contact.Website" Label="Website" />
+                            <MudText Typo="Typo.caption" Class="mt-2">
+                                Tip: You can click on a map or use Google Maps to find coordinates for the outlet's location.
+                            </MudText>
                         </MudItem>
                     </MudGrid>
                 </MudTabPanel>
 
-                <MudTabPanel Text="Reservation Settings">
-                    <MudGrid>
-                        <MudItem xs="12" sm="6">
-                            <MudNumericField @bind-Value="outlet.MinAdvanceReservationTime" Label="Min Advance Reservation (hours)" Min="0" />
-                        </MudItem>
-                        <MudItem xs="12" sm="6">
-                            <MudNumericField @bind-Value="outlet.MaxAdvanceReservationTime" Label="Max Advance Reservation (days)" Min="1" />
-                        </MudItem>
-                        <MudItem xs="12">
-                            <MudSwitch @bind-Checked="outlet.QueueEnabled" Color="Color.Primary" Label="Enable Queue" T="bool" />
-                        </MudItem>
-                    </MudGrid>
-
-                    <MudExpansionPanels>
-                        <MudExpansionPanel Text="Special Requirements">
-                            <MudStack>
-                                @foreach (var (req, index) in outlet.SpecialRequirements.Select((value, i) => (value, i)))
-                                {
-                                    <MudStack Row="true" AlignItems="AlignItems.Center">
-                                        <MudTextField @bind-Value="outlet.SpecialRequirements[index]" Label="Requirement" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                                       OnClick="@(() => outlet.SpecialRequirements.RemoveAt(index))" />
-                                    </MudStack>
-                                }
-                                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary"
-                                           OnClick="@(() => outlet.SpecialRequirements.Add(string.Empty))">
-                                    Add Requirement
-                                </MudButton>
-                            </MudStack>
-                        </MudExpansionPanel>
-                    </MudExpansionPanels>
+                <MudTabPanel Text="Tables" Icon="@Icons.Material.Filled.TableBar">
+                    <TablesEditor Tables="@OutletModel.Tables" TablesChanged="OnTablesChanged" />
                 </MudTabPanel>
 
-                <MudTabPanel Text="Operating Hours">
-                    <MudGrid>
-                        @foreach (var day in days)
-                        {
-                            var daySchedule = GetDaySchedule(day);
-                            <MudItem xs="12">
-                                <MudPaper Class="pa-4" Elevation="0">
-                                    <MudGrid>
-                                        <MudItem xs="12">
-                                            <MudSwitch @bind-Checked="daySchedule.IsOpen" Color="Color.Primary" Label="@day" T="bool" />
-                                        </MudItem>
-                                        @if (daySchedule.IsOpen)
-                                        {
-                                            <MudItem xs="12" sm="6">
-                                                <MudTimePicker Label="Open Time" @bind-Time="openTimes[day]" />
-                                            </MudItem>
-                                            <MudItem xs="12" sm="6">
-                                                <MudTimePicker Label="Close Time" @bind-Time="closeTimes[day]" />
-                                            </MudItem>
-                                        }
-                                    </MudGrid>
-                                </MudPaper>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                </MudTabPanel>
-
-                <MudTabPanel Text="Tables">
-                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Class="mb-4"
-                               OnClick="@AddTable">
-                        Add Table
-                    </MudButton>
-
-                    <MudTable Items="@outlet.Tables" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
-                        <HeaderContent>
-                            <MudTh>Name</MudTh>
-                            <MudTh>Capacity</MudTh>
-                            <MudTh>Location</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>Actions</MudTh>
-                        </HeaderContent>
-                        <RowTemplate Context="table">
-                            <MudTd DataLabel="Name">
-                                <MudTextField @bind-Value="table.Name" Margin="Margin.Dense" />
-                            </MudTd>
-                            <MudTd DataLabel="Capacity">
-                                <MudNumericField @bind-Value="table.Capacity" Min="1" Margin="Margin.Dense" />
-                            </MudTd>
-                            <MudTd DataLabel="Location">
-                                <MudTextField @bind-Value="table.Location" Margin="Margin.Dense" />
-                            </MudTd>
-                            <MudTd DataLabel="Status">
-                                <MudSelect @bind-Value="table.Status" Margin="Margin.Dense">
-                                    <MudSelectItem Value="@("Available")">Available</MudSelectItem>
-                                    <MudSelectItem Value="@("Reserved")">Reserved</MudSelectItem>
-                                    <MudSelectItem Value="@("OutOfService")">Out of Service</MudSelectItem>
-                                </MudSelect>
-                            </MudTd>
-                            <MudTd>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                               OnClick="@(() => outlet.Tables.Remove(table))" />
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                <MudTabPanel Text="Peak Hours" Icon="@Icons.Material.Filled.AccessTimeFilled">
+                    <PeakHourEditor PeakHours="@OutletModel.PeakHours" PeakHoursChanged="OnPeakHoursChanged" />
                 </MudTabPanel>
             </MudTabs>
         </MudForm>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Disabled="@(!isValid)" OnClick="Submit">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!formIsValid)">
             @(IsEdit ? "Update" : "Create")
         </MudButton>
     </DialogActions>
@@ -146,176 +109,122 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
     [Parameter] public OutletDto? Outlet { get; set; }
     [Parameter] public bool IsEdit { get; set; } = false;
 
-    private OutletDto outlet = new();
-    private bool isValid = false;
+    private OutletDto OutletModel { get; set; } = new OutletDto();
     private MudForm form = null!;
-    private List<string> days = new() { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
-    private Dictionary<string, TimeSpan?> openTimes = new();
-    private Dictionary<string, TimeSpan?> closeTimes = new();
+    private bool formIsValid = false;
 
     protected override void OnInitialized()
     {
         if (IsEdit && Outlet != null)
         {
-            // Create a deep copy instead of using 'with' since OutletDto is not a record
-            outlet = new OutletDto
+            // Deep copy the Outlet object to avoid modifying the original
+            OutletModel = new OutletDto
                 {
                     OutletId = Outlet.OutletId,
                     Name = Outlet.Name,
                     Location = Outlet.Location,
+                    OperatingHours = Outlet.OperatingHours,
                     Status = Outlet.Status,
-                    MaxAdvanceReservationTime = Outlet.MaxAdvanceReservationTime,
-                    MinAdvanceReservationTime = Outlet.MinAdvanceReservationTime,
                     QueueEnabled = Outlet.QueueEnabled,
-                    SpecialRequirements = new List<string>(Outlet.SpecialRequirements),
-                    Contact = new ContactInfo
+                    SpecialRequirements = Outlet.SpecialRequirements,
+                    Contact = Outlet.Contact,
+                    MinAdvanceReservationTime = Outlet.MinAdvanceReservationTime,
+                    MaxAdvanceReservationTime = Outlet.MaxAdvanceReservationTime,
+                    Latitude = Outlet.Latitude,
+                    Longitude = Outlet.Longitude,
+                    ReservationAllocationPercent = Outlet.ReservationAllocationPercent,
+                    DefaultDiningDurationMinutes = Outlet.DefaultDiningDurationMinutes,
+                    Tables = new List<TableInfo>(Outlet.Tables.Select(t => new TableInfo
                     {
-                        Phone = Outlet.Contact.Phone,
-                        Email = Outlet.Contact.Email,
-                        Website = Outlet.Contact.Website
-                    },
-                    OperatingHours = new OperatingHours
-                    {
-                        Monday = CopyDaySchedule(Outlet.OperatingHours.Monday),
-                        Tuesday = CopyDaySchedule(Outlet.OperatingHours.Tuesday),
-                        Wednesday = CopyDaySchedule(Outlet.OperatingHours.Wednesday),
-                        Thursday = CopyDaySchedule(Outlet.OperatingHours.Thursday),
-                        Friday = CopyDaySchedule(Outlet.OperatingHours.Friday),
-                        Saturday = CopyDaySchedule(Outlet.OperatingHours.Saturday),
-                        Sunday = CopyDaySchedule(Outlet.OperatingHours.Sunday)
-                    },
-                    Tables = Outlet.Tables.Select(t => new TableInfo
-                    {
-                        TableId = t.TableId,
-                        Name = t.Name,
+                        TableNumber = t.TableNumber,
                         Capacity = t.Capacity,
-                        Status = t.Status,
-                        Location = t.Location
-                    }).ToList()
+                        Section = t.Section,
+                        IsActive = t.IsActive
+                    })),
+                    PeakHours = new List<PeakHour>(Outlet.PeakHours.Select(p => new PeakHour
+                    {
+                        Name = p.Name,
+                        DaysOfWeek = p.DaysOfWeek,
+                        StartTime = p.StartTime,
+                        EndTime = p.EndTime,
+                        ReservationAllocationPercent = p.ReservationAllocationPercent,
+                        IsActive = p.IsActive,
+                        StartDate = p.StartDate,
+                        EndDate = p.EndDate
+                    }))
                 };
         }
-
-        // Initialize time pickers
-        foreach (var day in days)
+        else
         {
-            var daySchedule = GetDaySchedule(day);
-
-            if (TimeSpan.TryParse(daySchedule.OpenTime, out var openTime))
-            {
-                openTimes[day] = openTime;
-            }
-            else
-            {
-                openTimes[day] = TimeSpan.FromHours(9);
-            }
-
-            if (TimeSpan.TryParse(daySchedule.CloseTime, out var closeTime))
-            {
-                closeTimes[day] = closeTime;
-            }
-            else
-            {
-                closeTimes[day] = TimeSpan.FromHours(22);
-            }
-        }
-    }
-
-    private DaySchedule CopyDaySchedule(DaySchedule original)
-    {
-        return new DaySchedule
-            {
-                IsOpen = original.IsOpen,
-                OpenTime = original.OpenTime,
-                CloseTime = original.CloseTime,
-                BreakTimes = original.BreakTimes.Select(bt => new BreakTime
+            // Initialize a new outlet with default values
+            OutletModel = new OutletDto
                 {
-                    Start = bt.Start,
-                    End = bt.End
-                }).ToList()
-            };
-    }
-
-    private DaySchedule GetDaySchedule(string day)
-    {
-        return day switch
-        {
-            "Monday" => outlet.OperatingHours.Monday,
-            "Tuesday" => outlet.OperatingHours.Tuesday,
-            "Wednesday" => outlet.OperatingHours.Wednesday,
-            "Thursday" => outlet.OperatingHours.Thursday,
-            "Friday" => outlet.OperatingHours.Friday,
-            "Saturday" => outlet.OperatingHours.Saturday,
-            "Sunday" => outlet.OperatingHours.Sunday,
-            _ => new DaySchedule()
-        };
-    }
-
-    private void SetDayScheduleTimes()
-    {
-        foreach (var day in days)
-        {
-            var daySchedule = GetDaySchedule(day);
-
-            if (openTimes.TryGetValue(day, out var openTime) && openTime.HasValue)
-            {
-                daySchedule.OpenTime = $"{openTime.Value.Hours:D2}:{openTime.Value.Minutes:D2}";
-            }
-
-            if (closeTimes.TryGetValue(day, out var closeTime) && closeTime.HasValue)
-            {
-                daySchedule.CloseTime = $"{closeTime.Value.Hours:D2}:{closeTime.Value.Minutes:D2}";
-            }
+                    OutletId = Guid.NewGuid().ToString(),
+                    Name = "",
+                    Location = "",
+                    OperatingHours = "08:00 AM - 10:00 PM",
+                    Status = "Active",
+                    QueueEnabled = true,
+                    SpecialRequirements = false,
+                    Contact = "",
+                    MinAdvanceReservationTime = 2,
+                    MaxAdvanceReservationTime = 30,
+                    Latitude = 0.0,
+                    Longitude = 0.0,
+                    ReservationAllocationPercent = 40,
+                    DefaultDiningDurationMinutes = 90,
+                    Tables = new List<TableInfo>(),
+                    PeakHours = new List<PeakHour>()
+                };
         }
     }
 
-    private void AddTable()
+    private async Task OnTablesChanged(List<TableInfo> tables)
     {
-        var tableCount = outlet.Tables.Count + 1;
-        outlet.Tables.Add(new TableInfo
-            {
-                TableId = Guid.NewGuid().ToString(),
-                Name = $"Table {tableCount}",
-                Capacity = 4,
-                Location = "Main Area",
-                Status = "Available"
-            });
+        OutletModel.Tables = tables;
+        StateHasChanged();
     }
 
-    private void Cancel()
+    private async Task OnPeakHoursChanged(List<PeakHour> peakHours)
     {
-        MudDialog.Cancel();
+        OutletModel.PeakHours = peakHours;
+        StateHasChanged();
     }
 
     private async Task Submit()
     {
         try
         {
-            // Update operating hours from time pickers
-            SetDayScheduleTimes();
-
             bool result;
-
             if (IsEdit)
             {
-                result = await OutletService.UpdateOutletAsync(outlet);
+                result = await OutletService.UpdateOutletAsync(OutletModel);
+                if (result)
+                {
+                    Snackbar.Add("Outlet updated successfully", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update outlet", Severity.Error);
+                }
             }
             else
             {
-                outlet.OutletId = Guid.NewGuid().ToString();
-                result = await OutletService.CreateOutletAsync(outlet);
-            }
-
-            if (result)
-            {
-                Snackbar.Add(IsEdit ? "Outlet updated successfully" : "Outlet created successfully", Severity.Success);
-                MudDialog.Close(DialogResult.Ok(true));
-            }
-            else
-            {
-                Snackbar.Add("Operation failed", Severity.Error);
+                result = await OutletService.CreateOutletAsync(OutletModel);
+                if (result)
+                {
+                    Snackbar.Add("Outlet created successfully", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to create outlet", Severity.Error);
+                }
             }
         }
         catch (Exception ex)
@@ -323,4 +232,6 @@
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
     }
+
+    private void Cancel() => MudDialog.Cancel();
 }

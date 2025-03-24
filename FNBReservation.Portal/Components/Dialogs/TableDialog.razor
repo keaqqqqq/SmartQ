@@ -1,0 +1,44 @@
+﻿@using FNBReservation.Portal.Models
+@rendermode InteractiveServer
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(EditMode ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            @(EditMode ? "Edit Table" : "Add Table")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="Table.TableNumber" Label="Table Number" Required
+                              Variant="Variant.Outlined" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="Table.Capacity" Label="Capacity" Required
+                                 Variant="Variant.Outlined" Min="1" Max="20" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="Table.Section" Label="Section" Required
+                              Variant="Variant.Outlined" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSwitch @bind-Checked="Table.IsActive" Label="Active" Color="Color.Primary" T="bool" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public TableInfo Table { get; set; } = new();
+    [Parameter] public bool EditMode { get; set; } = false;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(Table));
+    private void Cancel() => MudDialog.Cancel();
+}

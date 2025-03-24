@@ -137,14 +137,33 @@ namespace FNBReservation.Portal.Services
                     OutletId = "A15",
                     Name = "Ocean View Restaurant - Downtown",
                     Location = "123 Main Street, Downtown",
+                    OperatingHours = "10:00 AM - 10:00 PM",
                     Status = "Active",
                     QueueEnabled = true,
+                    ReservationAllocationPercent = 50,
+                    DefaultDiningDurationMinutes = 90,
+                    Contact = "+123456789",
                     Tables = GenerateTables(25, "Main Area"),
-                    Contact = new ContactInfo
+                    PeakHours = new List<PeakHour>
                     {
-                        Phone = "+123456789",
-                        Email = "downtown@oceanview.com",
-                        Website = "www.oceanview.com/downtown"
+                        new PeakHour
+                        {
+                            Name = "Lunch Rush",
+                            DaysOfWeek = "1,2,3,4,5",
+                            StartTime = "12:00:00",
+                            EndTime = "14:00:00",
+                            ReservationAllocationPercent = 80,
+                            IsActive = true
+                        },
+                        new PeakHour
+                        {
+                            Name = "Dinner Rush",
+                            DaysOfWeek = "1,2,3,4,5,6,7",
+                            StartTime = "18:00:00",
+                            EndTime = "20:00:00",
+                            ReservationAllocationPercent = 90,
+                            IsActive = true
+                        }
                     }
                 },
                 new OutletDto
@@ -152,14 +171,24 @@ namespace FNBReservation.Portal.Services
                     OutletId = "A16",
                     Name = "Ocean View Restaurant - Beachside",
                     Location = "456 Beach Drive, Oceanfront",
+                    OperatingHours = "08:00 AM - 11:00 PM",
                     Status = "Active",
                     QueueEnabled = true,
+                    ReservationAllocationPercent = 60,
+                    DefaultDiningDurationMinutes = 120,
+                    Contact = "+123456790",
                     Tables = GenerateTables(20, "Beach View"),
-                    Contact = new ContactInfo
+                    PeakHours = new List<PeakHour>
                     {
-                        Phone = "+123456790",
-                        Email = "beachside@oceanview.com",
-                        Website = "www.oceanview.com/beachside"
+                        new PeakHour
+                        {
+                            Name = "Weekend Brunch",
+                            DaysOfWeek = "6,7",
+                            StartTime = "09:00:00",
+                            EndTime = "13:00:00",
+                            ReservationAllocationPercent = 100,
+                            IsActive = true
+                        }
                     }
                 },
                 new OutletDto
@@ -167,31 +196,29 @@ namespace FNBReservation.Portal.Services
                     OutletId = "A17",
                     Name = "Ocean View Restaurant - Harborfront",
                     Location = "789 Harbor Road, Marina District",
+                    OperatingHours = "09:00 AM - 09:00 PM",
                     Status = "Active",
                     QueueEnabled = false,
-                    Tables = GenerateTables(25, "Harbor View"),
-                    Contact = new ContactInfo
-                    {
-                        Phone = "+123456791",
-                        Email = "harbor@oceanview.com",
-                        Website = "www.oceanview.com/harbor"
-                    }
+                    ReservationAllocationPercent = 40,
+                    DefaultDiningDurationMinutes = 90,
+                    Contact = "+123456791",
+                    Tables = GenerateTables(15, "Harbor View"),
+                    PeakHours = new List<PeakHour>()
                 }
             };
         }
 
-        private List<FNBReservation.Portal.Models.TableInfo> GenerateTables(int count, string location)
+        private List<TableInfo> GenerateTables(int count, string section)
         {
-            var tables = new List<FNBReservation.Portal.Models.TableInfo>();
+            var tables = new List<TableInfo>();
             for (int i = 1; i <= count; i++)
             {
-                tables.Add(new FNBReservation.Portal.Models.TableInfo
+                tables.Add(new TableInfo
                 {
-                    TableId = Guid.NewGuid().ToString(),
-                    Name = $"Table {i}",
+                    TableNumber = $"T{i}",
                     Capacity = i % 3 == 0 ? 6 : 4, // Mix of 4 and 6 seat tables
-                    Status = "Available",
-                    Location = location
+                    Section = section,
+                    IsActive = true
                 });
             }
             return tables;
