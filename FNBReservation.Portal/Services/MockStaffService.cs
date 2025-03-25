@@ -6,6 +6,7 @@ namespace FNBReservation.Portal.Services
     public interface IStaffService
     {
         Task<List<StaffDto>> GetStaffAsync(string outletId, string? searchTerm = null);
+        Task<List<StaffDto>> GetAllStaffAsync(string? searchTerm = null);
         Task<StaffDto?> GetStaffByIdAsync(string outletId, string staffId);
         Task<bool> CreateStaffAsync(string outletId, StaffDto staff);
         Task<bool> UpdateStaffAsync(string outletId, StaffDto staff);
@@ -108,6 +109,26 @@ namespace FNBReservation.Portal.Services
             }
 
             return Task.FromResult(staff);
+        }
+
+        public Task<List<StaffDto>> GetAllStaffAsync(string? searchTerm = null)
+        {
+            // Combine staff from all outlets
+            var allStaff = _staffByOutlet.Values.SelectMany(s => s).ToList();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                searchTerm = searchTerm.ToLower();
+                allStaff = allStaff.Where(s =>
+                    s.FullName.ToLower().Contains(searchTerm) ||
+                    s.Username.ToLower().Contains(searchTerm) ||
+                    s.Email.ToLower().Contains(searchTerm) ||
+                    s.Phone.Contains(searchTerm) ||
+                    s.Role.ToLower().Contains(searchTerm)
+                ).ToList();
+            }
+
+            return Task.FromResult(allStaff);
         }
 
         public Task<StaffDto?> GetStaffByIdAsync(string outletId, string staffId)

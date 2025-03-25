@@ -13,6 +13,7 @@
         <MudSpacer />
         <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletSelectionChanged"
                    Label="Select Outlet" Variant="Variant.Outlined" Class="ml-auto mr-4" Style="min-width: 250px">
+            <MudSelectItem Value="@("all")">All Outlets</MudSelectItem>
             @foreach (var outlet in outlets)
             {
                 <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
@@ -37,7 +38,6 @@
                 <MudTh>Username</MudTh>
                 <MudTh>Contact</MudTh>
                 <MudTh>Role</MudTh>
-                <MudTh>Created</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -53,7 +53,6 @@
                         @context.Role
                     </MudChip>
                 </MudTd>
-                <MudTd DataLabel="Created">@context.CreatedAt.ToString("MM/dd/yyyy")</MudTd>
                 <MudTd DataLabel="Actions">
                     <MudStack Row="true">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
@@ -93,26 +92,21 @@
 @code {
     private List<StaffDto> staffList = new();
     private List<OutletSummaryDto> outlets = new();
-    private string selectedOutletId = string.Empty;
+    private string selectedOutletId = "all"; // "all" means "All Outlets"
     private string searchTerm = string.Empty;
     private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadOutlets();
-        if (outlets.Any())
-        {
-            selectedOutletId = outlets.First().OutletId;
-            await LoadStaff();
-        }
+        await LoadAllStaff(); // Load all staff initially
     }
 
     private async Task LoadOutlets()
     {
         try
         {
-            // For now, let's use the OutletService mock data from our existing OutletDto code
-            // This would normally come from an IOutletService
+            // For now, let's use mock data from our existing OutletDto code
             outlets = new List<OutletSummaryDto>
             {
                 new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
@@ -128,7 +122,7 @@
 
     private async Task LoadStaff()
     {
-        if (string.IsNullOrEmpty(selectedOutletId))
+        if (selectedOutletId == "all")
             return;
 
         try
@@ -147,22 +141,58 @@
         }
     }
 
+    // Method to load all staff from all outlets
+    private async Task LoadAllStaff()
+    {
+        try
+        {
+            isLoading = true;
+            staffList = await StaffService.GetAllStaffAsync(searchTerm);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading all staff: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task OutletSelectionChanged(string outletId)
     {
         selectedOutletId = outletId;
         searchTerm = string.Empty;
-        await LoadStaff();
+
+        if (outletId == "all")
+        {
+            // If "All Outlets" is selected, load all staff
+            await LoadAllStaff();
+        }
+        else
+        {
+            // Load staff for the selected outlet
+            await LoadStaff();
+        }
     }
 
     private async Task SearchStaff()
     {
-        if (string.IsNullOrEmpty(selectedOutletId))
-            return;
-
         try
         {
             isLoading = true;
-            staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+
+            if (selectedOutletId == "all")
+            {
+                // Search across all outlets
+                await LoadAllStaff();
+            }
+            else
+            {
+                // Search within the selected outlet
+                staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+            }
         }
         catch (Exception ex)
         {
@@ -188,18 +218,52 @@
 
     private async Task OpenAddStaffDialog()
     {
-        var parameters = new DialogParameters
-            {
-                ["OutletId"] = selectedOutletId,
-                ["IsEdit"] = false
-            };
-
-        var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        if (selectedOutletId == "all")
         {
-            await LoadStaff();
+            // When adding staff from "All Outlets" view, don't pre-select an outlet
+            var parameters = new DialogParameters
+                {
+                    ["IsEdit"] = false
+                };
+
+            var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                if (selectedOutletId == "all")
+                {
+                    await LoadAllStaff();
+                }
+                else
+                {
+                    await LoadStaff();
+                }
+            }
+        }
+        else
+        {
+            // When adding from a specific outlet view, pre-select that outlet
+            var parameters = new DialogParameters
+                {
+                    ["OutletId"] = selectedOutletId,
+                    ["IsEdit"] = false
+                };
+
+            var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                if (selectedOutletId == "all")
+                {
+                    await LoadAllStaff();
+                }
+                else
+                {
+                    await LoadStaff();
+                }
+            }
         }
     }
 
@@ -207,7 +271,7 @@
     {
         var parameters = new DialogParameters
             {
-                ["OutletId"] = selectedOutletId,
+                ["OutletId"] = staff.OutletId, // Use the staff member's own outlet ID
                 ["Staff"] = staff,
                 ["IsEdit"] = true
             };
@@ -217,7 +281,14 @@
 
         if (!result.Canceled)
         {
-            await LoadStaff();
+            if (selectedOutletId == "all")
+            {
+                await LoadAllStaff();
+            }
+            else
+            {
+                await LoadStaff();
+            }
         }
     }
 
@@ -243,12 +314,33 @@
     {
         try
         {
-            var result = await StaffService.DeleteStaffAsync(selectedOutletId, staffId);
+            // Need to determine which outlet this staff belongs to if in "all" view
+            string outletId = selectedOutletId;
+            if (selectedOutletId == "all")
+            {
+                // Find the staff member to get their outlet ID
+                var staffToDelete = staffList.FirstOrDefault(s => s.StaffId == staffId);
+                if (staffToDelete == null)
+                {
+                    Snackbar.Add("Staff member not found", Severity.Error);
+                    return;
+                }
+                outletId = staffToDelete.OutletId;
+            }
+
+            var result = await StaffService.DeleteStaffAsync(outletId, staffId);
 
             if (result)
             {
                 Snackbar.Add("Staff member deleted successfully", Severity.Success);
-                await LoadStaff();
+                if (selectedOutletId == "all")
+                {
+                    await LoadAllStaff();
+                }
+                else
+                {
+                    await LoadStaff();
+                }
             }
             else
             {

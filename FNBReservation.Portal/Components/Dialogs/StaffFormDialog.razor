@@ -16,6 +16,16 @@
         <MudForm @ref="form" Model="@staffModel" @bind-IsValid="@formIsValid">
             <MudGrid>
                 <MudItem xs="12">
+                    <MudSelect T="string" @bind-Value="staffModel.OutletId" Label="Outlet"
+                               Required RequiredError="Outlet is required"
+                               Variant="Variant.Outlined" FullWidth="true">
+                        @foreach (var outlet in outlets)
+                        {
+                            <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
                     <MudTextField @bind-Value="staffModel.FullName" Label="Full Name"
                                   Required RequiredError="Name is required"
                                   Variant="Variant.Outlined" FullWidth="true" />
@@ -74,9 +84,13 @@
     private StaffFormModel staffModel = new();
     private MudForm form = null!;
     private bool formIsValid = false;
+    private List<OutletSummaryDto> outlets = new();
 
     protected override void OnInitialized()
     {
+        // Load outlets for the dropdown
+        LoadOutlets();
+
         if (IsEdit && Staff != null)
         {
             staffModel = new StaffFormModel
@@ -87,16 +101,27 @@
                     Email = Staff.Email,
                     Phone = Staff.Phone,
                     Role = Staff.Role,
-                    OutletId = OutletId
+                    OutletId = Staff.OutletId // Use the staff's outlet ID when editing
                 };
         }
         else
         {
             staffModel = new StaffFormModel
                 {
-                    OutletId = OutletId
+                    OutletId = OutletId // Use the provided outlet ID when adding
                 };
         }
+    }
+
+    private void LoadOutlets()
+    {
+        // Mock data for outlets
+        outlets = new List<OutletSummaryDto>
+        {
+            new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
+            new OutletSummaryDto { OutletId = "A16", Name = "Ocean View Restaurant - Beachside", Location = "456 Beach Drive, Oceanfront" },
+            new OutletSummaryDto { OutletId = "A17", Name = "Ocean View Restaurant - Harborfront", Location = "789 Harbor Road, Marina District" }
+        };
     }
 
     private async Task Submit()
@@ -109,7 +134,7 @@
             var staffDto = new StaffDto
                 {
                     StaffId = IsEdit ? Staff!.StaffId : string.Empty,
-                    OutletId = OutletId,
+                    OutletId = staffModel.OutletId,
                     FullName = staffModel.FullName,
                     Username = staffModel.Username,
                     Email = staffModel.Email,
@@ -120,11 +145,11 @@
 
             if (IsEdit)
             {
-                result = await StaffService.UpdateStaffAsync(OutletId, staffDto);
+                result = await StaffService.UpdateStaffAsync(staffModel.OutletId, staffDto);
             }
             else
             {
-                result = await StaffService.CreateStaffAsync(OutletId, staffDto);
+                result = await StaffService.CreateStaffAsync(staffModel.OutletId, staffDto);
             }
 
             if (result)
@@ -168,6 +193,7 @@
         [Required(ErrorMessage = "Role is required")]
         public string Role { get; set; } = "Server";
 
+        [Required(ErrorMessage = "Outlet is required")]
         public string OutletId { get; set; } = string.Empty;
     }
 }

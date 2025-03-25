@@ -13,6 +13,7 @@ builder.Services.AddRazorComponents()
 // Register the mock service
 builder.Services.AddSingleton<IOutletService, MockOutletService>();
 builder.Services.AddScoped<IStaffService, MockStaffService>();
+builder.Services.AddScoped<ICustomerService, MockCustomerService>();
 builder.Services.AddMudServices();
 
 var app = builder.Build();

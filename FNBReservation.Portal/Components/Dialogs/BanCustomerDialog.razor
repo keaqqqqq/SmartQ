@@ -1,0 +1,225 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject ICustomerService CustomerService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Block" Class="mr-2" Color="Color.Error" />
+            @DialogTitle
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" Model="@model" @bind-IsValid="@formIsValid">
+            <MudGrid>
+                @if (!IsEdit)
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.subtitle2" Class="mb-4">Customer Information</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="model.Name" Label="Customer Name" Required
+                                      RequiredError="Name is required"
+                                      Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="model.PhoneNumber" Label="Phone Number" Required
+                                      RequiredError="Phone number is required"
+                                      Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="model.Email" Label="Email"
+                                      Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                    <MudDivider Class="my-4" />
+                }
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-4">Ban Details</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect @bind-Value="model.BanReason" Label="Ban Reason" Required RequiredError="Reason is required"
+                               Variant="Variant.Outlined" FullWidth="true" AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem Value="@("Repeated No-Shows")">Repeated No-Shows</MudSelectItem>
+                        <MudSelectItem Value="@("Fraudulent Booking")">Fraudulent Booking</MudSelectItem>
+                        <MudSelectItem Value="@("Disruptive Behavior")">Disruptive Behavior</MudSelectItem>
+                        <MudSelectItem Value="@("Non-Payment")">Non-Payment</MudSelectItem>
+                        <MudSelectItem Value="@("Fake Information")">Fake Information</MudSelectItem>
+                        <MudSelectItem Value="@("Non-Compliance with Rules")">Non-Compliance with Rules</MudSelectItem>
+                        <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                @if (model.BanReason == "Other")
+                {
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="model.CustomBanReason" Label="Specify Reason" Required
+                                      RequiredError="Custom reason is required"
+                                      Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="model.Notes" Label="Additional Notes"
+                                  Variant="Variant.Outlined" Lines="3" FullWidth="true" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDatePicker @bind-Date="model.BanExpiryDate" Label="Ban Expiry Date (optional)"
+                                   Variant="Variant.Outlined" FullWidth="true" Placeholder="Leave empty for permanent ban"
+                                   MinDate="@DateTime.Today.AddDays(1)" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!formIsValid)">
+            @(IsEdit ? "Update Ban" : "Ban Customer")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public CustomerDto? Customer { get; set; }
+    [Parameter] public bool IsEdit { get; set; } = false;
+
+    private string DialogTitle => IsEdit ? "Update Ban Information" : "Ban New Customer";
+    private BanCustomerModel model = new();
+    private MudForm form = null!;
+    private bool formIsValid = false;
+
+    protected override void OnInitialized()
+    {
+        if (IsEdit && Customer != null)
+        {
+            model = new BanCustomerModel
+                {
+                    CustomerId = Customer.CustomerId,
+                    Name = Customer.Name,
+                    PhoneNumber = Customer.PhoneNumber,
+                    Email = Customer.Email,
+                    BanReason = Customer.BanReason ?? "",
+                    Notes = "",
+                    BanExpiryDate = Customer.BanExpiryDate
+                };
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (!formIsValid) return;
+
+        try
+        {
+            bool result;
+
+            // If BanReason is "Other", use the custom reason instead
+            string finalBanReason = model.BanReason;
+            if (finalBanReason == "Other" && !string.IsNullOrWhiteSpace(model.CustomBanReason))
+            {
+                finalBanReason = model.CustomBanReason;
+            }
+
+            if (IsEdit)
+            {
+                // Update existing customer's ban information
+                result = await CustomerService.UpdateCustomerBanAsync(
+                    model.CustomerId,
+                    finalBanReason,
+                    model.Notes,
+                    model.BanExpiryDate
+                );
+
+                if (result)
+                {
+                    Snackbar.Add("Ban information updated successfully", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update ban information", Severity.Error);
+                }
+            }
+            else
+            {
+                // Ban a new or existing customer
+                if (string.IsNullOrEmpty(model.CustomerId))
+                {
+                    // This is a new customer that doesn't exist in the system yet
+                    var banResult = await CustomerService.BanNewCustomerAsync(
+                        model.Name,
+                        model.PhoneNumber,
+                        model.Email,
+                        finalBanReason,
+                        model.Notes,
+                        model.BanExpiryDate
+                    );
+
+                    if (banResult)
+                    {
+                        Snackbar.Add($"Customer {model.Name} has been banned", Severity.Success);
+                        MudDialog.Close(DialogResult.Ok(true));
+                    }
+                    else
+                    {
+                        Snackbar.Add("Failed to ban customer", Severity.Error);
+                    }
+                }
+                else
+                {
+                    // Ban an existing customer
+                    result = await CustomerService.BanCustomerAsync(
+                        model.CustomerId,
+                        finalBanReason,
+                        model.Notes,
+                        model.BanExpiryDate
+                    );
+
+                    if (result)
+                    {
+                        Snackbar.Add($"Customer {model.Name} has been banned", Severity.Success);
+                        MudDialog.Close(DialogResult.Ok(true));
+                    }
+                    else
+                    {
+                        Snackbar.Add("Failed to ban customer", Severity.Error);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class BanCustomerModel
+    {
+        public string CustomerId { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Name is required")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Phone number is required")]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Ban reason is required")]
+        public string BanReason { get; set; } = string.Empty;
+
+        public string CustomBanReason { get; set; } = string.Empty;
+
+        public string Notes { get; set; } = string.Empty;
+
+        public DateTime? BanExpiryDate { get; set; }
+    }
+}
