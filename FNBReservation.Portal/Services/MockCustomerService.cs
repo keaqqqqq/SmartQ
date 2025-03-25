@@ -64,7 +64,7 @@ namespace FNBReservation.Portal.Services
             customer.IsBanned = true;
             customer.BanReason = reason;
             customer.BannedDate = DateTime.Now;
-            customer.BannedBy = "Admin User";
+            customer.BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System";
             customer.BanExpiryDate = expiryDate;
 
             if (!string.IsNullOrWhiteSpace(notes))
@@ -97,7 +97,7 @@ namespace FNBReservation.Portal.Services
                 IsBanned = true,
                 BanReason = reason,
                 BannedDate = DateTime.Now,
-                BannedBy = "Admin User",
+                BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System",
                 BanExpiryDate = expiryDate,
                 TotalReservations = 0,
                 NoShows = 0

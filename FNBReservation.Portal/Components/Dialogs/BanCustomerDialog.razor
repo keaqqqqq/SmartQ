@@ -9,46 +9,34 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.Block" Class="mr-2" Color="Color.Error" />
-            @DialogTitle
+            Ban Customer
         </MudText>
     </TitleContent>
     <DialogContent>
         <MudForm @ref="form" Model="@model" @bind-IsValid="@formIsValid">
             <MudGrid>
-                @if (!IsEdit)
+                @if (!IsEdit && string.IsNullOrEmpty(model.PhoneNumber))
                 {
                     <MudItem xs="12">
-                        <MudText Typo="Typo.subtitle2" Class="mb-4">Customer Information</MudText>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="model.Name" Label="Customer Name" Required
-                                      RequiredError="Name is required"
-                                      Variant="Variant.Outlined" FullWidth="true" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
                         <MudTextField @bind-Value="model.PhoneNumber" Label="Phone Number" Required
                                       RequiredError="Phone number is required"
                                       Variant="Variant.Outlined" FullWidth="true" />
                     </MudItem>
+                }
+                else
+                {
                     <MudItem xs="12">
-                        <MudTextField @bind-Value="model.Email" Label="Email"
-                                      Variant="Variant.Outlined" FullWidth="true" />
+                        <MudText Typo="Typo.body1">Banning customer: <b>@model.Name</b> (@model.PhoneNumber)</MudText>
                     </MudItem>
-                    <MudDivider Class="my-4" />
                 }
 
                 <MudItem xs="12">
-                    <MudText Typo="Typo.subtitle2" Class="mb-4">Ban Details</MudText>
-                </MudItem>
-                <MudItem xs="12">
-                    <MudSelect @bind-Value="model.BanReason" Label="Ban Reason" Required RequiredError="Reason is required"
-                               Variant="Variant.Outlined" FullWidth="true" AnchorOrigin="Origin.BottomCenter">
-                        <MudSelectItem Value="@("Repeated No-Shows")">Repeated No-Shows</MudSelectItem>
-                        <MudSelectItem Value="@("Fraudulent Booking")">Fraudulent Booking</MudSelectItem>
-                        <MudSelectItem Value="@("Disruptive Behavior")">Disruptive Behavior</MudSelectItem>
-                        <MudSelectItem Value="@("Non-Payment")">Non-Payment</MudSelectItem>
-                        <MudSelectItem Value="@("Fake Information")">Fake Information</MudSelectItem>
-                        <MudSelectItem Value="@("Non-Compliance with Rules")">Non-Compliance with Rules</MudSelectItem>
+                    <MudSelect @bind-Value="model.BanReason" Label="Reason" Required RequiredError="Reason is required"
+                               Variant="Variant.Outlined" FullWidth="true">
+                        <MudSelectItem Value="@("Multiple no-shows")">Multiple no-shows</MudSelectItem>
+                        <MudSelectItem Value="@("Disruptive behavior")">Disruptive behavior</MudSelectItem>
+                        <MudSelectItem Value="@("Fake information")">Fake information</MudSelectItem>
+                        <MudSelectItem Value="@("Violation of policies")">Violation of policies</MudSelectItem>
                         <MudSelectItem Value="@("Other")">Other</MudSelectItem>
                     </MudSelect>
                 </MudItem>
@@ -63,22 +51,18 @@
                 }
 
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="model.Notes" Label="Additional Notes"
-                                  Variant="Variant.Outlined" Lines="3" FullWidth="true" />
-                </MudItem>
-
-                <MudItem xs="12">
-                    <MudDatePicker @bind-Date="model.BanExpiryDate" Label="Ban Expiry Date (optional)"
-                                   Variant="Variant.Outlined" FullWidth="true" Placeholder="Leave empty for permanent ban"
-                                   MinDate="@DateTime.Today.AddDays(1)" />
+                    <MudNumericField @bind-Value="model.BanDurationDays" Label="Duration (Days)"
+                                     Variant="Variant.Outlined" FullWidth="true" Min="0"
+                                     Placeholder="Leave as 0 for permanent ban"
+                                     HelperText="Set to 0 for permanent ban" />
                 </MudItem>
             </MudGrid>
         </MudForm>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
         <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!formIsValid)">
-            @(IsEdit ? "Update Ban" : "Ban Customer")
+            Ban Customer
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -88,25 +72,25 @@
 
     [Parameter] public CustomerDto? Customer { get; set; }
     [Parameter] public bool IsEdit { get; set; } = false;
+    [Parameter] public string CurrentUser { get; set; } = "Admin User";
 
-    private string DialogTitle => IsEdit ? "Update Ban Information" : "Ban New Customer";
     private BanCustomerModel model = new();
     private MudForm form = null!;
     private bool formIsValid = false;
 
     protected override void OnInitialized()
     {
-        if (IsEdit && Customer != null)
+        if (Customer != null)
         {
             model = new BanCustomerModel
                 {
                     CustomerId = Customer.CustomerId,
                     Name = Customer.Name,
                     PhoneNumber = Customer.PhoneNumber,
-                    Email = Customer.Email,
+                    Email = Customer.Email ?? string.Empty,
                     BanReason = Customer.BanReason ?? "",
-                    Notes = "",
-                    BanExpiryDate = Customer.BanExpiryDate
+                    BanDurationDays = Customer.BanExpiryDate.HasValue ?
+                        (int)(Customer.BanExpiryDate.Value - DateTime.Now).TotalDays : 0
                 };
         }
     }
@@ -126,70 +110,50 @@
                 finalBanReason = model.CustomBanReason;
             }
 
-            if (IsEdit)
+            // Calculate expiry date (null if permanent)
+            DateTime? expiryDate = model.BanDurationDays > 0 ?
+                DateTime.Now.AddDays(model.BanDurationDays) : null;
+
+            if (string.IsNullOrEmpty(model.CustomerId))
             {
-                // Update existing customer's ban information
-                result = await CustomerService.UpdateCustomerBanAsync(
-                    model.CustomerId,
+                // This is a new customer that doesn't exist in the system yet
+                var banResult = await CustomerService.BanNewCustomerAsync(
+                    model.Name,
+                    model.PhoneNumber,
+                    model.Email,
                     finalBanReason,
-                    model.Notes,
-                    model.BanExpiryDate
+                    $"Customer banned by {CurrentUser}",
+                    expiryDate
                 );
 
-                if (result)
+                if (banResult)
                 {
-                    Snackbar.Add("Ban information updated successfully", Severity.Success);
+                    Snackbar.Add($"Phone number {model.PhoneNumber} has been banned", Severity.Success);
                     MudDialog.Close(DialogResult.Ok(true));
                 }
                 else
                 {
-                    Snackbar.Add("Failed to update ban information", Severity.Error);
+                    Snackbar.Add("Failed to ban customer", Severity.Error);
                 }
             }
             else
             {
-                // Ban a new or existing customer
-                if (string.IsNullOrEmpty(model.CustomerId))
-                {
-                    // This is a new customer that doesn't exist in the system yet
-                    var banResult = await CustomerService.BanNewCustomerAsync(
-                        model.Name,
-                        model.PhoneNumber,
-                        model.Email,
-                        finalBanReason,
-                        model.Notes,
-                        model.BanExpiryDate
-                    );
+                // Ban an existing customer
+                result = await CustomerService.BanCustomerAsync(
+                    model.CustomerId,
+                    finalBanReason,
+                    $"Customer banned by {CurrentUser}",
+                    expiryDate
+                );
 
-                    if (banResult)
-                    {
-                        Snackbar.Add($"Customer {model.Name} has been banned", Severity.Success);
-                        MudDialog.Close(DialogResult.Ok(true));
-                    }
-                    else
-                    {
-                        Snackbar.Add("Failed to ban customer", Severity.Error);
-                    }
+                if (result)
+                {
+                    Snackbar.Add($"Customer {model.Name} has been banned", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
                 }
                 else
                 {
-                    // Ban an existing customer
-                    result = await CustomerService.BanCustomerAsync(
-                        model.CustomerId,
-                        finalBanReason,
-                        model.Notes,
-                        model.BanExpiryDate
-                    );
-
-                    if (result)
-                    {
-                        Snackbar.Add($"Customer {model.Name} has been banned", Severity.Success);
-                        MudDialog.Close(DialogResult.Ok(true));
-                    }
-                    else
-                    {
-                        Snackbar.Add("Failed to ban customer", Severity.Error);
-                    }
+                    Snackbar.Add("Failed to ban customer", Severity.Error);
                 }
             }
         }
@@ -205,7 +169,6 @@
     {
         public string CustomerId { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Name is required")]
         public string Name { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Phone number is required")]
@@ -218,8 +181,6 @@
 
         public string CustomBanReason { get; set; } = string.Empty;
 
-        public string Notes { get; set; } = string.Empty;
-
-        public DateTime? BanExpiryDate { get; set; }
+        public int BanDurationDays { get; set; } = 30;
     }
 }
