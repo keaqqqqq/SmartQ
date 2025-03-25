@@ -1,5 +1,263 @@
-﻿<h3>StaffManagement</h3>
+﻿@page "/staff"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Components.Dialogs
+@using FNBReservation.Portal.Services
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IStaffService StaffService
+@rendermode InteractiveServer
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
+        <MudText Typo="Typo.h4">Staff Management</MudText>
+        <MudSpacer />
+        <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletSelectionChanged"
+                   Label="Select Outlet" Variant="Variant.Outlined" Class="ml-auto mr-4" Style="min-width: 250px">
+            @foreach (var outlet in outlets)
+            {
+                <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField @bind-Value="searchTerm" Placeholder="Search" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+                      OnDebounceIntervalElapsed="SearchStaff" />
+    </MudStack>
+
+    @if (isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else
+    {
+        <MudTable Items="@staffList" Hover="true" Breakpoint="Breakpoint.Sm"
+                  Loading="@isLoading" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Username</MudTh>
+                <MudTh>Contact</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>Created</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">@context.StaffId</MudTd>
+                <MudTd DataLabel="Name">@context.FullName</MudTd>
+                <MudTd DataLabel="Username">@context.Username</MudTd>
+                <MudTd DataLabel="Contact">
+                    <div>@context.Email</div>
+                    <MudText Typo="Typo.caption">@context.Phone</MudText>
+                </MudTd>
+                <MudTd DataLabel="Role">
+                    <MudChip Color="@GetRoleColor(context.Role)" Size="Size.Small" T="string">
+                        @context.Role
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Created">@context.CreatedAt.ToString("MM/dd/yyyy")</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditStaffDialog(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       OnClick="@(() => OpenDeleteDialog(context))" />
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No staff members found</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+
+    <!-- Floating Action Button (FAB) -->
+    <MudFab Color="Color.Primary"
+            StartIcon="@Icons.Material.Filled.Add"
+            Size="Size.Large"
+            OnClick="OpenAddStaffDialog"
+            Class="fab-button"
+            aria-label="Add staff member" />
+
+    <style>
+        .fab-button {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10;
+        }
+    </style>
+</MudContainer>
 
 @code {
+    private List<StaffDto> staffList = new();
+    private List<OutletSummaryDto> outlets = new();
+    private string selectedOutletId = string.Empty;
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
 
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+        if (outlets.Any())
+        {
+            selectedOutletId = outlets.First().OutletId;
+            await LoadStaff();
+        }
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            // For now, let's use the OutletService mock data from our existing OutletDto code
+            // This would normally come from an IOutletService
+            outlets = new List<OutletSummaryDto>
+            {
+                new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
+                new OutletSummaryDto { OutletId = "A16", Name = "Ocean View Restaurant - Beachside", Location = "456 Beach Drive, Oceanfront" },
+                new OutletSummaryDto { OutletId = "A17", Name = "Ocean View Restaurant - Harborfront", Location = "789 Harbor Road, Marina District" }
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadStaff()
+    {
+        if (string.IsNullOrEmpty(selectedOutletId))
+            return;
+
+        try
+        {
+            isLoading = true;
+            staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading staff: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OutletSelectionChanged(string outletId)
+    {
+        selectedOutletId = outletId;
+        searchTerm = string.Empty;
+        await LoadStaff();
+    }
+
+    private async Task SearchStaff()
+    {
+        if (string.IsNullOrEmpty(selectedOutletId))
+            return;
+
+        try
+        {
+            isLoading = true;
+            staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching staff: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Color GetRoleColor(string role)
+    {
+        return role.ToLower() switch
+        {
+            "manager" => Color.Primary,
+            "host" => Color.Info,
+            "server" => Color.Success,
+            "admin" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private async Task OpenAddStaffDialog()
+    {
+        var parameters = new DialogParameters
+            {
+                ["OutletId"] = selectedOutletId,
+                ["IsEdit"] = false
+            };
+
+        var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadStaff();
+        }
+    }
+
+    private async Task OpenEditStaffDialog(StaffDto staff)
+    {
+        var parameters = new DialogParameters
+            {
+                ["OutletId"] = selectedOutletId,
+                ["Staff"] = staff,
+                ["IsEdit"] = true
+            };
+
+        var dialog = await DialogService.ShowAsync<StaffFormDialog>("Edit Staff Member", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadStaff();
+        }
+    }
+
+    private async Task OpenDeleteDialog(StaffDto staff)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the staff member <b>'{staff.FullName}'</b>? This action cannot be undone.",
+                ["ButtonText"] = "Delete",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await DeleteStaff(staff.StaffId);
+        }
+    }
+
+    private async Task DeleteStaff(string staffId)
+    {
+        try
+        {
+            var result = await StaffService.DeleteStaffAsync(selectedOutletId, staffId);
+
+            if (result)
+            {
+                Snackbar.Add("Staff member deleted successfully", Severity.Success);
+                await LoadStaff();
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete staff member", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
 }

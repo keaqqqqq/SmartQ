@@ -1,0 +1,173 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject IStaffService StaffService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            @(IsEdit ? "Edit Staff Member" : "Add Staff Member")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" Model="@staffModel" @bind-IsValid="@formIsValid">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="staffModel.FullName" Label="Full Name"
+                                  Required RequiredError="Name is required"
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="staffModel.Username" Label="Username"
+                                  Required RequiredError="Username is required"
+                                  Variant="Variant.Outlined" FullWidth="true"
+                                  Disabled="@IsEdit"
+                                  HelperText="@(IsEdit ? "Username cannot be changed" : "Choose a unique username")" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="staffModel.Password" Label="@(IsEdit ? "New Password (leave blank to keep unchanged)" : "Password")"
+                                  Required="@(!IsEdit)" RequiredError="Password is required for new staff"
+                                  Variant="Variant.Outlined" FullWidth="true"
+                                  InputType="InputType.Password" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="staffModel.Email" Label="Email"
+                                  Required RequiredError="Email is required"
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="staffModel.Phone" Label="Phone"
+                                  Required RequiredError="Phone is required"
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect @bind-Value="staffModel.Role" Label="Role"
+                               Required RequiredError="Role is required"
+                               Variant="Variant.Outlined" FullWidth="true">
+                        <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
+                        <MudSelectItem Value="@("Host")">Host</MudSelectItem>
+                        <MudSelectItem Value="@("Server")">Server</MudSelectItem>
+                        <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Disabled="@(!formIsValid)" OnClick="Submit">
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string OutletId { get; set; } = string.Empty;
+    [Parameter] public StaffDto? Staff { get; set; }
+    [Parameter] public bool IsEdit { get; set; } = false;
+
+    private StaffFormModel staffModel = new();
+    private MudForm form = null!;
+    private bool formIsValid = false;
+
+    protected override void OnInitialized()
+    {
+        if (IsEdit && Staff != null)
+        {
+            staffModel = new StaffFormModel
+                {
+                    StaffId = Staff.StaffId,
+                    FullName = Staff.FullName,
+                    Username = Staff.Username,
+                    Email = Staff.Email,
+                    Phone = Staff.Phone,
+                    Role = Staff.Role,
+                    OutletId = OutletId
+                };
+        }
+        else
+        {
+            staffModel = new StaffFormModel
+                {
+                    OutletId = OutletId
+                };
+        }
+    }
+
+    private async Task Submit()
+    {
+        try
+        {
+            bool result;
+
+            // Convert our form model to StaffDto
+            var staffDto = new StaffDto
+                {
+                    StaffId = IsEdit ? Staff!.StaffId : string.Empty,
+                    OutletId = OutletId,
+                    FullName = staffModel.FullName,
+                    Username = staffModel.Username,
+                    Email = staffModel.Email,
+                    Phone = staffModel.Phone,
+                    Role = staffModel.Role,
+                    CreatedAt = IsEdit ? Staff!.CreatedAt : DateTime.Now
+                };
+
+            if (IsEdit)
+            {
+                result = await StaffService.UpdateStaffAsync(OutletId, staffDto);
+            }
+            else
+            {
+                result = await StaffService.CreateStaffAsync(OutletId, staffDto);
+            }
+
+            if (result)
+            {
+                Snackbar.Add(IsEdit ? "Staff member updated successfully" : "Staff member created successfully",
+                    Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add("Failed to save staff member", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class StaffFormModel
+    {
+        public string StaffId { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Full name is required")]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Username is required")]
+        public string Username { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email format")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Phone is required")]
+        public string Phone { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Role is required")]
+        public string Role { get; set; } = "Server";
+
+        public string OutletId { get; set; } = string.Empty;
+    }
+}
