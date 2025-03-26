@@ -10,7 +10,7 @@
 
 <PageTitle>Customer Management - F&B Reservation System</PageTitle>
 
-<div class="d-flex flex-column">
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
     <MudText Typo="Typo.h4" Class="mb-4">Customer Management</MudText>
 
     <MudCard>
@@ -216,7 +216,7 @@
             </MudTabPanel>
         </MudTabs>
     </MudCard>
-</div>
+</MudContainer>
 
 @code {
     private List<CustomerDto> customers = new();

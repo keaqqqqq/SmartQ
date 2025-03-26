@@ -4,7 +4,7 @@
 @inject ISnackbar Snackbar
 @rendermode InteractiveServer
 
-<MudDialog DisableSidePadding="true" Style="min-width: 700px">
+<MudDialog DisableSidePadding="true" Class="reservation-details-dialog">
     <TitleContent>
         <MudText Typo="Typo.h6" Class="px-4 py-2">
             <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" /> Reservation Details
@@ -131,18 +131,18 @@
                     <MudPaper Elevation="0" Class="mt-4 pt-2">
                         <MudText Typo="Typo.subtitle1">Additional Information</MudText>
                         <MudGrid>
-                            <MudItem xs="6">
+                            <MudItem xs="12" sm="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Primary">Created</MudText>
                                 <MudText>@reservation.CreatedAt.ToString("d MMM yyyy h:mm tt")</MudText>
                             </MudItem>
-                            <MudItem xs="6">
+                            <MudItem xs="12" sm="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Primary">Last Updated</MudText>
                                 <MudText>@reservation.UpdatedAt.ToString("d MMM yyyy h:mm tt")</MudText>
                             </MudItem>
 
                             @if (reservation.CheckInTime.HasValue)
                             {
-                                <MudItem xs="6">
+                                <MudItem xs="12" sm="6">
                                     <MudText Typo="Typo.subtitle2" Color="Color.Primary">Check-In Time</MudText>
                                     <MudText>@reservation.CheckInTime.Value.ToString("d MMM yyyy h:mm tt")</MudText>
                                 </MudItem>
@@ -150,7 +150,7 @@
 
                             @if (reservation.CheckOutTime.HasValue)
                             {
-                                <MudItem xs="6">
+                                <MudItem xs="12" sm="6">
                                     <MudText Typo="Typo.subtitle2" Color="Color.Primary">Check-Out Time</MudText>
                                     <MudText>@reservation.CheckOutTime.Value.ToString("d MMM yyyy h:mm tt")</MudText>
                                 </MudItem>
@@ -160,91 +160,93 @@
                 </MudTabPanel>
 
                 <MudTabPanel Icon="@Icons.Material.Filled.Timeline" Text="STATUS HISTORY">
-                    <MudTimeline>
-                        @if (reservation.Status == "Confirmed" || reservation.Status == "Seated" || reservation.Status == "Completed"
-                       || reservation.Status == "Cancelled" || reservation.Status == "No-Show")
-                        {
-                            <MudTimelineItem Color="Color.Success">
-                                <ItemOpposite>
-                                    <MudText Typo="Typo.body2">@reservation.CreatedAt.ToString("MMM dd, yyyy")</MudText>
-                                    <MudText Typo="Typo.caption">@reservation.CreatedAt.ToString("hh:mm tt")</MudText>
-                                </ItemOpposite>
-                                <ItemContent>
-                                    <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(0,200,83,0.1);">
-                                        <MudText Typo="Typo.h6">Reservation Created</MudText>
-                                        <MudText Typo="Typo.body2">Reservation confirmed for @reservation.PartySize guests</MudText>
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
+                    <div class="status-history-container">
+                        <MudTimeline>
+                            @if (reservation.Status == "Confirmed" || reservation.Status == "Seated" || reservation.Status == "Completed"
+                           || reservation.Status == "Cancelled" || reservation.Status == "No-Show")
+                            {
+                                <MudTimelineItem Color="Color.Success">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.body2">@reservation.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                                        <MudText Typo="Typo.caption">@reservation.CreatedAt.ToString("hh:mm tt")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(0,200,83,0.1);">
+                                            <MudText Typo="Typo.h6">Reservation Created</MudText>
+                                            <MudText Typo="Typo.body2">Reservation confirmed for @reservation.PartySize guests</MudText>
+                                        </MudPaper>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
 
-                        @if (reservation.Status == "Seated" || reservation.Status == "Completed")
-                        {
-                            <MudTimelineItem Color="Color.Info">
-                                <ItemOpposite>
-                                    <MudText Typo="Typo.body2">@reservation.CheckInTime?.ToString("MMM dd, yyyy")</MudText>
-                                    <MudText Typo="Typo.caption">@reservation.CheckInTime?.ToString("hh:mm tt")</MudText>
-                                </ItemOpposite>
-                                <ItemContent>
-                                    <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(33,150,243,0.1);">
-                                        <MudText Typo="Typo.h6">Customer Checked In</MudText>
-                                        <MudText Typo="Typo.body2">Table(s): @string.Join(", ", reservation.TableAssignments)</MudText>
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
+                            @if (reservation.Status == "Seated" || reservation.Status == "Completed")
+                            {
+                                <MudTimelineItem Color="Color.Info">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.body2">@reservation.CheckInTime?.ToString("MMM dd, yyyy")</MudText>
+                                        <MudText Typo="Typo.caption">@reservation.CheckInTime?.ToString("hh:mm tt")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(33,150,243,0.1);">
+                                            <MudText Typo="Typo.h6">Customer Checked In</MudText>
+                                            <MudText Typo="Typo.body2">Table(s): @string.Join(", ", reservation.TableAssignments)</MudText>
+                                        </MudPaper>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
 
-                        @if (reservation.Status == "Completed")
-                        {
-                            <MudTimelineItem Color="Color.Dark">
-                                <ItemOpposite>
-                                    <MudText Typo="Typo.body2">@reservation.CheckOutTime?.ToString("MMM dd, yyyy")</MudText>
-                                    <MudText Typo="Typo.caption">@reservation.CheckOutTime?.ToString("hh:mm tt")</MudText>
-                                </ItemOpposite>
-                                <ItemContent>
-                                    <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(66,66,66,0.1);">
-                                        <MudText Typo="Typo.h6">Reservation Completed</MudText>
-                                        <MudText Typo="Typo.body2">Duration: @GetDuration(reservation.CheckInTime, reservation.CheckOutTime)</MudText>
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
+                            @if (reservation.Status == "Completed")
+                            {
+                                <MudTimelineItem Color="Color.Dark">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.body2">@reservation.CheckOutTime?.ToString("MMM dd, yyyy")</MudText>
+                                        <MudText Typo="Typo.caption">@reservation.CheckOutTime?.ToString("hh:mm tt")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(66,66,66,0.1);">
+                                            <MudText Typo="Typo.h6">Reservation Completed</MudText>
+                                            <MudText Typo="Typo.body2">Duration: @GetDuration(reservation.CheckInTime, reservation.CheckOutTime)</MudText>
+                                        </MudPaper>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
 
-                        @if (reservation.Status == "Cancelled")
-                        {
-                            <MudTimelineItem Color="Color.Error">
-                                <ItemOpposite>
-                                    <MudText Typo="Typo.body2">@reservation.UpdatedAt.ToString("MMM dd, yyyy")</MudText>
-                                    <MudText Typo="Typo.caption">@reservation.UpdatedAt.ToString("hh:mm tt")</MudText>
-                                </ItemOpposite>
-                                <ItemContent>
-                                    <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(244,67,54,0.1);">
-                                        <MudText Typo="Typo.h6">Reservation Cancelled</MudText>
-                                        @if (!string.IsNullOrEmpty(reservation.Notes))
-                                        {
-                                            <MudText Typo="Typo.body2">Reason: @reservation.Notes</MudText>
-                                        }
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
+                            @if (reservation.Status == "Cancelled")
+                            {
+                                <MudTimelineItem Color="Color.Error">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.body2">@reservation.UpdatedAt.ToString("MMM dd, yyyy")</MudText>
+                                        <MudText Typo="Typo.caption">@reservation.UpdatedAt.ToString("hh:mm tt")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(244,67,54,0.1);">
+                                            <MudText Typo="Typo.h6">Reservation Cancelled</MudText>
+                                            @if (!string.IsNullOrEmpty(reservation.Notes))
+                                            {
+                                                <MudText Typo="Typo.body2">Reason: @reservation.Notes</MudText>
+                                            }
+                                        </MudPaper>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
 
-                        @if (reservation.Status == "No-Show")
-                        {
-                            <MudTimelineItem Color="Color.Warning">
-                                <ItemOpposite>
-                                    <MudText Typo="Typo.body2">@reservation.UpdatedAt.ToString("MMM dd, yyyy")</MudText>
-                                    <MudText Typo="Typo.caption">@reservation.UpdatedAt.ToString("hh:mm tt")</MudText>
-                                </ItemOpposite>
-                                <ItemContent>
-                                    <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(255,152,0,0.1);">
-                                        <MudText Typo="Typo.h6">No-Show</MudText>
-                                        <MudText Typo="Typo.body2">Customer did not arrive for their reservation</MudText>
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
-                    </MudTimeline>
+                            @if (reservation.Status == "No-Show")
+                            {
+                                <MudTimelineItem Color="Color.Warning">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.body2">@reservation.UpdatedAt.ToString("MMM dd, yyyy")</MudText>
+                                        <MudText Typo="Typo.caption">@reservation.UpdatedAt.ToString("hh:mm tt")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: rgba(255,152,0,0.1);">
+                                            <MudText Typo="Typo.h6">No-Show</MudText>
+                                            <MudText Typo="Typo.body2">Customer did not arrive for their reservation</MudText>
+                                        </MudPaper>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    </div>
                 </MudTabPanel>
             </MudTabs>
         }
@@ -253,6 +255,51 @@
         <MudButton OnClick="Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
+
+<style>
+    /* Make the dialog responsive */
+    .reservation-details-dialog {
+        width: 90vw;
+        max-width: 1000px;
+        max-height: 90vh;
+        overflow: hidden;
+    }
+
+    /* Handle small screens */
+    @@media (max-width: 768px) {
+        .reservation-details-dialog
+
+    {
+        width: 100vw;
+        max-width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+    }
+
+    ::deep .mud-dialog-content {
+        max-height: calc(100vh - 120px);
+    }
+
+    }
+
+    /* Make timeline scroll properly on smaller screens */
+    .status-history-container {
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    /* Ensure the dialog content is scrollable */
+    ::deep .mud-dialog-content {
+        overflow-y: auto;
+    }
+</style>
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;

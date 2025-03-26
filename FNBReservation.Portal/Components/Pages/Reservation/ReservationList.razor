@@ -54,16 +54,16 @@
                 </MudItem>
 
                 <MudItem xs="12" md="3">
-                    <MudDateRangePicker @bind-DateRange="dateRange" Label="Date Range"
+                    <MudDateRangePicker @ref="dateRangePicker" Label="Date Range"
+                                        @bind-DateRange="dateRange"
                                         Variant="Variant.Outlined"
-                                        AdornmentIcon="@Icons.Material.Filled.DateRange"
-                                        Adornment="Adornment.Start"
+                                        Adornment="Adornment.None"
                                         DateFormat="dd/MM/yyyy"
-                                        DateChanged="@ApplyDateRange"
+                                        PickerVariant="PickerVariant.Dialog"
                                         HelperText="Reservation date range">
                         <PickerActions>
-                            <MudButton Class="mr-auto" Variant="Variant.Text" OnClick="ClearDateRange">Clear</MudButton>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ApplyDateRange">Apply</MudButton>
+                            <MudButton Class="mr-auto" Variant="Variant.Text" OnClick="@(() => ClearAndCloseDatePicker())">Clear</MudButton>
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => ApplyAndCloseDatePicker())">Apply</MudButton>
                         </PickerActions>
                     </MudDateRangePicker>
                 </MudItem>
@@ -189,6 +189,7 @@
     private string selectedOutletId = "all";
     private string selectedStatus = "";
     private DateRange dateRange = new DateRange(DateTime.Now.Date, DateTime.Now.Date.AddDays(7));
+    private MudDateRangePicker dateRangePicker;
     private string searchTerm = "";
 
     private bool isLoading = true;
@@ -253,13 +254,15 @@
         await LoadReservations();
     }
 
-    private void ClearDateRange()
+    private async Task ClearAndCloseDatePicker()
     {
         dateRange = new DateRange(null, null);
+        await dateRangePicker.CloseAsync(false);
     }
 
-    private async Task ApplyDateRange()
+    private async Task ApplyAndCloseDatePicker()
     {
+        await dateRangePicker.CloseAsync();
         await LoadReservations();
     }
 
@@ -297,13 +300,21 @@
 
     private async Task OpenCreateReservationDialog()
     {
-        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Create Reservation");
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        try
         {
-            await LoadReservations();
-            Snackbar.Add("Reservation created successfully", Severity.Success);
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            var dialog = await DialogService.ShowAsync<ReservationFormDialog>("New Reservation", options);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await LoadReservations();
+                Snackbar.Add("Reservation created successfully", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating reservation: {ex.Message}", Severity.Error);
         }
     }
 
@@ -321,20 +332,27 @@
 
     private async Task EditReservation(ReservationDto reservation)
     {
-        var parameters = new DialogParameters
-            {
-                ["ReservationId"] = reservation.ReservationId,
-                ["IsEdit"] = true
-            };
-
-        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium };
-        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Edit Reservation", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        try
         {
-            await LoadReservations();
-            Snackbar.Add("Reservation updated successfully", Severity.Success);
+            var parameters = new DialogParameters
+                {
+                    ["ReservationId"] = reservation.ReservationId,
+                    ["IsEdit"] = true
+                };
+
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Edit Reservation", parameters, options);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await LoadReservations();
+                Snackbar.Add("Reservation updated successfully", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error editing reservation: {ex.Message}", Severity.Error);
         }
     }
 
