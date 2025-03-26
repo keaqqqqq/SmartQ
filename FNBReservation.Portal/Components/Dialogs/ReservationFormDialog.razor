@@ -1,0 +1,635 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject IReservationService ReservationService
+@inject IOutletService OutletService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudDialog DisableSidePadding="true" Style="min-width: 800px; max-width: 95vw;">
+    <TitleContent>
+        <div class="d-flex align-center px-4 py-2">
+            <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            <MudText Typo="Typo.h6">@(IsEdit ? "Edit Reservation" : "New Reservation")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudContainer Class="px-4 py-5">
+            @if (isLoading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else
+            {
+                <MudForm @ref="form" Model="@reservationModel" @bind-IsValid="@formIsValid" Validation="@(validationContext.ValidateValue)">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: #f9f9f9; border-radius: 4px;">
+                                <MudText Typo="Typo.subtitle1" Class="mb-3">Reservation Details</MudText>
+
+                                <MudSelect Value="@reservationModel.OutletId" 
+                                           ValueChanged="@OnOutletChanged"
+                                           T="string"
+                                           Label="Outlet" 
+                                           Required RequiredError="Outlet is required"
+                                           HelperText="Select the restaurant outlet"
+                                           Variant="Variant.Outlined" 
+                                           AdornmentIcon="@Icons.Material.Filled.Store"
+                                           Adornment="Adornment.Start"
+                                           AnchorOrigin="Origin.BottomCenter" 
+                                           Class="mb-4"
+                                           Disabled="@IsEdit">
+                                    @foreach (var outlet in outlets)
+                                    {
+                                        <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                <div class="d-flex gap-3">
+                                    <div style="flex: 1;">
+                                        <MudDatePicker Label="Date" 
+                                                      Variant="Variant.Outlined" 
+                                                      Date="@reservationModel.ReservationDate"
+                                                      DateChanged="@OnDateChanged"
+                                                      Required RequiredError="Date is required"
+                                                      HelperText="Reservation date"
+                                                      Placeholder="Select date"
+                                                      AdornmentIcon="@Icons.Material.Filled.Event"
+                                                      Adornment="Adornment.Start"
+                                                      Class="mb-4" />
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <MudTimePicker Label="Time" 
+                                                      Variant="Variant.Outlined" 
+                                                      Time="@reservationModel.Time"
+                                                      TimeChanged="@OnTimeChanged"
+                                                      Required RequiredError="Time is required"
+                                                      HelperText="Reservation time"
+                                                      AdornmentIcon="@Icons.Material.Filled.AccessTime"
+                                                      Adornment="Adornment.Start"
+                                                      AmPm="true"
+                                                      TimeEditMode="TimeEditMode.Normal"
+                                                      Class="mb-4" />
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-3">
+                                    <div style="flex: 1;">
+                                        <MudNumericField @bind-Value="reservationModel.PartySize" 
+                                                        Label="Party Size" 
+                                                        Required RequiredError="Party size is required"
+                                                        HelperText="Number of guests"
+                                                        Variant="Variant.Outlined" 
+                                                        Min="1" Max="20" 
+                                                        AdornmentIcon="@Icons.Material.Filled.PeopleAlt"
+                                                        Adornment="Adornment.Start"
+                                                        Class="mb-4" />
+                                    </div>
+                                    
+                                    @if (IsEdit)
+                                    {
+                                        <div style="flex: 1;">
+                                            <MudSelect @bind-Value="reservationModel.Status" 
+                                                      T="string"
+                                                      Label="Status" 
+                                                      Required RequiredError="Status is required"
+                                                      HelperText="Current status"
+                                                      Variant="Variant.Outlined" 
+                                                      AdornmentIcon="@Icons.Material.Filled.Bookmark"
+                                                      Adornment="Adornment.Start"
+                                                      AnchorOrigin="Origin.BottomCenter" 
+                                                      Class="mb-4">
+                                                <MudSelectItem Value="@("Confirmed")">Confirmed</MudSelectItem>
+                                                <MudSelectItem Value="@("Seated")">Seated</MudSelectItem>
+                                                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                                                <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                                                <MudSelectItem Value="@("No-Show")">No-Show</MudSelectItem>
+                                            </MudSelect>
+                                        </div>
+                                    }
+                                </div>
+
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Table Assignment</MudText>
+                                <MudSelect @bind-Value="reservationModel.Tables" 
+                                          T="List<string>"
+                                          Label="Tables" 
+                                          Placeholder="Select tables"
+                                          HelperText="Assign specific tables"
+                                          Variant="Variant.Outlined" 
+                                          MultiSelection="true" 
+                                          SelectAll="true"
+                                          AdornmentIcon="@Icons.Material.Filled.TableBar"
+                                          Adornment="Adornment.Start"
+                                          AnchorOrigin="Origin.BottomCenter"
+                                          Class="mb-4">
+                                    @foreach (var tableGroup in availableTables.GroupBy(t => t.Section))
+                                    {
+                                        <MudSelectItemGroup T="string" Text="@tableGroup.Key">
+                                            @foreach (var table in tableGroup)
+                                            {
+                                                <MudSelectItem T="string" Value="@table.TableNumber">
+                                                    @table.TableNumber (Seats @table.Capacity)
+                                                </MudSelectItem>
+                                            }
+                                        </MudSelectItemGroup>
+                                    }
+                                </MudSelect>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: #f9f9f9; border-radius: 4px;">
+                                <MudText Typo="Typo.subtitle1" Class="mb-3">Customer Information</MudText>
+
+                                <MudTextField @bind-Value="reservationModel.CustomerName" 
+                                              Label="Customer Name" 
+                                              Required RequiredError="Customer name is required"
+                                              HelperText="Full name of the customer"
+                                              Variant="Variant.Outlined" 
+                                              AdornmentIcon="@Icons.Material.Filled.Person"
+                                              Adornment="Adornment.Start"
+                                              Class="mb-4" />
+
+                                <MudTextField @bind-Value="reservationModel.CustomerPhone" 
+                                              Label="Phone Number" 
+                                              Required RequiredError="Phone number is required"
+                                              HelperText="Contact phone number"
+                                              Variant="Variant.Outlined" 
+                                              AdornmentIcon="@Icons.Material.Filled.Phone"
+                                              Adornment="Adornment.Start"
+                                              Class="mb-4" />
+
+                                <MudTextField @bind-Value="reservationModel.CustomerEmail" 
+                                              Label="Email Address" 
+                                              HelperText="Email address (optional)"
+                                              Variant="Variant.Outlined" 
+                                              AdornmentIcon="@Icons.Material.Filled.Email"
+                                              Adornment="Adornment.Start"
+                                              InputType="InputType.Email"
+                                              Class="mb-4" />
+
+                                <MudTextField @bind-Value="reservationModel.SpecialRequests" 
+                                              Label="Special Requests" 
+                                              HelperText="Any special requirements for this reservation"
+                                              Variant="Variant.Outlined" 
+                                              AdornmentIcon="@Icons.Material.Filled.RoomService"
+                                              Adornment="Adornment.Start"
+                                              Lines="3"
+                                              Class="mb-4" />
+
+                                <MudTextField @bind-Value="reservationModel.Notes" 
+                                              Label="Staff Notes" 
+                                              HelperText="Internal notes visible only to staff"
+                                              Variant="Variant.Outlined" 
+                                              AdornmentIcon="@Icons.Material.Filled.Notes"
+                                              Adornment="Adornment.Start"
+                                              Lines="3" />
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+
+                @if (showAvailabilityCheck && !IsEdit)
+                {
+                    <MudDivider Class="my-4" />
+                    <MudExpansionPanel IsExpanded="true" Class="mt-2">
+                        <TitleContent>
+                            <MudText Typo="Typo.h6">Availability Check</MudText>
+                        </TitleContent>
+                        <ChildContent>
+                            @if (isCheckingAvailability)
+                            {
+                                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                                <MudText>Checking availability...</MudText>
+                            }
+                            else if (availabilityResponse != null)
+                            {
+                                @if (availabilityResponse.Available)
+                                {
+                                    <MudAlert Severity="Severity.Success" Class="my-4" Icon="@Icons.Material.Filled.CheckCircle">
+                                        <MudText>The selected time is available!</MudText>
+                                    </MudAlert>
+
+                                    @if (availabilityResponse.AvailableTimes.Count > 1)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mt-4">Other Available Times:</MudText>
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            @foreach (var slot in availabilityResponse.AvailableTimes.Where(t => t.Time != reservationModel.Time?.ToString(@"hh\:mm\:ss")))
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" T="string"
+                                                         OnClick="@(() => SelectAlternativeTime(slot.Time))">
+                                                    @FormatTimeSlot(slot.Time) (@slot.AvailableTables tables)
+                                                </MudChip>
+                                            }
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Warning" Class="my-4" Icon="@Icons.Material.Filled.Warning">
+                                        <MudText>@availabilityResponse.Message</MudText>
+                                    </MudAlert>
+
+                                    @if (availabilityResponse.AvailableTimes.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mt-4">Alternative Times:</MudText>
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            @foreach (var slot in availabilityResponse.AvailableTimes)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" T="string"
+                                                         OnClick="@(() => SelectAlternativeTime(slot.Time))">
+                                                    @FormatTimeSlot(slot.Time) (@slot.AvailableTables tables)
+                                                </MudChip>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (availabilityResponse.NextAvailableDate.HasValue)
+                                    {
+                                        <div class="mt-4">
+                                            <MudText Typo="Typo.subtitle2">Next Available Date:</MudText>
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" 
+                                                       OnClick="@(() => SelectAlternativeDate(availabilityResponse.NextAvailableDate.Value))">
+                                                @availabilityResponse.NextAvailableDate.Value.ToString("dddd, MMMM d, yyyy")
+                                            </MudButton>
+                                        </div>
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                <div class="d-flex justify-center my-4">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                              OnClick="CheckAvailability" 
+                                              StartIcon="@Icons.Material.Filled.Search"
+                                              Disabled="!CanCheckAvailability()">
+                                        Check Availability
+                                    </MudButton>
+                                </div>
+                            }
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            }
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        
+        @if (!IsEdit && showAvailabilityCheck && !isCheckingAvailability && 
+              (availabilityResponse == null || !availabilityResponse.Available))
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Outlined" OnClick="CheckAvailability" 
+                       Disabled="!CanCheckAvailability()" Class="mr-2">
+                Check Availability
+            </MudButton>
+        }
+        
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" 
+                   StartIcon="@Icons.Material.Filled.Save"
+                   Disabled="@(!formIsValid || (!IsEdit && showAvailabilityCheck && 
+                   (availabilityResponse == null || !availabilityResponse.Available)))">
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? ReservationId { get; set; }
+    [Parameter] public bool IsEdit { get; set; } = false;
+
+    private ReservationFormModel reservationModel = new();
+    private MudForm form = null!;
+    private bool formIsValid = false;
+    private ModelValidationContext validationContext;
+
+    private List<OutletDto> outlets = new();
+    private List<TableInfo> availableTables = new();
+    
+    private bool isLoading = true;
+    private bool showAvailabilityCheck = true;
+    private bool isCheckingAvailability = false;
+    private AvailabilityResponseDto? availabilityResponse = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        validationContext = new ModelValidationContext(this);
+        
+        await LoadOutlets();
+
+        if (IsEdit && !string.IsNullOrEmpty(ReservationId))
+        {
+            await LoadReservation();
+        }
+        else
+        {
+            // Initialize new reservation with current date and time
+            var now = DateTime.Now;
+            var roundedTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
+            
+            reservationModel = new ReservationFormModel
+            {
+                ReservationDate = DateTime.Today,
+                Time = TimeSpan.FromHours(roundedTime.Hour),
+                PartySize = 2,
+                Source = "Website"
+            };
+        }
+
+        isLoading = false;
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            outlets = await OutletService.GetOutletsAsync();
+            
+            if (outlets.Count > 0 && string.IsNullOrEmpty(reservationModel.OutletId))
+            {
+                reservationModel.OutletId = outlets[0].OutletId;
+                await LoadTablesForOutlet(reservationModel.OutletId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadReservation()
+    {
+        try
+        {
+            var reservation = await ReservationService.GetReservationByIdAsync(ReservationId!);
+            
+            if (reservation != null)
+            {
+                reservationModel = new ReservationFormModel
+                {
+                    OutletId = reservation.OutletId,
+                    ReservationDate = reservation.ReservationDate.Date,
+                    Time = TimeSpan.FromHours(reservation.ReservationDate.Hour).Add(TimeSpan.FromMinutes(reservation.ReservationDate.Minute)),
+                    PartySize = reservation.PartySize,
+                    CustomerName = reservation.CustomerName,
+                    CustomerPhone = reservation.CustomerPhone,
+                    CustomerEmail = reservation.CustomerEmail,
+                    SpecialRequests = reservation.SpecialRequests,
+                    Notes = reservation.Notes,
+                    Status = reservation.Status,
+                    Source = reservation.Source,
+                    Tables = reservation.TableAssignments
+                };
+                
+                await LoadTablesForOutlet(reservationModel.OutletId);
+                showAvailabilityCheck = false; // No need to check availability for edits
+            }
+            else
+            {
+                Snackbar.Add("Reservation not found", Severity.Error);
+                MudDialog.Cancel();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading reservation: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadTablesForOutlet(string outletId)
+    {
+        try
+        {
+            var outlet = await OutletService.GetOutletByIdAsync(outletId);
+            if (outlet != null)
+            {
+                availableTables = outlet.Tables.Where(t => t.IsActive).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tables: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool CanCheckAvailability()
+    {
+        return !string.IsNullOrEmpty(reservationModel.OutletId) && 
+               reservationModel.ReservationDate.HasValue && 
+               reservationModel.Time.HasValue && 
+               reservationModel.PartySize > 0;
+    }
+
+    private async Task CheckAvailability()
+    {
+        if (!CanCheckAvailability()) return;
+
+        try
+        {
+            isCheckingAvailability = true;
+            
+            var reservationDateTime = reservationModel.ReservationDate.Value.Add(reservationModel.Time.Value);
+            
+            var request = new AvailabilityRequestDto
+            {
+                OutletId = reservationModel.OutletId,
+                PartySize = reservationModel.PartySize,
+                Date = reservationModel.ReservationDate.Value,
+                PreferredTime = $"{reservationModel.Time.Value.Hours:D2}:{reservationModel.Time.Value.Minutes:D2}:00",
+                EarliestTime = $"{Math.Max(0, reservationModel.Time.Value.Hours - 1):D2}:{reservationModel.Time.Value.Minutes:D2}:00",
+                LatestTime = $"{Math.Min(23, reservationModel.Time.Value.Hours + 1):D2}:{reservationModel.Time.Value.Minutes:D2}:00"
+            };
+
+            availabilityResponse = await ReservationService.CheckAvailabilityAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error checking availability: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isCheckingAvailability = false;
+        }
+    }
+
+    private async Task OnOutletChanged(string outletId)
+    {
+        reservationModel.OutletId = outletId;
+        await LoadTablesForOutlet(outletId);
+        availabilityResponse = null; // Reset availability check when outlet changes
+    }
+
+    private void OnDateChanged(DateTime? date)
+    {
+        reservationModel.ReservationDate = date;
+        availabilityResponse = null; // Reset availability check when date changes
+    }
+
+    private void OnTimeChanged(TimeSpan? time)
+    {
+        reservationModel.Time = time;
+        availabilityResponse = null; // Reset availability check when time changes
+    }
+
+    private void SelectAlternativeTime(string timeString)
+    {
+        if (TimeSpan.TryParse(timeString, out var time))
+        {
+            reservationModel.Time = time;
+            CheckAvailability();
+        }
+    }
+
+    private void SelectAlternativeDate(DateTime date)
+    {
+        reservationModel.ReservationDate = date;
+        availabilityResponse = null; // Reset availability check when date changes
+    }
+
+    private string FormatTimeSlot(string timeString)
+    {
+        if (TimeSpan.TryParse(timeString, out var time))
+        {
+            var dt = DateTime.Today.Add(time);
+            return dt.ToString("h:mm tt");
+        }
+        return timeString;
+    }
+
+    private async Task Submit()
+    {
+        try
+        {
+            if (IsEdit)
+            {
+                // Update existing reservation
+                var updateRequest = new UpdateReservationDto
+                {
+                    ReservationId = ReservationId!,
+                    CustomerName = reservationModel.CustomerName,
+                    CustomerPhone = reservationModel.CustomerPhone,
+                    CustomerEmail = reservationModel.CustomerEmail,
+                    PartySize = reservationModel.PartySize,
+                    Status = reservationModel.Status,
+                    TableAssignments = reservationModel.Tables,
+                    SpecialRequests = reservationModel.SpecialRequests,
+                    Notes = reservationModel.Notes
+                };
+
+                // Only update reservation date if it was changed
+                if (reservationModel.ReservationDate.HasValue && reservationModel.Time.HasValue)
+                {
+                    updateRequest.ReservationDate = reservationModel.ReservationDate.Value.Add(reservationModel.Time.Value);
+                }
+
+                var updatedReservation = await ReservationService.UpdateReservationAsync(updateRequest);
+                
+                if (updatedReservation != null)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update reservation", Severity.Error);
+                }
+            }
+            else
+            {
+                // Create new reservation
+                if (!reservationModel.ReservationDate.HasValue || !reservationModel.Time.HasValue)
+                {
+                    Snackbar.Add("Date and time are required", Severity.Error);
+                    return;
+                }
+
+                var reservationDateTime = reservationModel.ReservationDate.Value.Add(reservationModel.Time.Value);
+                
+                var createRequest = new CreateReservationDto
+                {
+                    OutletId = reservationModel.OutletId,
+                    CustomerName = reservationModel.CustomerName,
+                    CustomerPhone = reservationModel.CustomerPhone,
+                    CustomerEmail = reservationModel.CustomerEmail,
+                    PartySize = reservationModel.PartySize,
+                    ReservationDate = reservationDateTime,
+                    SpecialRequests = reservationModel.SpecialRequests,
+                    Source = reservationModel.Source
+                };
+
+                var newReservation = await ReservationService.CreateReservationAsync(createRequest);
+                
+                if (newReservation != null)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to create reservation", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public class ReservationFormModel
+    {
+        public string OutletId { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "Date is required")]
+        public DateTime? ReservationDate { get; set; }
+        
+        [Required(ErrorMessage = "Time is required")]
+        public TimeSpan? Time { get; set; }
+        
+        [Required(ErrorMessage = "Party size is required")]
+        [Range(1, 20, ErrorMessage = "Party size must be between 1 and 20")]
+        public int PartySize { get; set; }
+        
+        [Required(ErrorMessage = "Customer name is required")]
+        public string CustomerName { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "Phone number is required")]
+        public string CustomerPhone { get; set; } = string.Empty;
+        
+        [EmailAddress(ErrorMessage = "Invalid email format")]
+        public string? CustomerEmail { get; set; }
+        
+        public string? SpecialRequests { get; set; }
+        
+        public string? Notes { get; set; }
+        
+        public List<string> Tables { get; set; } = new List<string>();
+        
+        [Required(ErrorMessage = "Status is required")]
+        public string Status { get; set; } = "Confirmed";
+        
+        [Required(ErrorMessage = "Source is required")]
+        public string Source { get; set; } = "Website";
+    }
+
+    public class ModelValidationContext
+    {
+        private readonly ReservationFormDialog _parent;
+
+        public ModelValidationContext(ReservationFormDialog parent)
+        {
+            _parent = parent;
+        }
+
+        public bool ValidateValue(object obj, object? value, string propertyName)
+        {
+            var context = new ValidationContext(obj) { MemberName = propertyName };
+            var results = new List<ValidationResult>();
+
+            var isValid = Validator.TryValidateProperty(value, context, results);
+            return isValid;
+        }
+    }
+}

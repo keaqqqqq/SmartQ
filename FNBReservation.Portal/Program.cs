@@ -10,10 +10,11 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 
-// Register the mock service
+// Register the mock services
 builder.Services.AddSingleton<IOutletService, MockOutletService>();
 builder.Services.AddScoped<IStaffService, MockStaffService>();
 builder.Services.AddScoped<ICustomerService, MockCustomerService>();
+builder.Services.AddScoped<IReservationService, MockReservationService>(); // Add this line
 builder.Services.AddMudServices();
 
 var app = builder.Build();

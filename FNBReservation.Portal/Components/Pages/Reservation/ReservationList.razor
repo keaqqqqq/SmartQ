@@ -1,5 +1,429 @@
-﻿<h3>ReservationList</h3>
+﻿@page "/reservations"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@using FNBReservation.Portal.Components.Dialogs
+@inject IReservationService ReservationService
+@inject IOutletService OutletService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Reservations - F&B Reservation System</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Reservation Management</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateReservationDialog">
+            NEW RESERVATION
+        </MudButton>
+    </div>
+
+    <MudCard>
+        <MudCardContent Class="py-4">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletChanged" Label="Outlet"
+                               Variant="Variant.Outlined"
+                               AdornmentIcon="@Icons.Material.Filled.Store"
+                               Adornment="Adornment.Start"
+                               HelperText="Filter by outlet">
+                        <MudSelectItem Value="@("all")">All Outlets</MudSelectItem>
+                        @foreach (var outlet in outlets)
+                        {
+                            <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" Value="@selectedStatus" ValueChanged="@StatusChanged" Label="Status"
+                               Variant="Variant.Outlined"
+                               AdornmentIcon="@Icons.Material.Filled.FilterList"
+                               Adornment="Adornment.Start"
+                               HelperText="Filter by status">
+                        <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
+                        <MudSelectItem Value="@("Confirmed")">Confirmed</MudSelectItem>
+                        <MudSelectItem Value="@("Seated")">Seated</MudSelectItem>
+                        <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                        <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                        <MudSelectItem Value="@("No-Show")">No-Show</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudDateRangePicker @bind-DateRange="dateRange" Label="Date Range"
+                                        Variant="Variant.Outlined"
+                                        AdornmentIcon="@Icons.Material.Filled.DateRange"
+                                        Adornment="Adornment.Start"
+                                        DateFormat="dd/MM/yyyy"
+                                        DateChanged="@ApplyDateRange"
+                                        HelperText="Reservation date range">
+                        <PickerActions>
+                            <MudButton Class="mr-auto" Variant="Variant.Text" OnClick="ClearDateRange">Clear</MudButton>
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ApplyDateRange">Apply</MudButton>
+                        </PickerActions>
+                    </MudDateRangePicker>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudTextField @bind-Value="searchTerm" Label="Search"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="Name, phone, email..."
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  HelperText="Search by customer details"
+                                  Immediate="true"
+                                  OnDebounceIntervalElapsed="SearchReservations" />
+                </MudItem>
+            </MudGrid>
+
+            @if (isLoading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+            }
+            else
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        @filteredReservations.Count Reservations found
+                    </MudText>
+                    <MudTable Items="@filteredReservations" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                              T="ReservationDto" Dense="@true"
+                              SortLabel="Sort by" Filter="@QuickFilter"
+                              Bordered="true">
+                        <HeaderContent>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ReservationDto, object>(x => x.ReservationDate)">Date & Time</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ReservationDto, object>(x => x.CustomerName)">Customer</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ReservationDto, object>(x => x.PartySize)">Party</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ReservationDto, object>(x => x.OutletName)">Outlet</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ReservationDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+                            <MudTh>Tables</MudTh>
+                            <MudTh>Special Requests</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date & Time">
+                                <div class="font-weight-bold">@context.ReservationDate.ToString("dd MMM yyyy")</div>
+                                <MudText Typo="Typo.caption">@context.ReservationDate.ToString("hh:mm tt")</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Customer">
+                                <div class="font-weight-medium">@context.CustomerName</div>
+                                <MudText Typo="Typo.caption">@context.CustomerPhone</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Party">@context.PartySize</MudTd>
+                            <MudTd DataLabel="Outlet">@context.OutletName</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small"
+                                         Style="font-size: 0.75rem;" T="string">
+                                    @context.Status
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Tables">
+                                @(string.Join(", ", context.TableAssignments))
+                            </MudTd>
+                            <MudTd DataLabel="Special Requests">
+                                <div style="max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @(string.IsNullOrEmpty(context.SpecialRequests) ? "-" : context.SpecialRequests)
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <div class="d-flex gap-1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => EditReservation(context))"
+                                                   Color="Color.Primary"
+                                                   Title="Edit" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                                   OnClick="@(() => ViewReservationDetails(context))"
+                                                   Color="Color.Info"
+                                                   Title="View Details" />
+                                    @if (context.Status == "Confirmed")
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small"
+                                                       OnClick="@(() => CheckInReservation(context))"
+                                                       Color="Color.Success"
+                                                       Title="Check In" />
+                                    }
+                                    @if (context.Status == "Seated")
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Assignment" Size="Size.Small"
+                                                       OnClick="@(() => CheckOutReservation(context))"
+                                                       Color="Color.Dark"
+                                                       Title="Check Out" />
+                                    }
+                                    @if (context.Status == "Confirmed")
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
+                                                       OnClick="@(() => CancelReservation(context))"
+                                                       Color="Color.Error"
+                                                       Title="Cancel" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small"
+                                                       OnClick="@(() => MarkNoShow(context))"
+                                                       Color="Color.Warning"
+                                                       Title="No-Show" />
+                                    }
+                                </div>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center" Class="my-5">No reservations found that match the search criteria.</MudText>
+                        </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+                        </PagerContent>
+                    </MudTable>
+                </div>
+            }
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
 
 @code {
+    private List<OutletDto> outlets = new();
+    private List<ReservationDto> reservations = new();
+    private List<ReservationDto> filteredReservations = new();
 
+    private string selectedOutletId = "all";
+    private string selectedStatus = "";
+    private DateRange dateRange = new DateRange(DateTime.Now.Date, DateTime.Now.Date.AddDays(7));
+    private string searchTerm = "";
+
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+        await LoadReservations();
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            outlets = await OutletService.GetOutletsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadReservations()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            var filter = new ReservationFilterDto
+                {
+                    OutletId = selectedOutletId == "all" ? null : selectedOutletId,
+                    Status = string.IsNullOrEmpty(selectedStatus) ? null : selectedStatus,
+                    StartDate = dateRange.Start,
+                    EndDate = dateRange.End,
+                    SearchTerm = string.IsNullOrEmpty(searchTerm) ? null : searchTerm
+                };
+
+            reservations = await ReservationService.GetReservationsAsync(filter);
+            filteredReservations = reservations.ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading reservations: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OutletChanged(string outletId)
+    {
+        selectedOutletId = outletId;
+        await LoadReservations();
+    }
+
+    private async Task StatusChanged(string status)
+    {
+        selectedStatus = status;
+        await LoadReservations();
+    }
+
+    private void ClearDateRange()
+    {
+        dateRange = new DateRange(null, null);
+    }
+
+    private async Task ApplyDateRange()
+    {
+        await LoadReservations();
+    }
+
+    private async Task SearchReservations()
+    {
+        await LoadReservations();
+    }
+
+    private bool QuickFilter(ReservationDto reservation)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return true;
+
+        var searchTermLower = searchTerm.ToLower();
+
+        return reservation.CustomerName.ToLower().Contains(searchTermLower) ||
+               reservation.CustomerPhone.ToLower().Contains(searchTermLower) ||
+               (reservation.CustomerEmail != null && reservation.CustomerEmail.ToLower().Contains(searchTermLower)) ||
+               reservation.ReservationId.ToLower().Contains(searchTermLower) ||
+               (reservation.Notes != null && reservation.Notes.ToLower().Contains(searchTermLower));
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "confirmed" => Color.Info,
+            "seated" => Color.Success,
+            "completed" => Color.Dark,
+            "cancelled" => Color.Error,
+            "no-show" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private async Task OpenCreateReservationDialog()
+    {
+        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Create Reservation");
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadReservations();
+            Snackbar.Add("Reservation created successfully", Severity.Success);
+        }
+    }
+
+    private async Task ViewReservationDetails(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ReservationId"] = reservation.ReservationId
+            };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium };
+        var dialog = await DialogService.ShowAsync<ReservationDetailsDialog>("Reservation Details", parameters, options);
+        await dialog.Result;
+    }
+
+    private async Task EditReservation(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ReservationId"] = reservation.ReservationId,
+                ["IsEdit"] = true
+            };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium };
+        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Edit Reservation", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadReservations();
+            Snackbar.Add("Reservation updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task CancelReservation(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to cancel the reservation for {reservation.CustomerName}?",
+                ["ButtonText"] = "Cancel Reservation",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Cancellation", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            var success = await ReservationService.CancelReservationAsync(reservation.ReservationId, "Cancelled by admin");
+            if (success)
+            {
+                Snackbar.Add("Reservation cancelled successfully", Severity.Success);
+                await LoadReservations();
+            }
+            else
+            {
+                Snackbar.Add("Failed to cancel reservation", Severity.Error);
+            }
+        }
+    }
+
+    private async Task CheckInReservation(ReservationDto reservation)
+    {
+        var success = await ReservationService.CheckInReservationAsync(reservation.ReservationId);
+        if (success)
+        {
+            Snackbar.Add("Customer checked in successfully", Severity.Success);
+            await LoadReservations();
+        }
+        else
+        {
+            Snackbar.Add("Failed to check in customer", Severity.Error);
+        }
+    }
+
+    private async Task CheckOutReservation(ReservationDto reservation)
+    {
+        var success = await ReservationService.CheckOutReservationAsync(reservation.ReservationId);
+        if (success)
+        {
+            Snackbar.Add("Customer checked out successfully", Severity.Success);
+            await LoadReservations();
+        }
+        else
+        {
+            Snackbar.Add("Failed to check out customer", Severity.Error);
+        }
+    }
+
+    private async Task MarkNoShow(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to mark {reservation.CustomerName}'s reservation as a no-show?",
+                ["ButtonText"] = "Mark as No-Show",
+                ["Color"] = Color.Warning
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm No-Show", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            var updateRequest = new UpdateReservationDto
+                {
+                    ReservationId = reservation.ReservationId,
+                    Status = "No-Show",
+                    Notes = "Marked as no-show by admin"
+                };
+
+            var updatedReservation = await ReservationService.UpdateReservationAsync(updateRequest);
+            if (updatedReservation != null)
+            {
+                Snackbar.Add("Reservation marked as no-show", Severity.Success);
+                await LoadReservations();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update reservation status", Severity.Error);
+            }
+        }
+    }
 }
