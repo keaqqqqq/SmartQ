@@ -1,0 +1,6 @@
+@FNBReservation.CustomerPortal.Server_HostAddress = http://localhost:5108
+
+GET {{FNBReservation.CustomerPortal.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
