@@ -515,6 +515,26 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     throw new InvalidOperationException($"Cannot update a reservation with status '{reservation.Status}'");
                 }
 
+                // Check if reservation is too close to start time
+                var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
+                if (outlet == null)
+                {
+                    _logger.LogWarning("Outlet not found: {OutletId}", reservation.OutletId);
+                    throw new InvalidOperationException("Cannot update reservation: outlet not found");
+                }
+
+                // Calculate the minimum time allowed for modifications
+                // Use half of the minimum advance reservation time as the cutoff for modifications
+                int modificationCutoffHours = Math.Max(2, outlet.MinAdvanceReservationTime / 2);
+                DateTime cutoffTime = reservation.ReservationDate.AddHours(-modificationCutoffHours);
+
+                if (DateTime.UtcNow > cutoffTime)
+                {
+                    _logger.LogWarning("Reservation too close to start time for updates: {ReservationId}, starts at {StartTime}, cutoff was {CutoffTime}",
+                        id, reservation.ReservationDate, cutoffTime);
+                    throw new InvalidOperationException($"Reservations cannot be updated within {modificationCutoffHours} hours of the reservation time");
+                }
+
                 // Track changes for notification
                 List<string> changes = new List<string>();
 
@@ -550,13 +570,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 // Handle more complex updates that need validation
                 if (updateReservationDto.PartySize.HasValue || updateReservationDto.ReservationDate.HasValue)
                 {
-                    // Get outlet and settings
-                    var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
-                    if (outlet == null)
-                    {
-                        _logger.LogWarning("Outlet not found: {OutletId}", reservation.OutletId);
-                        throw new InvalidOperationException("Cannot update reservation: outlet not found");
-                    }
 
                     // Handle party size change
                     int newPartySize = updateReservationDto.PartySize ?? reservation.PartySize;
@@ -702,7 +715,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     await _notificationService.SendModificationAsync(reservation.Id, string.Join(", ", changes));
 
                     // Get updated table assignments
-                    var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
                     var tables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
                     var assignedTables = tables
                         .Where(t => updatedReservation.TableAssignments.Any(ta => ta.TableId == t.Id))
@@ -716,7 +728,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     _logger.LogInformation("No changes detected for reservation: {ReservationId}", id);
 
                     // Get updated information even if no changes
-                    var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
                     var tables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
                     var assignedTables = tables
                         .Where(t => reservation.TableAssignments.Any(ta => ta.TableId == t.Id))
@@ -765,6 +776,26 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     throw new InvalidOperationException("Cannot cancel a completed reservation");
                 }
 
+                // Check if the reservation is too close to start time for cancellation
+                var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
+                if (outlet == null)
+                {
+                    _logger.LogWarning("Outlet not found for reservation: {ReservationId}", id);
+                    throw new InvalidOperationException("Outlet information not available");
+                }
+
+                // Calculate the minimum time allowed for cancellation
+                // Use a minimum of 2 hours or half of the outlet's minimum advance reservation time
+                int cancellationCutoffHours = Math.Max(2, outlet.MinAdvanceReservationTime / 2);
+                DateTime cutoffTime = reservation.ReservationDate.AddHours(-cancellationCutoffHours);
+
+                if (DateTime.UtcNow > cutoffTime)
+                {
+                    _logger.LogWarning("Reservation too close to start time for cancellation: {ReservationId}, starts at {StartTime}, cutoff was {CutoffTime}",
+                        id, reservation.ReservationDate, cutoffTime);
+                    throw new InvalidOperationException($"Reservations cannot be canceled within {cancellationCutoffHours} hours of the reservation time");
+                }
+
                 // Record status change
                 var oldStatus = reservation.Status;
                 reservation.Status = "Canceled";
@@ -790,7 +821,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 await _notificationService.SendCancellationAsync(reservation.Id, cancelReservationDto.Reason);
 
                 // Return updated reservation
-                var outlet = await _outletAdapter.GetOutletInfoAsync(reservation.OutletId);
                 var tables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
                 var assignedTables = tables
                     .Where(t => updatedReservation.TableAssignments.Any(ta => ta.TableId == t.Id))
