@@ -1,0 +1,236 @@
+﻿@page "/outlets"
+@using System.Text.Json
+@using System.Net.Http.Json
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Components.Dialogs
+@using FNBReservation.Portal.Services
+@inject IOutletService OutletService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@rendermode InteractiveServer
+
+<MudBreakpointProvider>
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
+            <MudText Typo="Typo.h4">Outlet Management</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
+        </MudStack>
+
+        @if (isLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else
+        {
+            <MudTable Items="@outlets" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading" LoadingProgressColor="Color.Primary">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Location</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Capacity</MudTh>
+                    <MudTh>Queue</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="context">
+                    <MudTd DataLabel="ID">@context.OutletId</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Location">@context.Location</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">@context.Status</MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Capacity">
+                        <div>@context.Tables.Sum(t => t.Capacity) seats</div>
+                        <MudText Typo="Typo.caption">@context.Tables.Count tables</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Queue">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@(context.QueueEnabled ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                                        @(context.QueueEnabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" OnClick="@(() => ViewOutletDetails(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditOutletDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteDialog(context))" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No outlets found</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+        <!-- Floating Action Button (FAB) -->
+        <MudFab Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Add"
+                Size="Size.Large"
+                OnClick="OpenAddOutletDialog"
+                Class="fab-button"
+                aria-label="Add outlet" />
+    </MudContainer>
+
+    <style>
+        .fab-button {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10;
+        }
+    </style>
+
+
+</MudBreakpointProvider>
+
+@code {
+    // Your existing code here
+    private List<OutletDto> outlets = new();
+    private bool isLoading = true;
+    private string SearchTerm = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            isLoading = true;
+            outlets = await OutletService.GetOutletsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SearchOutlets()
+    {
+        isLoading = true;
+        try
+        {
+            outlets = await OutletService.GetOutletsAsync(SearchTerm);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching outlets: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "active" => Color.Success,
+            "inactive" => Color.Error,
+            "maintenance" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private async Task ViewOutletDetails(OutletDto outlet)
+    {
+        var parameters = new DialogParameters
+            {
+                ["OutletId"] = outlet.OutletId
+            };
+
+        var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
+        await dialog.Result;
+    }
+
+    private async Task OpenAddOutletDialog()
+    {
+        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet");
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadOutlets();
+        }
+    }
+
+    private async Task OpenEditOutletDialog(OutletDto outlet)
+    {
+        var parameters = new DialogParameters
+            {
+                ["Outlet"] = outlet,
+                ["IsEdit"] = true
+            };
+
+        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadOutlets();
+        }
+    }
+
+    private async Task OpenDeleteDialog(OutletDto outlet)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the outlet <b>'{outlet.Name}'</b>? This action cannot be undone.",
+                ["ButtonText"] = "Delete",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await DeleteOutlet(outlet.OutletId);
+        }
+    }
+
+    private async Task DeleteOutlet(string outletId)
+    {
+        try
+        {
+            var result = await OutletService.DeleteOutletAsync(outletId);
+
+            if (result)
+            {
+                Snackbar.Add("Outlet deleted successfully", Severity.Success);
+                await LoadOutlets();
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete outlet", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+}

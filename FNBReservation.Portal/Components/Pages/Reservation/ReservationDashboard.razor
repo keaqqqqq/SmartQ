@@ -1,0 +1,493 @@
+﻿@page "/reservation-dashboard"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@using FNBReservation.Portal.Components.Dialogs
+@inject IReservationService ReservationService
+@inject IOutletService OutletService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Reservation Dashboard - F&B Reservation System</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudText Typo="Typo.h4" Class="mb-4">Reservation Dashboard</MudText>
+            <MudPaper Class="pa-4 mb-4" Elevation="3">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="string" Label="Outlet" Value="@selectedOutletId" ValueChanged="@ChangeOutlet"
+                                   Variant="Variant.Outlined">
+                            @foreach (var outlet in outlets)
+                            {
+                                <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudDatePicker Label="Date" Date="@selectedDate" DateChanged="@ChangeDate"
+                                       Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="OpenCreateReservationDialog"
+                                   Class="ml-auto">
+                            New Reservation
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudCard Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Today's Summary</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudList Dense="true" T="string">
+                        <MudListItem Icon="@Icons.Material.Filled.EventAvailable" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Total Reservations</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Primary">@totalReservations</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.PeopleAlt" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Total Guests</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Primary">@totalGuests</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudDivider Class="my-2" />
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Confirmed</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Info">@confirmedCount</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.RestaurantMenu" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Seated</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Success">@seatedCount</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Done" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Completed</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Dark">@completedCount</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Cancel" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>Cancelled</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Error">@cancelledCount</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.PersonOff" T="string">
+                            <div class="d-flex justify-space-between w-100">
+                                <MudText>No-Show</MudText>
+                                <MudText Typo="Typo.body1" Color="Color.Warning">@noShowCount</MudText>
+                            </div>
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Time Slots</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudList Dense="true" T="string">
+                        @foreach (var timeSlot in timeSlots)
+                        {
+                            <MudListItem T="string">
+                                <div class="d-flex justify-space-between w-100">
+                                    <MudText>@timeSlot.Time</MudText>
+                                    <MudChip Size="Size.Small" Color="@GetTimeSlotColor(timeSlot.Count, timeSlot.Capacity)" T="string">
+                                        @timeSlot.Count/@timeSlot.Capacity
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="9">
+            <MudPaper Class="pa-4" Elevation="3">
+                <MudText Typo="Typo.h6" Class="mb-4">
+                    Reservations for @(selectedDate?.ToString("dddd, MMMM d, yyyy") ?? "Today")
+                </MudText>
+
+                @if (isLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                }
+                else
+                {
+                    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                        <MudTabPanel Text="List View" Icon="@Icons.Material.Filled.FormatListBulleted">
+                            <MudTable Items="@reservations" Hover="true"
+                                      Dense="true" Striped="true" Breakpoint="Breakpoint.Sm">
+                                <HeaderContent>
+                                    <MudTh>Time</MudTh>
+                                    <MudTh>Customer</MudTh>
+                                    <MudTh>Party</MudTh>
+                                    <MudTh>Tables</MudTh>
+                                    <MudTh>Status</MudTh>
+                                    <MudTh>Special Requests</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd>@context.ReservationDate.ToString("h:mm tt")</MudTd>
+                                    <MudTd>
+                                        <div>@context.CustomerName</div>
+                                        <MudText Typo="Typo.caption">@context.CustomerPhone</MudText>
+                                    </MudTd>
+                                    <MudTd>@context.PartySize</MudTd>
+                                    <MudTd>@(string.Join(", ", context.TableAssignments))</MudTd>
+                                    <MudTd>
+                                        <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">
+                                            @context.Status
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudText Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
+                                            @(string.IsNullOrEmpty(context.SpecialRequests) ? "-" : context.SpecialRequests)
+                                        </MudText>
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                           OnClick="@(() => EditReservation(context))"
+                                                           Title="Edit" />
+                                            @if (context.Status == "Confirmed")
+                                            {
+                                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                                               OnClick="@(() => CheckInReservation(context))"
+                                                               Color="Color.Success"
+                                                               Title="Check In" />
+                                            }
+                                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                           OnClick="@(() => ViewReservationDetails(context))"
+                                                           Color="Color.Info"
+                                                           Title="View Details" />
+                                        </MudButtonGroup>
+                                    </MudTd>
+                                </RowTemplate>
+                                <NoRecordsContent>
+                                    <MudText Align="Align.Center">No reservations found for this date.</MudText>
+                                </NoRecordsContent>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                        </MudTabPanel>
+
+                        <MudTabPanel Text="Timeline View" Icon="@Icons.Material.Filled.Timeline">
+                            <div class="overflow-auto" style="max-height: 600px">
+                                <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                    @foreach (var reservation in reservations.OrderBy(r => r.ReservationDate))
+                                    {
+                                        <MudTimelineItem Color="@GetStatusColor(reservation.Status)">
+                                            <ItemOpposite>
+                                                <MudText Typo="Typo.h6">@reservation.ReservationDate.ToString("h:mm tt")</MudText>
+                                                <MudText Typo="Typo.caption">@(string.Join(", ", reservation.TableAssignments))</MudText>
+                                            </ItemOpposite>
+                                            <ItemContent>
+                                                <MudCard Elevation="2">
+                                                    <MudCardHeader>
+                                                        <CardHeaderAvatar>
+                                                            <MudAvatar Color="@GetStatusColor(reservation.Status)">@reservation.CustomerName[0]</MudAvatar>
+                                                        </CardHeaderAvatar>
+                                                        <CardHeaderContent>
+                                                            <MudText Typo="Typo.body1">@reservation.CustomerName</MudText>
+                                                            <MudText Typo="Typo.caption">@reservation.CustomerPhone</MudText>
+                                                        </CardHeaderContent>
+                                                        <CardHeaderActions>
+                                                            <MudChip Color="@GetStatusColor(reservation.Status)" Size="Size.Small" T="string">@reservation.Status</MudChip>
+                                                        </CardHeaderActions>
+                                                    </MudCardHeader>
+                                                    <MudCardContent>
+                                                        <MudText>Party of @reservation.PartySize</MudText>
+                                                        @if (!string.IsNullOrEmpty(reservation.SpecialRequests))
+                                                        {
+                                                            <MudText Typo="Typo.caption">
+                                                                <span class="font-weight-bold">Special Requests:</span> @reservation.SpecialRequests
+                                                            </MudText>
+                                                        }
+                                                    </MudCardContent>
+                                                    <MudCardActions>
+                                                        <MudButtonGroup Size="Size.Small" Variant="Variant.Text">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                           OnClick="@(() => EditReservation(reservation))" />
+                                                            @if (reservation.Status == "Confirmed")
+                                                            {
+                                                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                                                               OnClick="@(() => CheckInReservation(reservation))"
+                                                                               Color="Color.Success" />
+                                                            }
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                                           OnClick="@(() => ViewReservationDetails(reservation))"
+                                                                           Color="Color.Info" />
+                                                        </MudButtonGroup>
+                                                    </MudCardActions>
+                                                </MudCard>
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                    }
+                                </MudTimeline>
+                            </div>
+                        </MudTabPanel>
+                    </MudTabs>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<OutletDto> outlets = new();
+    private List<ReservationDto> reservations = new();
+
+    private string selectedOutletId = string.Empty;
+    private DateTime? selectedDate = DateTime.Today;
+
+    // Summary counters
+    private int totalReservations = 0;
+    private int totalGuests = 0;
+    private int confirmedCount = 0;
+    private int seatedCount = 0;
+    private int completedCount = 0;
+    private int cancelledCount = 0;
+    private int noShowCount = 0;
+
+    // Time slots
+    private List<TimeSlotInfo> timeSlots = new();
+
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+
+        if (outlets.Count > 0)
+        {
+            selectedOutletId = outlets[0].OutletId;
+            await LoadReservations();
+        }
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            outlets = await OutletService.GetOutletsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadReservations()
+    {
+        if (string.IsNullOrEmpty(selectedOutletId) || !selectedDate.HasValue)
+            return;
+
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            reservations = await ReservationService.GetReservationsByOutletAndDateAsync(
+                selectedOutletId, selectedDate.Value);
+
+            // Calculate summary statistics
+            CalculateSummaryStatistics();
+            GenerateTimeSlots();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading reservations: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CalculateSummaryStatistics()
+    {
+        totalReservations = reservations.Count;
+        totalGuests = reservations.Sum(r => r.PartySize);
+        confirmedCount = reservations.Count(r => r.Status == "Confirmed");
+        seatedCount = reservations.Count(r => r.Status == "Seated");
+        completedCount = reservations.Count(r => r.Status == "Completed");
+        cancelledCount = reservations.Count(r => r.Status == "Cancelled");
+        noShowCount = reservations.Count(r => r.Status == "No-Show");
+    }
+
+    private async Task GenerateTimeSlots()
+    {
+        timeSlots = new List<TimeSlotInfo>();
+
+        if (string.IsNullOrEmpty(selectedOutletId))
+            return;
+
+        try
+        {
+            var outlet = await OutletService.GetOutletByIdAsync(selectedOutletId);
+            if (outlet == null) return;
+
+            // Create time slots from operating hours (assuming format like "10:00 AM - 10:00 PM")
+            var operatingHours = outlet.OperatingHours.Split('-');
+            if (operatingHours.Length != 2) return;
+
+            DateTime startTime, endTime;
+            if (!DateTime.TryParse(operatingHours[0].Trim(), out startTime) ||
+                !DateTime.TryParse(operatingHours[1].Trim(), out endTime))
+                return;
+
+            // Convert to TimeSpan for easier calculations
+            var start = startTime.TimeOfDay;
+            var end = endTime.TimeOfDay;
+
+            // Calculate total capacity from tables
+            var totalCapacity = outlet.Tables.Where(t => t.IsActive).Sum(t => t.Capacity);
+
+            // Generate hourly slots
+            for (var time = start; time <= end; time = time.Add(TimeSpan.FromHours(1)))
+            {
+                var slotTime = DateTime.Today.Add(time);
+                var slotReservations = reservations.Where(r =>
+                    r.ReservationDate.TimeOfDay >= time &&
+                    r.ReservationDate.TimeOfDay < time.Add(TimeSpan.FromHours(1)) &&
+                    r.Status != "Cancelled" && r.Status != "No-Show")
+                    .ToList();
+
+                timeSlots.Add(new TimeSlotInfo
+                    {
+                        Time = slotTime.ToString("h:mm tt"),
+                        Count = slotReservations.Count,
+                        Capacity = totalCapacity / 2, // Assuming 2-hour dining periods, so half capacity per hour
+                        Reservations = slotReservations
+                    });
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating time slots: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ChangeOutlet(string outletId)
+    {
+        selectedOutletId = outletId;
+        await LoadReservations();
+    }
+
+    private async Task ChangeDate(DateTime? date)
+    {
+        selectedDate = date;
+        await LoadReservations();
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "confirmed" => Color.Info,
+            "seated" => Color.Success,
+            "completed" => Color.Dark,
+            "cancelled" => Color.Error,
+            "no-show" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetTimeSlotColor(int count, int capacity)
+    {
+        var percentage = (double)count / capacity;
+
+        if (percentage >= 0.9) return Color.Error;
+        if (percentage >= 0.7) return Color.Warning;
+        if (percentage >= 0.5) return Color.Info;
+        return Color.Success;
+    }
+
+    private async Task OpenCreateReservationDialog()
+    {
+        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Create Reservation");
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Reservation created successfully", Severity.Success);
+            await LoadReservations();
+        }
+    }
+
+    private async Task ViewReservationDetails(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ReservationId"] = reservation.ReservationId
+            };
+
+        var dialog = await DialogService.ShowAsync<ReservationDetailsDialog>("Reservation Details", parameters);
+        await dialog.Result;
+    }
+
+    private async Task EditReservation(ReservationDto reservation)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ReservationId"] = reservation.ReservationId,
+                ["IsEdit"] = true
+            };
+
+        var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Edit Reservation", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Reservation updated successfully", Severity.Success);
+            await LoadReservations();
+        }
+    }
+
+    private async Task CheckInReservation(ReservationDto reservation)
+    {
+        var success = await ReservationService.CheckInReservationAsync(reservation.ReservationId);
+        if (success)
+        {
+            Snackbar.Add("Customer checked in successfully", Severity.Success);
+            await LoadReservations();
+        }
+        else
+        {
+            Snackbar.Add("Failed to check in customer", Severity.Error);
+        }
+    }
+
+    private class TimeSlotInfo
+    {
+        public string Time { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public int Capacity { get; set; }
+        public List<ReservationDto> Reservations { get; set; } = new();
+    }
+}

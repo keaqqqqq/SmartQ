@@ -1,0 +1,185 @@
+﻿@using FNBReservation.Portal.Models
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudPaper Elevation="0" Class="pa-4">
+    <MudText Typo="Typo.subtitle1" Class="mb-4">Tables Configuration</MudText>
+
+    <MudTable Items="@Tables" Dense="true" Hover="true" Bordered="true" Striped="true">
+        <ToolBarContent>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenAddTableDialog" Class="ml-auto">Add Table</MudButton>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Table Number</MudTh>
+            <MudTh>Capacity</MudTh>
+            <MudTh>Section</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Table Number">@context.TableNumber</MudTd>
+            <MudTd DataLabel="Capacity">@context.Capacity</MudTd>
+            <MudTd DataLabel="Section">@context.Section</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudStack Row="true">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="@(() => OpenEditTableDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => RemoveTable(context))" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center">No tables added yet. Click the Add Table button to get started.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+
+    <MudGrid Class="mt-4">
+        <MudItem xs="12">
+            <MudPaper Elevation="0" Class="pa-4" Style="background-color: #f5f5f5; border-radius: 4px;">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Add Multiple Tables</MudText>
+                <MudGrid>
+                    <MudItem xs="3">
+                        <MudTextField @bind-Value="bulkSection" Label="Section"
+                                      Variant="Variant.Outlined" Placeholder="Main Dining" />
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudTextField @bind-Value="bulkPrefix" Label="Table # Prefix"
+                                      Variant="Variant.Outlined" Placeholder="A" />
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudNumericField @bind-Value="bulkCount" Label="Number of Tables"
+                                         Variant="Variant.Outlined" Min="1" Max="50" />
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudNumericField @bind-Value="bulkCapacity" Label="Capacity per Table"
+                                         Variant="Variant.Outlined" Min="1" Max="20" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                                   OnClick="BulkAddTables" FullWidth="false">
+                            Add Tables
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code {
+    [Parameter] public List<TableInfo> Tables { get; set; } = new List<TableInfo>();
+    [Parameter] public EventCallback<List<TableInfo>> TablesChanged { get; set; }
+
+    private string bulkSection = "Main Dining";
+    private string bulkPrefix = "A";
+    private int bulkCount = 5;
+    private int bulkCapacity = 4;
+
+    private async Task OpenAddTableDialog()
+    {
+        var newTable = new TableInfo
+            {
+                TableNumber = $"{bulkPrefix}{Tables.Count + 1}",
+                Capacity = 4,
+                Section = "Main Dining",
+                IsActive = true
+            };
+
+        var parameters = new DialogParameters
+            {
+                ["Table"] = newTable,
+                ["EditMode"] = false
+            };
+
+        var dialog = await DialogService.ShowAsync<TableDialog>("Add Table", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is TableInfo table)
+        {
+            Tables.Add(table);
+            await TablesChanged.InvokeAsync(Tables);
+            Snackbar.Add("Table added successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditTableDialog(TableInfo tableToEdit)
+    {
+        // Create a copy of the table to edit
+        var tableCopy = new TableInfo
+            {
+                TableNumber = tableToEdit.TableNumber,
+                Capacity = tableToEdit.Capacity,
+                Section = tableToEdit.Section,
+                IsActive = tableToEdit.IsActive
+            };
+
+        var parameters = new DialogParameters
+            {
+                ["Table"] = tableCopy,
+                ["EditMode"] = true
+            };
+
+        var dialog = await DialogService.ShowAsync<TableDialog>("Edit Table", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is TableInfo updatedTable)
+        {
+            // Remove the old table and add the updated one
+            var index = Tables.IndexOf(tableToEdit);
+            if (index >= 0)
+            {
+                Tables[index] = updatedTable;
+                await TablesChanged.InvokeAsync(Tables);
+                Snackbar.Add("Table updated successfully", Severity.Success);
+            }
+        }
+    }
+
+    private async Task RemoveTable(TableInfo table)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to remove table {table.TableNumber}?",
+                ["ButtonText"] = "Delete",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Table", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Tables.Remove(table);
+            await TablesChanged.InvokeAsync(Tables);
+            Snackbar.Add("Table removed successfully", Severity.Success);
+        }
+    }
+
+    private async Task BulkAddTables()
+    {
+        var startingNumber = Tables.Count + 1;
+        for (int i = 0; i < bulkCount; i++)
+        {
+            Tables.Add(new TableInfo
+                {
+                    TableNumber = $"{bulkPrefix}{startingNumber + i}",
+                    Capacity = bulkCapacity,
+                    Section = bulkSection,
+                    IsActive = true
+                });
+        }
+        await TablesChanged.InvokeAsync(Tables);
+        Snackbar.Add($"Added {bulkCount} tables successfully", Severity.Success);
+    }
+}

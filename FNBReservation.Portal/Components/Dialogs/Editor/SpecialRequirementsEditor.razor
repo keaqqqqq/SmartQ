@@ -1,0 +1,115 @@
+﻿@using FNBReservation.Portal.Models
+@rendermode InteractiveServer
+
+<MudContainer Class="pa-4">
+    <MudText Typo="Typo.subtitle1" Class="mb-4">Special Requirements Options</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        These are additional requirements or preferences customers can select when making a reservation.
+    </MudText>
+
+    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid #e0e0e0; border-radius: 4px;">
+        <MudList Clickable="false" Dense="true" T="string">
+            @foreach (var (requirement, index) in Requirements.Select((r, i) => (r, i)))
+            {
+                <MudListItem T="string">
+                    <div class="d-flex align-center justify-space-between">
+                        <MudText>@requirement</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       Size="Size.Small" OnClick="@(() => RemoveRequirement(index))" />
+                    </div>
+                </MudListItem>
+                @if (index < Requirements.Count - 1)
+                {
+                    <MudDivider />
+                }
+            }
+        </MudList>
+
+        @if (!Requirements.Any())
+        {
+            <MudText Align="Align.Center" Class="my-4">No special requirements defined.</MudText>
+        }
+
+        <MudDivider Class="my-4" />
+
+        <MudGrid>
+            <MudItem xs="9">
+                <MudTextField @bind-Value="newRequirement" Placeholder="Enter a new requirement"
+                              Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           OnClick="AddRequirement" Disabled="@(string.IsNullOrWhiteSpace(newRequirement))">
+                    Add
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudExpansionPanels Class="mt-4">
+        <MudExpansionPanel Text="Common Requirements (Click to add)">
+            <MudGrid>
+                @foreach (var req in commonRequirements)
+                {
+                    <MudItem xs="6">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                                   OnClick="@(() => AddCommonRequirement(req))" Class="mb-2">
+                            @req
+                        </MudButton>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+</MudContainer>
+
+@code {
+    [Parameter] public List<string> Requirements { get; set; } = new List<string>();
+    [Parameter] public EventCallback<List<string>> RequirementsChanged { get; set; }
+
+    private string newRequirement = string.Empty;
+
+    private readonly List<string> commonRequirements = new()
+    {
+        "High Chair Needed",
+        "Wheelchair Accessible",
+        "Birthday Celebration",
+        "Anniversary Celebration",
+        "Window Seat Preferred",
+        "Quiet Area Preferred",
+        "Outdoor Seating Preferred",
+        "Allergies (Please Specify)",
+        "Vegan Options Required",
+        "Halal Food Required",
+        "Gluten-Free Options Required",
+        "Business Meeting"
+    };
+
+    private async Task AddRequirement()
+    {
+        if (!string.IsNullOrWhiteSpace(newRequirement) && !Requirements.Contains(newRequirement))
+        {
+            Requirements.Add(newRequirement);
+            newRequirement = string.Empty;
+            await RequirementsChanged.InvokeAsync(Requirements);
+        }
+    }
+
+    private async Task RemoveRequirement(int index)
+    {
+        if (index >= 0 && index < Requirements.Count)
+        {
+            Requirements.RemoveAt(index);
+            await RequirementsChanged.InvokeAsync(Requirements);
+        }
+    }
+
+    private async Task AddCommonRequirement(string requirement)
+    {
+        if (!Requirements.Contains(requirement))
+        {
+            Requirements.Add(requirement);
+            await RequirementsChanged.InvokeAsync(Requirements);
+        }
+    }
+}

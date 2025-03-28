@@ -1,0 +1,365 @@
+﻿@page "/customers"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@using FNBReservation.Portal.Components.Dialogs
+@inject ICustomerService CustomerService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Customer Management - F&B Reservation System</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    <MudText Typo="Typo.h4" Class="mb-4">Customer Management</MudText>
+
+    <MudCard>
+        <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pa-0" @bind-ActivePanelIndex="activeTabIndex">
+            <MudTabPanel Icon="@Icons.Material.Filled.People" Text="ALL CUSTOMERS">
+                <MudCardContent Class="pb-0">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
+                    </div>
+
+                    <MudTable Items="@GetAllCustomers()" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                              T="CustomerDto" Class="mb-4" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Customer</MudTh>
+                            <MudTh>Contact</MudTh>
+                            <MudTh>Reservations</MudTh>
+                            <MudTh>Last Visit</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="customer">
+                            <MudTd DataLabel="Customer">
+                                <div>@customer.Name</div>
+                                <MudText Typo="Typo.caption">ID: @customer.CustomerId</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Contact">
+                                <div>@customer.PhoneNumber</div>
+                                <MudText Typo="Typo.caption">@customer.Email</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Reservations">
+                                <div>Total: @customer.TotalReservations</div>
+                                <MudText Typo="Typo.caption">No-shows: @customer.NoShows</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Last Visit">
+                                @(customer.LastVisit?.ToString("d/M/yyyy") ?? "Never")
+                            </MudTd>
+                            <MudTd DataLabel="Status">
+                                @if (customer.IsBanned)
+                                {
+                                    <MudChip Color="Color.Error" Size="Size.Small" Style="height: 24px; font-size: 0.75rem;" T="string">Banned</MudChip>
+                                }
+                                else
+                                {
+                                    <div style="width: 80px;" class="pa-0">
+                                        <div class="rounded-pill" style="background-color: #00c853; color: white; text-align: center; padding: 3px 8px; font-size: 0.75rem; height: 24px; line-height: 18px;">
+                                            Active
+                                        </div>
+                                    </div>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info"
+                                                   OnClick="@(() => ViewCustomerDetails(customer))" />
+
+                                    @if (!customer.IsBanned)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error"
+                                                       OnClick="@(() => OpenBanCustomerDialog(customer))" />
+                                    }
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center">No customers found.</MudText>
+                        </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new int[] { 5, 10, 25 }" />
+                        </PagerContent>
+                    </MudTable>
+                </MudCardContent>
+            </MudTabPanel>
+
+            <MudTabPanel Icon="@Icons.Material.Filled.CheckCircle" Text="ACTIVE CUSTOMERS">
+                <MudCardContent Class="pb-0">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
+                    </div>
+
+                    <MudTable Items="@GetFilteredCustomers(false)" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                              T="CustomerDto" Class="mb-4" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Customer</MudTh>
+                            <MudTh>Contact</MudTh>
+                            <MudTh>Reservations</MudTh>
+                            <MudTh>Last Visit</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="customer">
+                            <MudTd DataLabel="Customer">
+                                <div>@customer.Name</div>
+                                <MudText Typo="Typo.caption">ID: @customer.CustomerId</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Contact">
+                                <div>@customer.PhoneNumber</div>
+                                <MudText Typo="Typo.caption">@customer.Email</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Reservations">
+                                <div>Total: @customer.TotalReservations</div>
+                                <MudText Typo="Typo.caption">No-shows: @customer.NoShows</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Last Visit">
+                                @(customer.LastVisit?.ToString("d/M/yyyy") ?? "Never")
+                            </MudTd>
+                            <MudTd DataLabel="Status">
+                                <div style="width: 80px;" class="pa-0">
+                                    <div class="rounded-pill" style="background-color: #00c853; color: white; text-align: center; padding: 3px 8px; font-size: 0.75rem; height: 24px; line-height: 18px;">
+                                        Active
+                                    </div>
+                                </div>
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info"
+                                                   OnClick="@(() => ViewCustomerDetails(customer))" />
+
+                                    <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error"
+                                                   OnClick="@(() => OpenBanCustomerDialog(customer))" />
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center">No active customers found.</MudText>
+                        </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new int[] { 5, 10, 25 }" />
+                        </PagerContent>
+                    </MudTable>
+                </MudCardContent>
+            </MudTabPanel>
+
+            <MudTabPanel Icon="@Icons.Material.Filled.Block" Text="BANNED CUSTOMERS">
+                <MudCardContent Class="pb-0">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
+                    </div>
+
+                    <MudTable Items="@GetFilteredCustomers(true)" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                              T="CustomerDto" Class="mb-4" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Customer</MudTh>
+                            <MudTh>Reason</MudTh>
+                            <MudTh>Banned At</MudTh>
+                            <MudTh>Duration</MudTh>
+                            <MudTh>Banned By</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="customer">
+                            <MudTd DataLabel="Customer">
+                                <div>@customer.Name</div>
+                                <MudText Typo="Typo.caption">@customer.PhoneNumber</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Reason">
+                                @(customer.BanReason ?? "Not specified")
+                            </MudTd>
+                            <MudTd DataLabel="Banned At">
+                                @(customer.BannedDate?.ToString("d/M/yyyy") ?? "Unknown")
+                            </MudTd>
+                            <MudTd DataLabel="Duration">
+                                @if (customer.BanExpiryDate.HasValue)
+                                {
+                                    <span>Until @customer.BanExpiryDate.Value.ToString("d/M/yyyy")</span>
+                                }
+                                else
+                                {
+                                    <span>Permanent</span>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Banned By">
+                                @(customer.BannedBy ?? "Unknown")
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small"
+                                           OnClick="@(() => UnbanCustomer(customer))">
+                                    Remove Ban
+                                </MudButton>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center">No banned customers found.</MudText>
+                        </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new int[] { 5, 10, 25 }" />
+                        </PagerContent>
+                    </MudTable>
+                </MudCardContent>
+            </MudTabPanel>
+        </MudTabs>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private List<CustomerDto> customers = new();
+    private bool isLoading = true;
+    private string SearchTerm = "";
+    private int activeTabIndex = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomers();
+    }
+
+    private async Task LoadCustomers()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            customers = await CustomerService.GetCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading customers: {ex.Message}", Severity.Error);
+            await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<CustomerDto> GetAllCustomers()
+    {
+        var filteredList = customers.ToList();
+
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            filteredList = filteredList
+                .Where(c =>
+                    c.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    c.PhoneNumber.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    c.Email?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true ||
+                    c.CustomerId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return filteredList;
+    }
+
+    private List<CustomerDto> GetFilteredCustomers(bool showBanned)
+    {
+        var filteredList = customers.Where(c => c.IsBanned == showBanned).ToList();
+
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            filteredList = filteredList
+                .Where(c =>
+                    c.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    c.PhoneNumber.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    c.Email?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true ||
+                    c.CustomerId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return filteredList;
+    }
+
+    private async Task SearchCustomers()
+    {
+        StateHasChanged();
+    }
+
+    private async Task OpenBanCustomerDialog(CustomerDto customer)
+    {
+        var parameters = new DialogParameters
+            {
+                ["Customer"] = customer,
+                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+            };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<BanCustomerDialog>("Ban Customer", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadCustomers();
+        }
+    }
+
+    private async Task UnbanCustomer(CustomerDto customer)
+    {
+        var parameters = new DialogParameters
+            {
+                ["ContentText"] = $"Are you sure you want to remove the ban for <b>{customer.Name}</b>? This will allow them to make reservations again.",
+                ["ButtonText"] = "Remove Ban",
+                ["Color"] = Color.Success
+            };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Unban", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                var success = await CustomerService.UnbanCustomerAsync(customer.CustomerId);
+                if (success)
+                {
+                    Snackbar.Add($"Ban removed for customer {customer.Name}", Severity.Success);
+                    await LoadCustomers();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to remove customer ban", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ViewCustomerDetails(CustomerDto customer)
+    {
+        var parameters = new DialogParameters
+            {
+                ["CustomerId"] = customer.CustomerId,
+                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+            };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CustomerDetailsDialog>("Customer Details", parameters, options);
+        var result = await dialog.Result;
+
+        // Refresh data after dialog is closed in case any changes were made
+        if (!result.Canceled)
+        {
+            await LoadCustomers();
+        }
+    }
+}
