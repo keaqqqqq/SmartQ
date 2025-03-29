@@ -1,5 +1,7 @@
+
 import React, { createContext, useState, useContext, useCallback } from 'react';
 import ReservationService from '../services/ReservationService';
+import { useLocation } from './LocationContext';
 import { format } from 'date-fns';
 
 // Create context
@@ -8,6 +10,9 @@ const ReservationContext = createContext();
 export const useReservation = () => useContext(ReservationContext);
 
 export const ReservationProvider = ({ children }) => {
+    // Get location from LocationContext
+    const { location } = useLocation();
+
     // Reservation state
     const [outlets, setOutlets] = useState([]);
     const [availableSlots, setAvailableSlots] = useState([]);
@@ -34,7 +39,13 @@ export const ReservationProvider = ({ children }) => {
         setError(null);
 
         try {
-            const response = await ReservationService.getNearbyOutlets();
+            // Include user location if available
+            const locationParams = location ? {
+                latitude: location.latitude,
+                longitude: location.longitude
+            } : null;
+
+            const response = await ReservationService.getNearbyOutlets(locationParams);
             setOutlets(response.outlets || []);
             return response.outlets || [];
         } catch (err) {
@@ -44,7 +55,7 @@ export const ReservationProvider = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [location]);
 
     // Check availability
     const checkAvailability = useCallback(async (params) => {

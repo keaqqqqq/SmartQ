@@ -4,9 +4,16 @@ const API_BASE_URL = '/api/CustomerReservation';
 
 class ReservationService {
     // Get nearby outlets based on user location
-    async getNearbyOutlets() {
+    async getNearbyOutlets(locationParams = null) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetNearbyOutlets`);
+            let url = `${API_BASE_URL}/GetNearbyOutlets`;
+
+            // Add location params if available
+            if (locationParams) {
+                url += `?latitude=${locationParams.latitude}&longitude=${locationParams.longitude}`;
+            }
+
+            const response = await axios.get(url);
             return response.data;
         } catch (error) {
             this.handleError(error);
