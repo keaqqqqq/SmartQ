@@ -1,11 +1,41 @@
-﻿#root {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animation classes */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-th, td {
-    padding-left: 1rem;
-    padding-right: 1rem;
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* For smooth page transitions */
+.page-transition {
+    transition: opacity 0.3s ease-in-out;
+}
+
+.page-enter {
+    opacity: 0;
+}
+
+.page-enter-active {
+    opacity: 1;
+}
+
+.page-exit {
+    opacity: 1;
+}
+
+.page-exit-active {
+    opacity: 0;
 }

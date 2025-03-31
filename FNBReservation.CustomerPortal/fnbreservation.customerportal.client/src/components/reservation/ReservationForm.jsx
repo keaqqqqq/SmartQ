@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, addHours, subHours, parseISO } from "date-fns";
+import { format, addDays, parseISO } from "date-fns";
 import axios from "axios";
 
 // Reusable Input Component
 const FormInput = ({ label, type, name, value, onChange, required, placeholder, className }) => (
-    <div className="mb-4">
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+    <div className="mb-6">
+        <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-2">
             {label} {required && <span className="text-red-500">*</span>}
         </label>
         <input
@@ -24,20 +24,21 @@ const FormInput = ({ label, type, name, value, onChange, required, placeholder, 
 
 const ReservationForm = () => {
     const navigate = useNavigate();
-    const [step, setStep] = useState(1); // 1: Check Availability, 2: Review Availability, 3: Personal Details
+    const [step, setStep] = useState(1); // 1: Initial Check, 2: Personal Details, 3: Confirmation
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [availableSlots, setAvailableSlots] = useState([]);
+    const [alternativeOutlets, setAlternativeOutlets] = useState([]);
     const [selectedSlot, setSelectedSlot] = useState(null);
     const [reservationCode, setReservationCode] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
-        // Availability Check
+        // Initial Check
         outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
         partySize: 2,
         date: format(new Date(), 'yyyy-MM-dd'),
-        preferredTime: "19:00:00",
+        time: "19:00:00",
 
         // Personal Details
         customerName: "",
@@ -46,9 +47,11 @@ const ReservationForm = () => {
         specialRequests: ""
     });
 
-    // Outlet data would typically come from an API
+    // Outlet data
     const [outlets, setOutlets] = useState([
-        { id: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5", name: "Main Branch" }
+        { id: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5", name: "Main Branch", address: "123 Main Street" },
+        { id: "8a2417c7-bc1f-4cd2-9c42-2a858271c2f5", name: "Downtown Location", address: "456 Center Ave" },
+        { id: "9c3417c7-cc1f-4cd2-9c42-2a858271c2f5", name: "Riverside Branch", address: "789 River Road" }
     ]);
 
     // Handle input changes
@@ -60,30 +63,13 @@ const ReservationForm = () => {
         });
     };
 
-    // Calculate earliest and latest time (30 min before and 1 hour after preferred time)
-    const getEarliestTime = () => {
+    // Format date for display
+    const formatDisplayDate = (dateString) => {
         try {
-            const timeOnly = formData.preferredTime;
-            const [hours, minutes] = timeOnly.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes, 0);
-            const earliestDate = subHours(date, 0.5);
-            return format(earliestDate, 'HH:mm:ss');
-        } catch (e) {
-            return "18:30:00"; // Default
-        }
-    };
-
-    const getLatestTime = () => {
-        try {
-            const timeOnly = formData.preferredTime;
-            const [hours, minutes] = timeOnly.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes, 0);
-            const latestDate = addHours(date, 1);
-            return format(latestDate, 'HH:mm:ss');
-        } catch (e) {
-            return "20:00:00"; // Default
+            const date = new Date(dateString);
+            return format(date, 'EEEE, MMMM d, yyyy');
+        } catch (error) {
+            return dateString;
         }
     };
 
@@ -94,29 +80,48 @@ const ReservationForm = () => {
         setError(null);
 
         try {
-            const payload = {
-                OutletId: formData.outletId,
-                PartySize: parseInt(formData.partySize),
-                Date: `${formData.date}T00:00:00Z`,
-                PreferredTime: formData.preferredTime,
-                EarliestTime: getEarliestTime(),
-                LatestTime: getLatestTime()
-            };
+            // Simulating API call for available time slots
+            // In a real implementation, this would call your actual API
+            setTimeout(() => {
+                // These would come from the API
+                const timeSlots = [
+                    { time: "18:00:00", available: true },
+                    { time: "18:15:00", available: true },
+                    { time: "18:30:00", available: true },
+                    { time: "18:45:00", available: true },
+                    { time: formData.time, available: true },
+                    { time: "19:15:00", available: true },
+                    { time: "19:30:00", available: true },
+                    { time: "19:45:00", available: true },
+                    { time: "20:00:00", available: true }
+                ];
 
-            // API call to check availability
-            const response = await axios.post('/api/CustomerReservation/CheckAvailability', payload);
+                // Alternative outlets would also come from the API
+                const alternatives = outlets
+                    .filter(outlet => outlet.id !== formData.outletId)
+                    .map(outlet => {
+                        return {
+                            ...outlet,
+                            availableTimes: [
+                                { time: "18:15:00", available: true },
+                                { time: "18:30:00", available: true },
+                                { time: "18:45:00", available: true },
+                                { time: "19:00:00", available: true },
+                                { time: "19:15:00", available: true },
+                                { time: "20:15:00", available: true }
+                            ]
+                        };
+                    });
 
-            if (response.data && response.data.availableSlots) {
-                setAvailableSlots(response.data.availableSlots);
-                setStep(2); // Move to review availability step
-            } else {
-                setAvailableSlots([]);
-                setError("No available slots found. Please try different time or date.");
-            }
+                setAvailableSlots(timeSlots);
+                setAlternativeOutlets(alternatives);
+                setSelectedSlot(formData.time);
+                setStep(2); // Move to personal details step
+                setLoading(false);
+            }, 1000);
         } catch (err) {
-            setError(err.response?.data?.message || "Failed to check availability. Please try again.");
+            setError("Failed to check availability. Please try again.");
             console.error("Availability check error:", err);
-        } finally {
             setLoading(false);
         }
     };
@@ -128,335 +133,479 @@ const ReservationForm = () => {
         setError(null);
 
         try {
-            // Format the reservation date in ISO format with timezone
-            const reservationDateTime = new Date(`${formData.date}T${selectedSlot || formData.preferredTime}`);
-            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            const formattedDateTime = reservationDateTime.toLocaleString('en-CA', {
-                timeZone: timezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
-
-            const payload = {
-                OutletId: formData.outletId,
-                CustomerName: formData.customerName,
-                CustomerPhone: formData.customerPhone,
-                CustomerEmail: formData.customerEmail,
-                PartySize: parseInt(formData.partySize),
-                ReservationDate: `${formattedDateTime}+08:00`, // Adjust timezone as needed
-                SpecialRequests: formData.specialRequests
-            };
-
-            // API call to create reservation
-            const response = await axios.post('/api/CustomerReservation/CreateReservation', payload);
-
-            if (response.data && response.data.reservationCode) {
-                setReservationCode(response.data.reservationCode);
-                setStep(4); // Success step
-            } else {
-                throw new Error("No reservation code received");
-            }
+            // Simulating API call for creating a reservation
+            setTimeout(() => {
+                setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
+                setStep(3); // Success step
+                setLoading(false);
+            }, 1500);
         } catch (err) {
-            setError(err.response?.data?.message || "Failed to create reservation. Please try again.");
+            setError("Failed to create reservation. Please try again.");
             console.error("Reservation creation error:", err);
-        } finally {
             setLoading(false);
         }
     };
 
+    // Countdown timer implementation
+    useEffect(() => {
+        if (step !== 2) return;
+
+        // Start with 4:59 (299 seconds)
+        let totalSeconds = 299;
+
+        const countdownElement = document.getElementById('countdown-timer');
+        if (!countdownElement) return;
+
+        const timer = setInterval(() => {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+
+            // Format as M:SS
+            countdownElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            // Decrease the countdown
+            totalSeconds--;
+
+            // When timer reaches 0, handle expiration (optional)
+            if (totalSeconds < 0) {
+                clearInterval(timer);
+                countdownElement.textContent = "0:00";
+                // Optionally show an alert or take some action when time expires
+                // setError("Your table hold has expired. Please try again.");
+                // setStep(1);
+            }
+        }, 1000);
+
+        // Clean up timer
+        return () => clearInterval(timer);
+    }, [step]);
+
     // Select a time slot
     const selectTimeSlot = (slot) => {
         setSelectedSlot(slot);
-        setStep(3); // Move to personal details
+        setFormData({
+            ...formData,
+            time: slot
+        });
     };
 
-    // Reset and go back to availability check
-    const goBackToAvailability = () => {
-        setStep(1);
-        setSelectedSlot(null);
+    // Select alternative outlet
+    const selectAlternativeOutlet = (outletId, time) => {
+        setFormData({
+            ...formData,
+            outletId: outletId,
+            time: time
+        });
+        setSelectedSlot(time);
     };
 
-    // Fetch nearby outlets on component mount
-    useEffect(() => {
-        const fetchOutlets = async () => {
-            try {
-                const response = await axios.get('/api/CustomerReservation/GetNearbyOutlets');
-                if (response.data && response.data.outlets) {
-                    setOutlets(response.data.outlets);
-                }
-            } catch (err) {
-                console.error("Error fetching outlets:", err);
-            }
-        };
+    // Generate date options for the next 14 days
+    const generateDateOptions = () => {
+        const options = [];
+        const today = new Date();
 
-        fetchOutlets();
-    }, []);
+        for (let i = 0; i < 14; i++) {
+            const date = addDays(today, i);
+            options.push({
+                value: format(date, 'yyyy-MM-dd'),
+                label: format(date, 'EEE, MMM d')
+            });
+        }
 
-    // Generate sample time slots for demo (would come from the API in reality)
-    const generateSampleSlots = () => {
-        if (availableSlots.length > 0) return availableSlots;
+        return options;
+    };
 
-        const baseTime = new Date();
-        baseTime.setHours(18, 0, 0);
-
+    // Generate time options
+    const generateTimeOptions = () => {
         return [
-            { time: "18:00:00", available: true },
-            { time: "18:30:00", available: true },
-            { time: formData.preferredTime, available: true },
-            { time: "19:30:00", available: true },
-            { time: "20:00:00", available: true }
+            { value: "11:00:00", label: "11:00 AM" },
+            { value: "11:15:00", label: "11:15 AM" },
+            { value: "11:30:00", label: "11:30 AM" },
+            { value: "11:45:00", label: "11:45 AM" },
+            { value: "12:00:00", label: "12:00 PM" },
+            { value: "12:15:00", label: "12:15 PM" },
+            { value: "12:30:00", label: "12:30 PM" },
+            { value: "12:45:00", label: "12:45 PM" },
+            { value: "13:00:00", label: "1:00 PM" },
+            { value: "13:15:00", label: "1:15 PM" },
+            { value: "13:30:00", label: "1:30 PM" },
+            { value: "13:45:00", label: "1:45 PM" },
+            { value: "17:00:00", label: "5:00 PM" },
+            { value: "17:15:00", label: "5:15 PM" },
+            { value: "17:30:00", label: "5:30 PM" },
+            { value: "17:45:00", label: "5:45 PM" },
+            { value: "18:00:00", label: "6:00 PM" },
+            { value: "18:15:00", label: "6:15 PM" },
+            { value: "18:30:00", label: "6:30 PM" },
+            { value: "18:45:00", label: "6:45 PM" },
+            { value: "19:00:00", label: "7:00 PM" },
+            { value: "19:15:00", label: "7:15 PM" },
+            { value: "19:30:00", label: "7:30 PM" },
+            { value: "19:45:00", label: "7:45 PM" },
+            { value: "20:00:00", label: "8:00 PM" },
+            { value: "20:15:00", label: "8:15 PM" },
+            { value: "20:30:00", label: "8:30 PM" },
+            { value: "20:45:00", label: "8:45 PM" },
+            { value: "21:00:00", label: "9:00 PM" }
         ];
     };
 
+    // Format time for display
+    const formatDisplayTime = (timeString) => {
+        try {
+            const time = parseISO(`2023-01-01T${timeString}`);
+            return format(time, 'h:mm a');
+        } catch (error) {
+            return timeString;
+        }
+    };
+
     return (
-        <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-            {/* Header */}
-            <h1 className="text-2xl font-bold text-center mb-6">
-                {step === 1 ? "Check Table Availability" :
-                    step === 2 ? "Select Available Time" :
-                        step === 3 ? "Complete Your Reservation" : "Reservation Confirmed"}
-            </h1>
-
-            {/* Error Message */}
-            {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
-                    <span className="block sm:inline">{error}</span>
+        <div className="w-full">
+            {/* Full-width header image */}
+            <div
+                className="w-full h-72 bg-cover bg-center relative"
+                style={{ backgroundImage: "url('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80')" }}
+            >
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center">
+                    <h1 className="text-white text-4xl font-bold mb-2">RESERVATION</h1>
+                    <p className="text-white text-xl italic">Book A Table</p>
                 </div>
-            )}
+            </div>
 
-            {/* Step 1: Check Availability Form */}
-            {step === 1 && (
-                <form onSubmit={checkAvailability}>
-                    <div className="mb-4">
-                        <label htmlFor="outletId" className="block text-sm font-medium text-gray-700 mb-1">
-                            Select Restaurant <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            id="outletId"
-                            name="outletId"
-                            value={formData.outletId}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                        >
-                            {outlets.map(outlet => (
-                                <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
-                            ))}
-                        </select>
+            <div className="max-w-5xl mx-auto px-4 py-8">
+                {/* Error Message */}
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6" role="alert">
+                        <span className="block sm:inline">{error}</span>
                     </div>
+                )}
 
-                    <FormInput
-                        label="Date"
-                        type="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleChange}
-                        required
-                    />
+                {/* Step 1: Initial availability check */}
+                {step === 1 && (
+                    <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                        <h2 className="text-2xl font-bold mb-6">Find a Table</h2>
 
-                    <FormInput
-                        label="Preferred Time"
-                        type="time"
-                        name="preferredTime"
-                        value={formData.preferredTime}
-                        onChange={handleChange}
-                        required
-                    />
+                        <form onSubmit={checkAvailability} className="grid md:grid-cols-4 gap-4">
+                            <div>
+                                <label htmlFor="partySize" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Party Size
+                                </label>
+                                <select
+                                    id="partySize"
+                                    name="partySize"
+                                    value={formData.partySize}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    required
+                                >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(size => (
+                                        <option key={size} value={size}>{size} {size === 1 ? 'person' : 'people'}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-                    <div className="mb-4">
-                        <label htmlFor="partySize" className="block text-sm font-medium text-gray-700 mb-1">
-                            Party Size <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            id="partySize"
-                            name="partySize"
-                            value={formData.partySize}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                        >
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(size => (
-                                <option key={size} value={size}>{size} {size === 1 ? 'person' : 'people'}</option>
-                            ))}
-                        </select>
+                            <div>
+                                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Date
+                                </label>
+                                <select
+                                    id="date"
+                                    name="date"
+                                    value={formData.date}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    required
+                                >
+                                    {generateDateOptions().map((option, index) => (
+                                        <option key={index} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label htmlFor="time" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Time
+                                </label>
+                                <select
+                                    id="time"
+                                    name="time"
+                                    value={formData.time}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    required
+                                >
+                                    {generateTimeOptions().map((option, index) => (
+                                        <option key={index} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label htmlFor="outletId" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Location
+                                </label>
+                                <select
+                                    id="outletId"
+                                    name="outletId"
+                                    value={formData.outletId}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    required
+                                >
+                                    {outlets.map(outlet => (
+                                        <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-4 mt-2">
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                                >
+                                    {loading ? "Checking..." : "Find a Table"}
+                                </button>
+                            </div>
+                        </form>
                     </div>
+                )}
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                    >
-                        {loading ? "Checking..." : "Check Availability"}
-                    </button>
-                </form>
-            )}
+                {/* Step 2: Personal Details */}
+                {step === 2 && (
+                    <div className="grid md:grid-cols-12 gap-6">
+                        {/* Main reservation form */}
+                        <div className="md:col-span-8">
+                            <div className="bg-white rounded-lg shadow-md p-6 mb-4">
+                                <h2 className="text-2xl font-bold mb-6">Complete Your Reservation</h2>
 
-            {/* Step 2: Review Available Time Slots */}
-            {step === 2 && (
-                <div>
-                    <p className="mb-4">
-                        Select one of the available time slots for {formData.partySize} {formData.partySize === 1 ? 'person' : 'people'} on {format(new Date(formData.date), 'MMMM d, yyyy')}:
-                    </p>
+                                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+                                    <div className="flex items-center mb-2">
+                                        <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>
+                                            Table for {formData.partySize} {formData.partySize === 1 ? 'person' : 'people'} at {formatDisplayTime(formData.time)} on {formatDisplayDate(formData.date)}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center text-sm">
+                                        <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>We're holding this table for you for <span className="font-bold" id="countdown-timer">4:59</span></span>
+                                    </div>
+                                </div>
 
-                    <div className="grid grid-cols-3 gap-3 mb-6">
-                        {generateSampleSlots().map((slot, index) => (
+                                <form onSubmit={createReservation}>
+                                    <FormInput
+                                        label="Full Name"
+                                        type="text"
+                                        name="customerName"
+                                        value={formData.customerName}
+                                        onChange={handleChange}
+                                        required
+                                        placeholder="John Smith"
+                                    />
+
+                                    <FormInput
+                                        label="Email Address"
+                                        type="email"
+                                        name="customerEmail"
+                                        value={formData.customerEmail}
+                                        onChange={handleChange}
+                                        required
+                                        placeholder="your@email.com"
+                                    />
+
+                                    <FormInput
+                                        label="Phone Number"
+                                        type="tel"
+                                        name="customerPhone"
+                                        value={formData.customerPhone}
+                                        onChange={handleChange}
+                                        required
+                                        placeholder="+60 12-345 6789"
+                                    />
+
+                                    <div className="mb-6">
+                                        <label htmlFor="specialRequests" className="block text-sm font-medium text-gray-700 mb-1">
+                                            Special Requests (Optional)
+                                        </label>
+                                        <textarea
+                                            id="specialRequests"
+                                            name="specialRequests"
+                                            value={formData.specialRequests}
+                                            onChange={handleChange}
+                                            placeholder="Let us know if you have any special requests"
+                                            rows="3"
+                                            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setStep(1)}
+                                            className="w-full border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50"
+                                        >
+                                            Back
+                                        </button>
+
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                                        >
+                                            {loading ? "Confirming..." : "Complete Reservation"}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* Sidebar with reservation info and alternative times */}
+                        <div className="md:col-span-4">
+                            <div className="bg-white rounded-lg shadow-md p-6 mb-4">
+                                <h3 className="font-bold text-lg mb-4">Reservation Details</h3>
+
+                                <div className="mb-4">
+                                    <p className="text-sm text-gray-500">Restaurant</p>
+                                    <p className="font-medium">{outlets.find(o => o.id === formData.outletId)?.name}</p>
+                                    <p className="text-sm text-gray-600">{outlets.find(o => o.id === formData.outletId)?.address}</p>
+                                </div>
+
+                                <div className="mb-4">
+                                    <p className="text-sm text-gray-500">Date & Time</p>
+                                    <p className="font-medium">{formatDisplayDate(formData.date)}</p>
+                                    <p className="font-medium">{formatDisplayTime(formData.time)}</p>
+                                </div>
+
+                                <div className="mb-4">
+                                    <p className="text-sm text-gray-500">Party Size</p>
+                                    <p className="font-medium">{formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}</p>
+                                </div>
+                            </div>
+
+                            {/* Alternative time slots for current outlet */}
+                            <div className="bg-white rounded-lg shadow-md p-6 mb-4">
+                                <h3 className="font-bold text-lg mb-4">Other Available Times</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {availableSlots.map((slot, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => selectTimeSlot(slot.time)}
+                                            className={`py-2 px-3 rounded text-center text-sm ${slot.time === selectedSlot
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'border border-gray-300 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            {formatDisplayTime(slot.time)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Alternative outlets */}
+                            {alternativeOutlets.length > 0 && (
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h3 className="font-bold text-lg mb-4">Other Available Restaurants</h3>
+
+                                    {alternativeOutlets.map((outlet, outletIndex) => (
+                                        <div key={outletIndex} className="mb-4 pb-4 border-b border-gray-200 last:border-0 last:mb-0 last:pb-0">
+                                            <p className="font-medium mb-2">{outlet.name}</p>
+                                            <p className="text-sm text-gray-600 mb-2">{outlet.address}</p>
+
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {outlet.availableTimes.map((timeSlot, timeIndex) => (
+                                                    <button
+                                                        key={timeIndex}
+                                                        onClick={() => selectAlternativeOutlet(outlet.id, timeSlot.time)}
+                                                        className="py-2 px-3 rounded text-center text-sm border border-gray-300 hover:bg-gray-100"
+                                                    >
+                                                        {formatDisplayTime(timeSlot.time)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 3: Confirmation */}
+                {step === 3 && reservationCode && (
+                    <div className="bg-white rounded-lg shadow-md p-8 max-w-xl mx-auto text-center">
+                        <div className="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+
+                        <h2 className="text-2xl font-bold mb-4">Reservation Confirmed!</h2>
+                        <p className="mb-6 text-gray-600">Your reservation has been successfully created. A confirmation has been sent to your phone and email.</p>
+
+                        <div className="bg-gray-50 p-6 rounded-lg mb-6 text-left">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-500">Reservation Code</p>
+                                    <p className="font-medium">{reservationCode}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Restaurant</p>
+                                    <p className="font-medium">{outlets.find(o => o.id === formData.outletId)?.name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Date</p>
+                                    <p className="font-medium">{formatDisplayDate(formData.date)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Time</p>
+                                    <p className="font-medium">{formatDisplayTime(formData.time)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Party Size</p>
+                                    <p className="font-medium">{formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">Name</p>
+                                    <p className="font-medium">{formData.customerName}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row justify-center gap-4">
                             <button
-                                key={index}
-                                onClick={() => selectTimeSlot(slot.time)}
-                                disabled={!slot.available}
-                                className={`py-3 px-4 rounded text-center ${slot.available
-                                        ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    }`}
+                                onClick={() => {
+                                    // Reset form and go back to step 1
+                                    setFormData({
+                                        ...formData,
+                                        customerName: "",
+                                        customerPhone: "",
+                                        customerEmail: "",
+                                        specialRequests: ""
+                                    });
+                                    setStep(1);
+                                    setSelectedSlot(null);
+                                    setReservationCode(null);
+                                }}
+                                className="border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50"
                             >
-                                {format(parseISO(`2023-01-01T${slot.time}`), 'h:mm a')}
+                                Make Another Reservation
                             </button>
-                        ))}
+
+                            <button
+                                onClick={() => navigate('/')}
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
+                            >
+                                Return Home
+                            </button>
+                        </div>
                     </div>
-
-                    <button
-                        onClick={goBackToAvailability}
-                        className="w-full border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50"
-                    >
-                        Change Selection
-                    </button>
-                </div>
-            )}
-
-            {/* Step 3: Personal Details */}
-            {step === 3 && (
-                <form onSubmit={createReservation}>
-                    <div className="bg-gray-100 p-4 rounded-lg mb-6">
-                        <h3 className="font-medium mb-2">Reservation Summary</h3>
-                        <p>Date: {format(new Date(formData.date), 'MMMM d, yyyy')}</p>
-                        <p>Time: {format(parseISO(`2023-01-01T${selectedSlot}`), 'h:mm a')}</p>
-                        <p>Party Size: {formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}</p>
-                        <button
-                            type="button"
-                            onClick={goBackToAvailability}
-                            className="text-sm text-blue-600 hover:underline mt-2"
-                        >
-                            Change
-                        </button>
-                    </div>
-
-                    <FormInput
-                        label="Your Name"
-                        type="text"
-                        name="customerName"
-                        value={formData.customerName}
-                        onChange={handleChange}
-                        required
-                        placeholder="John Smith"
-                    />
-
-                    <FormInput
-                        label="Phone Number"
-                        type="tel"
-                        name="customerPhone"
-                        value={formData.customerPhone}
-                        onChange={handleChange}
-                        required
-                        placeholder="+60 12-345 6789"
-                    />
-
-                    <FormInput
-                        label="Email Address"
-                        type="email"
-                        name="customerEmail"
-                        value={formData.customerEmail}
-                        onChange={handleChange}
-                        required
-                        placeholder="your@email.com"
-                    />
-
-                    <div className="mb-4">
-                        <label htmlFor="specialRequests" className="block text-sm font-medium text-gray-700 mb-1">
-                            Special Requests
-                        </label>
-                        <textarea
-                            id="specialRequests"
-                            name="specialRequests"
-                            value={formData.specialRequests}
-                            onChange={handleChange}
-                            placeholder="Any special requests or occasions? (Optional)"
-                            rows="3"
-                            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                        ></textarea>
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 mb-3"
-                    >
-                        {loading ? "Confirming..." : "Confirm Reservation"}
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setStep(2)}
-                        className="w-full border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50"
-                    >
-                        Back
-                    </button>
-                </form>
-            )}
-
-            {/* Step 4: Confirmation */}
-            {step === 4 && reservationCode && (
-                <div className="text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    </div>
-
-                    <h2 className="text-xl font-bold mb-2">Reservation Confirmed!</h2>
-                    <p className="mb-4">Your reservation has been successfully created. A confirmation has been sent to your phone.</p>
-
-                    <div className="bg-gray-100 p-4 rounded-lg mb-6 text-left">
-                        <p className="mb-2"><strong>Reservation Code:</strong> {reservationCode}</p>
-                        <p className="mb-2"><strong>Date:</strong> {format(new Date(formData.date), 'MMMM d, yyyy')}</p>
-                        <p className="mb-2"><strong>Time:</strong> {format(parseISO(`2023-01-01T${selectedSlot}`), 'h:mm a')}</p>
-                        <p className="mb-2"><strong>Party Size:</strong> {formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}</p>
-                        <p><strong>Name:</strong> {formData.customerName}</p>
-                    </div>
-
-                    <div className="mt-6">
-                        <button
-                            onClick={() => {
-                                // Reset form and go back to step 1
-                                setFormData({
-                                    ...formData,
-                                    customerName: "",
-                                    customerPhone: "",
-                                    customerEmail: "",
-                                    specialRequests: ""
-                                });
-                                setStep(1);
-                                setSelectedSlot(null);
-                                setReservationCode(null);
-                            }}
-                            className="bg-white border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50 mr-3"
-                        >
-                            Make Another Reservation
-                        </button>
-
-                        <button
-                            onClick={() => navigate('/')}
-                            className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded"
-                        >
-                            Home
-                        </button>
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
