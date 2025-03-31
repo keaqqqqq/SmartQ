@@ -26,6 +26,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Data
                 entity.HasIndex(e => e.OutletId); // Add index for OutletId
 
                 entity.Property(e => e.Username).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.FullName).HasMaxLength(100); // Add this line
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.PasswordHash).IsRequired();
                 entity.Property(e => e.Role).IsRequired().HasMaxLength(20);
@@ -63,6 +64,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Data
                     UserId = "ADMIN001",
                     Username = "admin",
                     Email = "admin@fnbreservation.com",
+                    FullName = "System Administrator", // Add this line
                     // Note: In a real application, generate these with proper hashing
                     PasswordHash = "AQAAAAEAACcQAAAAEKND4k6EtZZbkwsOVZl8s5WQy59k8/MEP5aqO4vWu2Y5OnUW9DSx9STiUsolFq/llg==", // Password: Admin@123
                     Role = "Admin",

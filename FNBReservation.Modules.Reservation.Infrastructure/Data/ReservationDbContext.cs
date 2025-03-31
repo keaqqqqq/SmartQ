@@ -2,6 +2,7 @@
 using FNBReservation.Modules.Reservation.Core.Entities;
 using System.Collections.Generic;
 using System.Reflection.Emit;
+using System.Text.Json;
 
 namespace FNBReservation.Modules.Reservation.Infrastructure.Data
 {
@@ -15,6 +16,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Data
         public DbSet<ReservationTableAssignment> TableAssignments { get; set; }
         public DbSet<ReservationReminder> Reminders { get; set; }
         public DbSet<ReservationStatusChange> StatusChanges { get; set; }
+
+        public DbSet<TableHold> TableHolds { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -97,6 +100,17 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Data
                     .WithMany(r => r.StatusChanges)
                     .HasForeignKey(e => e.ReservationId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<TableHold>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.TableIds).HasConversion(
+                    v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
+                    v => JsonSerializer.Deserialize<List<Guid>>(v, JsonSerializerOptions.Default) ?? new List<Guid>()
+                );
+                entity.Property(e => e.HoldCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.IsActive).HasDefaultValue(true);
             });
         }
     }

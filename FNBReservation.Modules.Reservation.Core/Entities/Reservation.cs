@@ -57,4 +57,16 @@ namespace FNBReservation.Modules.Reservation.Core.Entities
         public Guid? ChangedBy { get; set; } // User ID if changed by staff, null if by system
         public string Reason { get; set; }
     }
+    public class TableHold
+    {
+        public Guid Id { get; set; }
+        public Guid OutletId { get; set; }
+        public List<Guid> TableIds { get; set; } = new List<Guid>();
+        public int PartySize { get; set; }
+        public DateTime ReservationDateTime { get; set; }
+        public DateTime HoldCreatedAt { get; set; }
+        public DateTime HoldExpiresAt { get; set; }
+        public string SessionId { get; set; } // To track which user session has the hold
+        public bool IsActive { get; set; } = true;
+    }
 }

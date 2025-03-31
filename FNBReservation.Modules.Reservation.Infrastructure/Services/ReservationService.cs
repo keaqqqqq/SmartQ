@@ -13,7 +13,7 @@ using ReservationTableInfo = FNBReservation.Modules.Reservation.Core.Interfaces.
 namespace FNBReservation.Modules.Reservation.Infrastructure.Services
 {
     public class ReservationService : IReservationService
-    {
+    {   
         private readonly IReservationRepository _reservationRepository;
         private readonly IReservationNotificationService _notificationService;
         private readonly IOutletAdapter _outletAdapter;
@@ -37,8 +37,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
 
         public async Task<TimeSlotAvailabilityResponseDto> CheckAvailabilityAsync(CheckAvailabilityRequestDto request)
         {
-            _logger.LogInformation("Checking availability for outlet {OutletId}, party size {PartySize}, date {Date}",
-                request.OutletId, request.PartySize, request.Date);
+            _logger.LogInformation("Checking availability for outlet {OutletId}, party size {PartySize}, date {Date}, preferred time {PreferredTime}",
+                request.OutletId, request.PartySize, request.Date, request.PreferredTime);
 
             try
             {
@@ -56,12 +56,15 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     throw new ArgumentException($"Outlet with ID {request.OutletId} is not active");
                 }
 
-                // Parse preferred time if provided
-                TimeSpan? preferredTime = request.PreferredTime;
+                // Check if requested date is in the past
+                DateTime now = DateTime.UtcNow;
+                DateTime today = now.Date;
 
-                // Set default or use provided time range
-                TimeSpan earliestTime = request.EarliestTime ?? new TimeSpan(11, 0, 0); // Default 11:00 AM
-                TimeSpan latestTime = request.LatestTime ?? new TimeSpan(21, 0, 0);     // Default 9:00 PM
+                if (request.Date.Date < today)
+                {
+                    _logger.LogWarning("Availability check for past date: {Date}", request.Date);
+                    throw new ArgumentException("Cannot check availability for past dates");
+                }
 
                 // Create response object
                 var response = new TimeSlotAvailabilityResponseDto
@@ -74,139 +77,121 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     AlternativeTimeSlots = new List<AvailableTimeslotDto>()
                 };
 
-                // Generate time slots at 30-minute intervals
-                DateTime startDateTime = request.Date.Date.Add(earliestTime);
-                DateTime endDateTime = request.Date.Date.Add(latestTime);
-                TimeSpan interval = TimeSpan.FromMinutes(30); // Change to 30-minute intervals
+                // Define operating hours (default or get from outlet)
+                TimeSpan openingTime = new TimeSpan(11, 0, 0); // 11:00 AM
+                TimeSpan closingTime = new TimeSpan(22, 0, 0); // 10:00 PM
 
-                // Define exact preferred time if provided
-                DateTime? exactPreferredDateTime = null;
-                if (preferredTime.HasValue)
+                // If the preferred time is not provided, use opening time
+                TimeSpan preferredTime = request.PreferredTime ?? openingTime;
+                DateTime exactPreferredDateTime = request.Date.Date.Add(preferredTime);
+
+                // Check if the preferred time is within operating hours
+                if (preferredTime < openingTime || preferredTime > closingTime)
                 {
-                    exactPreferredDateTime = request.Date.Date.Add(preferredTime.Value);
-                    _logger.LogInformation("Preferred time: {PreferredTime}", exactPreferredDateTime);
+                    _logger.LogWarning("Preferred time {PreferredTime} is outside operating hours", preferredTime);
+                    throw new ArgumentException($"The selected time is outside our operating hours ({openingTime} - {closingTime})");
                 }
 
-                // Check each time slot
-                for (DateTime slotTime = startDateTime; slotTime <= endDateTime; slotTime = slotTime.Add(interval))
+                // First check availability at the preferred time
+                var preferredSettings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, exactPreferredDateTime);
+                if (preferredSettings == null)
                 {
-                    // For each time slot, check availability based on outlet's settings for that time
-                    var settings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, slotTime);
+                    _logger.LogWarning("Could not get reservation settings for outlet {OutletId} at {DateTime}",
+                        request.OutletId, exactPreferredDateTime);
+                    throw new InvalidOperationException("Could not retrieve reservation settings");
+                }
 
-                    if (settings == null)
-                    {
-                        _logger.LogWarning("Could not get reservation settings for outlet {OutletId} at {DateTime}",
-                            request.OutletId, slotTime);
-                        continue;
-                    }
-
-                    // If reservation allocation is 0%, skip this time slot
-                    if (settings.ReservationAllocationPercent <= 0)
-                    {
-                        _logger.LogInformation("Skipping time slot {TimeSlot} as reservation allocation is {Allocation}%",
-                            slotTime, settings.ReservationAllocationPercent);
-                        continue;
-                    }
-
+                // If reservation allocation is 0% at preferred time, it's not available
+                if (preferredSettings.ReservationAllocationPercent <= 0)
+                {
+                    _logger.LogInformation("Preferred time {TimeSlot} not available as reservation allocation is {Allocation}%",
+                        exactPreferredDateTime, preferredSettings.ReservationAllocationPercent);
+                }
+                else
+                {
                     // Calculate the end time for this reservation based on the dining duration
-                    DateTime endTime = slotTime.AddMinutes(settings.DefaultDiningDurationMinutes);
+                    DateTime endTime = exactPreferredDateTime.AddMinutes(preferredSettings.DefaultDiningDurationMinutes);
 
                     // Get the current reserved capacity for this time slot
                     int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                        request.OutletId, slotTime, endTime);
+                        request.OutletId, exactPreferredDateTime, endTime);
 
                     // Calculate available capacity
-                    int availableCapacity = settings.ReservationCapacity - reservedCapacity;
+                    int availableCapacity = preferredSettings.ReservationCapacity - reservedCapacity;
 
                     // Check if the party can be accommodated
                     bool isAvailable = availableCapacity >= request.PartySize;
 
-                    // Check if this is the preferred time slot
-                    bool isPreferred = false;
-                    if (exactPreferredDateTime.HasValue)
-                    {
-                        // Check if the current slot is within 15 minutes of the preferred time
-                        var timeDiff = Math.Abs((slotTime - exactPreferredDateTime.Value).TotalMinutes);
-                        isPreferred = timeDiff <= 15;
-
-                        // If this is exactly the preferred time, ensure it's first in the list
-                        if (slotTime.TimeOfDay == exactPreferredDateTime.Value.TimeOfDay)
-                        {
-                            isPreferred = true; // Extra sure it's marked as preferred
-                        }
-                    }
-
-                    var timeSlot = new AvailableTimeslotDto
-                    {
-                        DateTime = slotTime,
-                        AvailableCapacity = availableCapacity,
-                        IsPreferred = isPreferred
-                    };
-
-                    // Add to appropriate list
                     if (isAvailable)
                     {
-                        if (isPreferred)
+                        // Add the preferred time as available
+                        response.AvailableTimeSlots.Add(new AvailableTimeslotDto
                         {
-                            // Add preferred times to the beginning of the list
-                            response.AvailableTimeSlots.Insert(0, timeSlot);
-                        }
-                        else
-                        {
-                            response.AvailableTimeSlots.Add(timeSlot);
-                        }
-                    }
-                    else if (availableCapacity > 0)
-                    {
-                        // Add as alternative if has some capacity (useful for smaller party suggestions)
-                        response.AlternativeTimeSlots.Add(timeSlot);
-                    }
-                }
-
-                // If the client requested 19:00 specifically and it's not in the slots, add it if possible
-                if (exactPreferredDateTime.HasValue && !response.AvailableTimeSlots.Any(ts => ts.DateTime.TimeOfDay == exactPreferredDateTime.Value.TimeOfDay))
-                {
-                    // See if we can add the exact preferred time
-                    var settings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, exactPreferredDateTime.Value);
-                    if (settings != null && settings.ReservationAllocationPercent > 0)
-                    {
-                        DateTime endTime = exactPreferredDateTime.Value.AddMinutes(settings.DefaultDiningDurationMinutes);
-                        int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                            request.OutletId, exactPreferredDateTime.Value, endTime);
-                        int availableCapacity = settings.ReservationCapacity - reservedCapacity;
-
-                        var exactTimeSlot = new AvailableTimeslotDto
-                        {
-                            DateTime = exactPreferredDateTime.Value,
+                            DateTime = exactPreferredDateTime,
                             AvailableCapacity = availableCapacity,
                             IsPreferred = true
-                        };
-
-                        if (availableCapacity >= request.PartySize)
-                        {
-                            // Insert at the beginning since it's the preferred time
-                            response.AvailableTimeSlots.Insert(0, exactTimeSlot);
-                        }
-                        else if (availableCapacity > 0)
-                        {
-                            // Add to alternatives if there's some capacity
-                            response.AlternativeTimeSlots.Add(exactTimeSlot);
-                        }
+                        });
                     }
                 }
 
-                // Sort time slots by time (keeping preferred at the top)
-                response.AvailableTimeSlots = response.AvailableTimeSlots
-                    .OrderBy(ts => !ts.IsPreferred) // Put preferred times first
-                    .ThenBy(ts => ts.DateTime)
-                    .ToList();
+                // If preferred time is not available, find alternatives
+                if (response.AvailableTimeSlots.Count == 0)
+                {
+                    // Generate alternative time slots at 15-minute intervals within 2 hours before and after the preferred time
+                    TimeSpan interval = TimeSpan.FromMinutes(15);
+                    TimeSpan window = TimeSpan.FromHours(2);
 
-                response.AlternativeTimeSlots = response.AlternativeTimeSlots
-                    .OrderBy(ts => ts.DateTime)
-                    .ToList();
+                    DateTime startSearchTime = exactPreferredDateTime.Add(-window);
+                    if (startSearchTime.TimeOfDay < openingTime)
+                        startSearchTime = request.Date.Date.Add(openingTime);
 
-                _logger.LogInformation("Found {AvailableCount} available time slots and {AlternativeCount} alternative time slots",
-                    response.AvailableTimeSlots.Count, response.AlternativeTimeSlots.Count);
+                    DateTime endSearchTime = exactPreferredDateTime.Add(window);
+                    if (endSearchTime.TimeOfDay > closingTime)
+                        endSearchTime = request.Date.Date.Add(closingTime);
+
+                    // Check each time slot around the preferred time
+                    for (DateTime slotTime = startSearchTime; slotTime <= endSearchTime; slotTime = slotTime.Add(interval))
+                    {
+                        // Skip the preferred time as we've already checked it
+                        if (slotTime == exactPreferredDateTime)
+                            continue;
+
+                        // For each time slot, check availability based on outlet's settings for that time
+                        var settings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, slotTime);
+
+                        if (settings == null || settings.ReservationAllocationPercent <= 0)
+                            continue;
+
+                        // Calculate the end time for this reservation based on the dining duration
+                        DateTime endTime = slotTime.AddMinutes(settings.DefaultDiningDurationMinutes);
+
+                        // Get the current reserved capacity for this time slot
+                        int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
+                            request.OutletId, slotTime, endTime);
+
+                        // Calculate available capacity
+                        int availableCapacity = settings.ReservationCapacity - reservedCapacity;
+
+                        // Check if the party can be accommodated
+                        if (availableCapacity >= request.PartySize)
+                        {
+                            response.AlternativeTimeSlots.Add(new AvailableTimeslotDto
+                            {
+                                DateTime = slotTime,
+                                AvailableCapacity = availableCapacity,
+                                IsPreferred = false
+                            });
+                        }
+                    }
+
+                    // Sort alternative time slots by how close they are to the preferred time
+                    response.AlternativeTimeSlots = response.AlternativeTimeSlots
+                        .OrderBy(ts => Math.Abs((ts.DateTime - exactPreferredDateTime).TotalMinutes))
+                        .ToList();
+                }
+
+                _logger.LogInformation("Preferred time available: {IsAvailable}, alternative slots found: {AlternativeCount}",
+                    response.AvailableTimeSlots.Count > 0, response.AlternativeTimeSlots.Count);
 
                 return response;
             }
@@ -238,8 +223,48 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     throw new ArgumentException($"Outlet with ID {createReservationDto.OutletId} is not active");
                 }
 
+                // Verify the hold if HoldId is provided
+                List<ReservationTableInfo> tablesToAssign = new List<ReservationTableInfo>();
+
+                if (createReservationDto.HoldId != Guid.Empty)
+                {
+                    var hold = await _reservationRepository.GetTableHoldByIdAsync(createReservationDto.HoldId);
+
+                    if (hold == null || !hold.IsActive)
+                    {
+                        throw new InvalidOperationException("The table hold has expired or is invalid. Please start again.");
+                    }
+
+                    if (hold.SessionId != createReservationDto.SessionId)
+                    {
+                        throw new InvalidOperationException("This hold belongs to another session.");
+                    }
+
+                    if (DateTime.UtcNow > hold.HoldExpiresAt)
+                    {
+                        throw new InvalidOperationException("The table hold has expired. Please start again.");
+                    }
+
+                    // Use the tables from the hold
+                    var availableTables = await _outletAdapter.GetTablesAsync(createReservationDto.OutletId);
+                    tablesToAssign = availableTables
+                        .Where(t => hold.TableIds.Contains(t.Id))
+                        .ToList();
+
+                    // Mark the hold as used
+                    await _reservationRepository.ReleaseTableHoldAsync(hold.Id);
+                }
+
                 // Check reservation is within allowed time range
                 DateTime now = DateTime.UtcNow;
+                DateTime today = now.Date;
+
+                if (createReservationDto.ReservationDate.Date < today)
+                {
+                    _logger.LogWarning("Reservation date is in the past: {ReservationDate}", createReservationDto.ReservationDate);
+                    throw new ArgumentException("Reservations cannot be made for past dates");
+                }
+
                 DateTime minAllowedTime = now.AddHours(outlet.MinAdvanceReservationTime);
                 DateTime maxAllowedTime = now.AddDays(outlet.MaxAdvanceReservationTime);
 
@@ -273,18 +298,31 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 // Calculate duration based on outlet settings
                 TimeSpan duration = TimeSpan.FromMinutes(settings.DefaultDiningDurationMinutes);
 
-                // Check if there's capacity for this reservation
-                DateTime endTime = createReservationDto.ReservationDate.Add(duration);
-                int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                    createReservationDto.OutletId, createReservationDto.ReservationDate, endTime);
-
-                int availableCapacity = settings.ReservationCapacity - reservedCapacity;
-
-                if (availableCapacity < createReservationDto.PartySize)
+                // Check if there's capacity for this reservation (skip if we already have a table hold)
+                if (tablesToAssign.Count == 0)
                 {
-                    _logger.LogWarning("Not enough capacity for party size {PartySize}. Available: {AvailableCapacity}",
-                        createReservationDto.PartySize, availableCapacity);
-                    throw new InvalidOperationException("Not enough capacity for this reservation");
+                    DateTime endTime = createReservationDto.ReservationDate.Add(duration);
+                    int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
+                        createReservationDto.OutletId, createReservationDto.ReservationDate, endTime);
+
+                    int availableCapacity = settings.ReservationCapacity - reservedCapacity;
+
+                    if (availableCapacity < createReservationDto.PartySize)
+                    {
+                        _logger.LogWarning("Not enough capacity for party size {PartySize}. Available: {AvailableCapacity}",
+                            createReservationDto.PartySize, availableCapacity);
+                        throw new InvalidOperationException("Not enough capacity for this reservation");
+                    }
+
+                    // Find tables if we don't have a hold
+                    var availableTables = await _outletAdapter.GetTablesAsync(createReservationDto.OutletId);
+                    tablesToAssign = await FindOptimalTableCombinationAsync(
+                        availableTables.ToList(),
+                        createReservationDto.PartySize,
+                        createReservationDto.OutletId,
+                        createReservationDto.ReservationDate,
+                        createReservationDto.ReservationDate.Add(duration)
+                    );
                 }
 
                 // Generate reservation code
@@ -310,16 +348,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
 
                 // Save reservation
                 var createdReservation = await _reservationRepository.CreateAsync(reservation);
-
-                // Get available tables for assignment
-                var availableTables = await _outletAdapter.GetTablesAsync(createReservationDto.OutletId);
-                var tablesToAssign = await FindOptimalTableCombinationAsync(
-                    availableTables.ToList(),
-                    createReservationDto.PartySize,
-                    createReservationDto.OutletId,
-                    createReservationDto.ReservationDate,
-                    createReservationDto.ReservationDate.Add(duration)
-                );
 
                 if (tablesToAssign == null || tablesToAssign.Count == 0)
                 {
@@ -988,6 +1016,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             }
         }
 
+
         public async Task SendReservationRemindersAsync()
         {
             _logger.LogInformation("Processing scheduled reservation reminders");
@@ -1003,38 +1032,316 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             }
         }
 
-        #region Helper Methods
-        private string GenerateReservationCode()
+        public async Task<TableHoldResponseDto> HoldTablesForReservationAsync(TableHoldRequestDto request)
         {
-            // Generate a unique reservation code (e.g., "RSV-ABC123")
-            var random = new Random();
-            var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Avoid characters that look similar
-            var code = new char[6];
+            _logger.LogInformation("Attempting to hold tables for outlet {OutletId}, party size {PartySize}, date {DateTime}",
+                request.OutletId, request.PartySize, request.ReservationDateTime);
 
-            for (int i = 0; i < 6; i++)
+            try
             {
-                code[i] = chars[random.Next(chars.Length)];
-            }
+                // Validate outlet exists and is active
+                var outlet = await _outletAdapter.GetOutletInfoAsync(request.OutletId);
+                if (outlet == null || !outlet.IsActive)
+                {
+                    throw new ArgumentException($"Outlet with ID {request.OutletId} not found or inactive");
+                }
 
-            return $"R{new string(code)}";
+                // Check if there's an existing hold for this session
+                var existingHold = await _reservationRepository.GetTableHoldBySessionIdAsync(request.SessionId);
+                if (existingHold != null && existingHold.IsActive)
+                {
+                    // Release the previous hold
+                    await _reservationRepository.ReleaseTableHoldAsync(existingHold.Id);
+                }
+
+                // Get reservation settings for the time slot
+                var settings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, request.ReservationDateTime);
+                if (settings == null || settings.ReservationAllocationPercent <= 0)
+                {
+                    throw new InvalidOperationException("This time slot is not available for reservations");
+                }
+
+                // Calculate end time based on dining duration
+                DateTime endTime = request.ReservationDateTime.AddMinutes(settings.DefaultDiningDurationMinutes);
+
+                // Find optimal table combination considering both existing reservations and active holds
+                var availableTables = await _outletAdapter.GetTablesAsync(request.OutletId);
+                var tablesToAssign = await FindOptimalTableCombinationWithHoldsAsync(
+                    availableTables.ToList(),
+                    request.PartySize,
+                    request.OutletId,
+                    request.ReservationDateTime,
+                    endTime,
+                    request.SessionId // We'll ignore this session's own holds
+                );
+
+                if (tablesToAssign == null || tablesToAssign.Count == 0)
+                {
+                    throw new InvalidOperationException("No suitable tables available for this reservation");
+                }
+
+                // Create a table hold
+                var tableHold = new TableHold
+                {
+                    Id = Guid.NewGuid(),
+                    OutletId = request.OutletId,
+                    TableIds = tablesToAssign.Select(t => t.Id).ToList(),
+                    PartySize = request.PartySize,
+                    ReservationDateTime = request.ReservationDateTime,
+                    HoldCreatedAt = DateTime.UtcNow,
+                    HoldExpiresAt = DateTime.UtcNow.AddMinutes(3), // 3-minute hold
+                    SessionId = request.SessionId,
+                    IsActive = true
+                };
+
+                var createdHold = await _reservationRepository.CreateTableHoldAsync(tableHold);
+
+                // Return response with hold details and expiration time
+                return new TableHoldResponseDto
+                {
+                    HoldId = createdHold.Id,
+                    OutletId = createdHold.OutletId,
+                    ReservationDateTime = createdHold.ReservationDateTime,
+                    ExpiresAt = createdHold.HoldExpiresAt,
+                    IsSuccessful = true,
+                    TableNumbers = tablesToAssign.Select(t => t.TableNumber).ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error holding tables for reservation");
+
+                return new TableHoldResponseDto
+                {
+                    IsSuccessful = false,
+                    ErrorMessage = ex.Message
+                };
+            }
         }
 
-        private async Task<List<ReservationTableInfo>> FindOptimalTableCombinationAsync(
-            List<ReservationTableInfo> availableTables,
-            int partySize,
-            Guid outletId,
-            DateTime startTime,
-            DateTime endTime)
+        public async Task<bool> ReleaseTableHoldAsync(Guid holdId)
+        {
+            _logger.LogInformation("Releasing table hold: {HoldId}", holdId);
+
+            try
+            {
+                return await _reservationRepository.ReleaseTableHoldAsync(holdId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error releasing table hold: {HoldId}", holdId);
+                return false;
+            }
+        }
+
+        public async Task<TableHoldResponseDto> UpdateTableHoldTimeAsync(UpdateHoldTimeRequestDto request)
+        {
+            _logger.LogInformation("Updating table hold {HoldId} to new time {NewTime}",
+                request.HoldId, request.NewReservationDateTime);
+
+            try
+            {
+                // Verify the original hold exists and is valid
+                var originalHold = await _reservationRepository.GetTableHoldByIdAsync(request.HoldId);
+
+                if (originalHold == null || !originalHold.IsActive)
+                {
+                    return new TableHoldResponseDto
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "The original table hold has expired or is invalid."
+                    };
+                }
+
+                if (originalHold.SessionId != request.SessionId)
+                {
+                    return new TableHoldResponseDto
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "This hold belongs to another session."
+                    };
+                }
+
+                if (DateTime.UtcNow > originalHold.HoldExpiresAt)
+                {
+                    return new TableHoldResponseDto
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "The original table hold has expired."
+                    };
+                }
+
+                // Check if the new time is available
+                var settings = await _outletAdapter.GetReservationSettingsAsync(request.OutletId, request.NewReservationDateTime);
+                if (settings == null || settings.ReservationAllocationPercent <= 0)
+                {
+                    return new TableHoldResponseDto
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "The selected time is not available for reservations."
+                    };
+                }
+
+                // Release the old hold
+                await _reservationRepository.ReleaseTableHoldAsync(originalHold.Id);
+
+                // Create a new hold for the new time
+                var availableTables = await _outletAdapter.GetTablesAsync(request.OutletId);
+                var endTime = request.NewReservationDateTime.AddMinutes(settings.DefaultDiningDurationMinutes);
+
+                var tablesToAssign = await FindOptimalTableCombinationWithHoldsAsync(
+                    availableTables.ToList(),
+                    request.PartySize,
+                    request.OutletId,
+                    request.NewReservationDateTime,
+                    endTime,
+                    request.SessionId
+                );
+
+                if (tablesToAssign == null || tablesToAssign.Count == 0)
+                {
+                    return new TableHoldResponseDto
+                    {
+                        IsSuccessful = false,
+                        ErrorMessage = "No suitable tables available for the new time."
+                    };
+                }
+
+                // Create a new table hold
+                var tableHold = new TableHold
+                {
+                    Id = Guid.NewGuid(),
+                    OutletId = request.OutletId,
+                    TableIds = tablesToAssign.Select(t => t.Id).ToList(),
+                    PartySize = request.PartySize,
+                    ReservationDateTime = request.NewReservationDateTime,
+                    HoldCreatedAt = DateTime.UtcNow,
+                    HoldExpiresAt = originalHold.HoldExpiresAt, // Keep the original expiration time
+                    SessionId = request.SessionId,
+                    IsActive = true
+                };
+
+                var createdHold = await _reservationRepository.CreateTableHoldAsync(tableHold);
+
+                // Return response with hold details
+                return new TableHoldResponseDto
+                {
+                    HoldId = createdHold.Id,
+                    OutletId = createdHold.OutletId,
+                    ReservationDateTime = createdHold.ReservationDateTime,
+                    ExpiresAt = createdHold.HoldExpiresAt,
+                    IsSuccessful = true,
+                    TableNumbers = tablesToAssign.Select(t => t.TableNumber).ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating table hold time: {Message}", ex.Message);
+
+                return new TableHoldResponseDto
+                {
+                    IsSuccessful = false,
+                    ErrorMessage = "An error occurred while updating the hold time: " + ex.Message
+                };
+            }
+        }
+
+        public async Task<List<TimeSlotDto>> GetAlternativeTimeSlotsAsync(
+        Guid outletId, DateTime referenceTime, int partySize, int rangeMinutes = 30)
+        {
+            _logger.LogInformation("Getting alternative time slots around {ReferenceTime} for outlet {OutletId}",
+                referenceTime, outletId);
+
+            try
+            {
+                // Validate outlet
+                var outlet = await _outletAdapter.GetOutletInfoAsync(outletId);
+                if (outlet == null || !outlet.IsActive)
+                {
+                    throw new ArgumentException($"Outlet with ID {outletId} not found or inactive");
+                }
+
+                // Define the time range to search
+                DateTime startTime = referenceTime.AddMinutes(-rangeMinutes);
+                DateTime endTime = referenceTime.AddMinutes(rangeMinutes);
+
+                // Get time slots at 15-minute intervals
+                TimeSpan interval = TimeSpan.FromMinutes(15);
+
+                var timeSlots = new List<TimeSlotDto>();
+
+                // Check each time slot
+                for (DateTime slotTime = startTime; slotTime <= endTime; slotTime = slotTime.Add(interval))
+                {
+                    // Skip if it's the reference time
+                    if (slotTime == referenceTime)
+                        continue;
+
+                    // Get settings for this time
+                    var settings = await _outletAdapter.GetReservationSettingsAsync(outletId, slotTime);
+
+                    if (settings == null || settings.ReservationAllocationPercent <= 0)
+                        continue;
+
+                    // Calculate the end time for this reservation
+                    DateTime slotEndTime = slotTime.AddMinutes(settings.DefaultDiningDurationMinutes);
+
+                    // Get the current reserved capacity
+                    int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
+                        outletId, slotTime, slotEndTime);
+
+                    // Calculate available capacity
+                    int availableCapacity = settings.ReservationCapacity - reservedCapacity;
+
+                    // Check if the party can be accommodated
+                    if (availableCapacity >= partySize)
+                    {
+                        timeSlots.Add(new TimeSlotDto
+                        {
+                            DateTime = slotTime,
+                            AvailableCapacity = availableCapacity,
+                            IsAvailable = true
+                        });
+                    }
+                }
+
+                // Sort by how close they are to the reference time
+                return timeSlots
+                    .OrderBy(ts => Math.Abs((ts.DateTime - referenceTime).TotalMinutes))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving alternative time slots");
+                throw;
+            }
+        }
+
+        private async Task<List<ReservationTableInfo>> FindOptimalTableCombinationWithHoldsAsync(
+        List<ReservationTableInfo> availableTables,
+        int partySize,
+        Guid outletId,
+        DateTime startTime,
+        DateTime endTime,
+        string currentSessionId)
         {
             // Get tables that are already reserved for this time slot
             var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
                 outletId, startTime, endTime);
 
-            // Filter out tables that are already reserved
+            // Get tables that are currently on hold (except for the current session)
+            var heldTableIds = await _reservationRepository.GetHeldTableIdsForTimeSlotAsync(
+                outletId, startTime, endTime, currentSessionId);
+
+            // Combine reserved and held table IDs
+            var unavailableTableIds = reservedTableIds.Concat(heldTableIds).Distinct().ToList();
+
+            // Filter out tables that are already reserved or on hold
             var trulyAvailableTables = availableTables
-                .Where(t => t.IsActive && !reservedTableIds.Contains(t.Id))
+                .Where(t => t.IsActive && !unavailableTableIds.Contains(t.Id))
                 .ToList();
 
+            // Rest of the table assignment logic remains the same...
             // First try to find tables that match the party size exactly
             var exactMatchTable = trulyAvailableTables
                 .FirstOrDefault(t => t.Capacity == partySize);
@@ -1045,7 +1352,6 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             }
 
             // If no exact match, look for the smallest table that can fit the party
-            // (with a reasonable buffer - don't assign a table more than 50% larger than needed)
             var bestFitTable = trulyAvailableTables
                 .Where(t => t.Capacity >= partySize && t.Capacity <= partySize * 1.5)
                 .OrderBy(t => t.Capacity)
@@ -1056,18 +1362,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 return new List<ReservationTableInfo> { bestFitTable };
             }
 
-            // If no table within 50% buffer, look for any table that fits
-            var anyFitTable = trulyAvailableTables
-                .Where(t => t.Capacity >= partySize)
-                .OrderBy(t => t.Capacity)
-                .FirstOrDefault();
-
-            if (anyFitTable != null)
-            {
-                return new List<ReservationTableInfo> { anyFitTable };
-            }
-
-            // If we can't find a single table, try to combine tables
+            // If no table within 50% buffer, try to combine tables
             var remainingCapacity = partySize;
             var result = new List<ReservationTableInfo>();
 
@@ -1091,6 +1386,126 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             }
 
             return result;
+        }
+
+        #region Helper Methods
+        private string GenerateReservationCode()
+        {
+            // Generate a unique reservation code (e.g., "RSV-ABC123")
+            var random = new Random();
+            var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Avoid characters that look similar
+            var code = new char[6];
+
+            for (int i = 0; i < 6; i++)
+            {
+                code[i] = chars[random.Next(chars.Length)];
+            }
+
+            return $"R{new string(code)}";
+        }
+
+        private async Task<List<ReservationTableInfo>> FindOptimalTableCombinationAsync(
+       List<ReservationTableInfo> availableTables,
+       int partySize,
+       Guid outletId,
+       DateTime startTime,
+       DateTime endTime)
+        {
+            // Get tables that are already reserved for this time slot
+            var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
+                outletId, startTime, endTime);
+
+            // Filter out tables that are already reserved
+            var trulyAvailableTables = availableTables
+                .Where(t => t.IsActive && !reservedTableIds.Contains(t.Id))
+                .ToList();
+
+            // Define what we consider an acceptable buffer for table capacity
+            // For example, a party of 4 should ideally be seated at a table for 4-6 people
+            double maxBuffer = 1.5; // 50% buffer
+
+            // Strategy 1: Look for exact match first
+            var exactMatchTable = trulyAvailableTables
+                .FirstOrDefault(t => t.Capacity == partySize);
+
+            if (exactMatchTable != null)
+            {
+                _logger.LogInformation("Found exact match table {TableNumber} with capacity {Capacity} for party size {PartySize}",
+                    exactMatchTable.TableNumber, exactMatchTable.Capacity, partySize);
+                return new List<ReservationTableInfo> { exactMatchTable };
+            }
+
+            // Strategy 2: Find the smallest table that can accommodate the party 
+            // but not too much larger (within the buffer)
+            var bestFitTable = trulyAvailableTables
+                .Where(t => t.Capacity >= partySize && t.Capacity <= partySize * maxBuffer)
+                .OrderBy(t => t.Capacity)  // Get the smallest suitable table
+                .FirstOrDefault();
+
+            if (bestFitTable != null)
+            {
+                _logger.LogInformation("Found best fit table {TableNumber} with capacity {Capacity} for party size {PartySize}",
+                    bestFitTable.TableNumber, bestFitTable.Capacity, partySize);
+                return new List<ReservationTableInfo> { bestFitTable };
+            }
+
+            // Strategy 3: If no table within buffer, find the most efficient one
+            // that can still fit the party (even if it's larger than our buffer)
+            var anyFitTable = trulyAvailableTables
+                .Where(t => t.Capacity >= partySize)
+                .OrderBy(t => t.Capacity)  // Get the smallest table that fits
+                .FirstOrDefault();
+
+            if (anyFitTable != null)
+            {
+                // If the smallest available table is more than twice the size of the party,
+                // log a warning about inefficient seating
+                if (anyFitTable.Capacity > partySize * 2)
+                {
+                    _logger.LogWarning("Inefficient seating: Assigning party of {PartySize} to large table with capacity {Capacity}",
+                        partySize, anyFitTable.Capacity);
+                }
+
+                return new List<ReservationTableInfo> { anyFitTable };
+            }
+
+            // Strategy 4: If no single table can accommodate the party, try combining tables
+            // Sort by descending capacity to minimize the number of tables needed
+            var sortedByCapacity = trulyAvailableTables
+                .OrderByDescending(t => t.Capacity)
+                .ToList();
+
+            var selectedTables = new List<ReservationTableInfo>();
+            var remainingCapacity = partySize;
+
+            foreach (var table in sortedByCapacity)
+            {
+                // Skip if we've already satisfied the capacity requirement
+                if (remainingCapacity <= 0) break;
+
+                // Add this table to our selection
+                selectedTables.Add(table);
+                remainingCapacity -= table.Capacity;
+            }
+
+            // If we couldn't find a combination of tables that works, return empty list
+            if (remainingCapacity > 0)
+            {
+                _logger.LogWarning("Unable to find suitable table(s) for party of {PartySize}", partySize);
+                return new List<ReservationTableInfo>();
+            }
+
+            // If we're using more than 3 tables for one reservation, log a warning
+            if (selectedTables.Count > 3)
+            {
+                _logger.LogWarning("Using {TableCount} tables for party of {PartySize} - consider optimizing table layout",
+                    selectedTables.Count, partySize);
+            }
+
+            _logger.LogInformation("Assigned {TableCount} tables with combined capacity {TotalCapacity} for party of {PartySize}",
+                selectedTables.Count, selectedTables.Sum(t => t.Capacity), partySize);
+
+            return selectedTables;
         }
 
         private async Task ScheduleRemindersAsync(Guid reservationId, DateTime reservationDate)

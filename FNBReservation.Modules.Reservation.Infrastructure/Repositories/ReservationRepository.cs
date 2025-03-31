@@ -256,5 +256,67 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
                 .Select(ta => ta.TableId)
                 .ToList();
         }
+
+        public async Task<List<Guid>> GetHeldTableIdsForTimeSlotAsync(
+        Guid outletId, DateTime startTime, DateTime endTime, string excludeSessionId = null)
+        {
+            _logger.LogInformation("Getting held table IDs for outlet: {OutletId} between {StartTime} and {EndTime}",
+                outletId, startTime, endTime);
+
+            // Get active holds that overlap with the specified time range
+            var activeHolds = await _dbContext.TableHolds
+                .Where(h => h.OutletId == outletId &&
+                           h.IsActive &&
+                           h.ReservationDateTime < endTime &&
+                           h.ReservationDateTime.AddMinutes(120) > startTime && // Assuming a standard 2-hour hold
+                           (excludeSessionId == null || h.SessionId != excludeSessionId))
+                .ToListAsync();
+
+            // Extract the table IDs from all active holds
+            var heldTableIds = activeHolds
+                .SelectMany(h => h.TableIds)
+                .Distinct()
+                .ToList();
+
+            return heldTableIds;
+        }
+
+        public async Task<TableHold> CreateTableHoldAsync(TableHold tableHold)
+        {
+            await _dbContext.TableHolds.AddAsync(tableHold);
+            await _dbContext.SaveChangesAsync();
+            return tableHold;
+        }
+
+        public async Task<TableHold> GetTableHoldBySessionIdAsync(string sessionId)
+        {
+            return await _dbContext.TableHolds
+                .FirstOrDefaultAsync(h => h.SessionId == sessionId && h.IsActive);
+        }
+
+        public async Task<TableHold> GetTableHoldByIdAsync(Guid holdId)
+        {
+            return await _dbContext.TableHolds
+                .FirstOrDefaultAsync(h => h.Id == holdId);
+        }
+
+        public async Task<bool> ReleaseTableHoldAsync(Guid holdId)
+        {
+            var hold = await _dbContext.TableHolds.FindAsync(holdId);
+            if (hold == null)
+                return false;
+
+            hold.IsActive = false;
+            _dbContext.TableHolds.Update(hold);
+            await _dbContext.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<List<TableHold>> GetExpiredTableHoldsAsync()
+        {
+            return await _dbContext.TableHolds
+                .Where(h => h.IsActive && h.HoldExpiresAt < DateTime.UtcNow)
+                .ToListAsync();
+        }
     }
 }

@@ -71,6 +71,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 UserId = staffUserId,
                 OutletId = createStaffDto.OutletId,
                 Email = createStaffDto.Email,
+                FullName = createStaffDto.FullName, // Add this line
                 Username = createStaffDto.Username,
                 PasswordHash = passwordHash,
                 Phone = createStaffDto.Phone,
@@ -160,6 +161,11 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             {
                 _logger.LogWarning("Staff not found for update: {Id}", id);
                 return null;
+            }
+
+            if (!string.IsNullOrEmpty(updateStaffDto.FullName))
+            {
+                existingStaff.FullName = updateStaffDto.FullName;
             }
 
             // Check for username uniqueness if updating username
@@ -264,6 +270,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 OutletId = staff.OutletId ?? Guid.Empty,
                 OutletName = outletName,
                 Email = staff.Email,
+                FullName = staff.FullName ?? "", // Add this line
                 Username = staff.Username,
                 Phone = staff.Phone ?? "",
                 Role = staff.Role,

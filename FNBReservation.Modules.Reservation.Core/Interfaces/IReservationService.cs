@@ -20,6 +20,13 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
         Task<bool> MarkAsNoShowAsync(Guid id);
         Task<bool> MarkAsCompletedAsync(Guid id);
         Task SendReservationRemindersAsync();
+        Task<bool> ReleaseTableHoldAsync(Guid tableHoldId);
+        Task<TableHoldResponseDto> HoldTablesForReservationAsync(TableHoldRequestDto request);
+        Task<TableHoldResponseDto> UpdateTableHoldTimeAsync(UpdateHoldTimeRequestDto request);
+
+        Task<List<TimeSlotDto>> GetAlternativeTimeSlotsAsync(
+            Guid outletId, DateTime referenceTime, int partySize, int rangeMinutes = 30);
+
     }
 
     public interface IReservationRepository
@@ -41,6 +48,12 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
         Task AddStatusChangeAsync(ReservationStatusChange statusChange);
         Task<IEnumerable<ReservationReminder>> GetPendingRemindersAsync(DateTime before);
         Task<List<Guid>> GetReservedTableIdsForTimeSlotAsync(Guid outletId, DateTime startTime, DateTime endTime);
+        Task<TableHold> CreateTableHoldAsync(TableHold tableHold);
+        Task<TableHold> GetTableHoldBySessionIdAsync(string sessionId);
+        Task<List<TableHold>> GetExpiredTableHoldsAsync();
+        Task<List<Guid>> GetHeldTableIdsForTimeSlotAsync(Guid outletId, DateTime startTime, DateTime endTime, string excludeSessionId = null);
+        Task<bool> ReleaseTableHoldAsync(Guid tableHoldId);
+        Task<TableHold> GetTableHoldByIdAsync(Guid holdId);
 
     }
 

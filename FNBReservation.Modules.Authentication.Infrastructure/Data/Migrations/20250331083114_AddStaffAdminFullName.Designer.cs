@@ -4,6 +4,7 @@ using FNBReservation.Modules.Authentication.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FNBReservation.Modules.Authentication.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(FNBDbContext))]
-    partial class FNBDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250331083114_AddStaffAdminFullName")]
+    partial class AddStaffAdminFullName
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -144,14 +147,14 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("0e5c2719-7ea6-4cfa-aa4b-aa95bb438b43"),
-                            CreatedAt = new DateTime(2025, 3, 31, 8, 36, 19, 116, DateTimeKind.Utc).AddTicks(9209),
+                            Id = new Guid("45c525ab-00e7-4738-a56e-4a817ec8239a"),
+                            CreatedAt = new DateTime(2025, 3, 31, 8, 31, 14, 168, DateTimeKind.Utc).AddTicks(230),
                             Email = "admin@fnbreservation.com",
                             FullName = "System Administrator",
                             IsActive = true,
                             PasswordHash = "AQAAAAEAACcQAAAAEKND4k6EtZZbkwsOVZl8s5WQy59k8/MEP5aqO4vWu2Y5OnUW9DSx9STiUsolFq/llg==",
                             Role = "Admin",
-                            UpdatedAt = new DateTime(2025, 3, 31, 8, 36, 19, 116, DateTimeKind.Utc).AddTicks(9210),
+                            UpdatedAt = new DateTime(2025, 3, 31, 8, 31, 14, 168, DateTimeKind.Utc).AddTicks(233),
                             UserId = "ADMIN001",
                             Username = "admin"
                         });

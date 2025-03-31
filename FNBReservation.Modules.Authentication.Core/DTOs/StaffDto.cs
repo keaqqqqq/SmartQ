@@ -14,6 +14,10 @@ namespace FNBReservation.Modules.Authentication.Core.DTOs
         [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
         public string Email { get; set; }
 
+        [Required(ErrorMessage = "Full name is required")]
+        [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]
+        public string FullName { get; set; }
+
         [Required(ErrorMessage = "Username is required")]
         [StringLength(50, ErrorMessage = "Username cannot exceed 50 characters")]
         public string Username { get; set; }
@@ -40,6 +44,9 @@ namespace FNBReservation.Modules.Authentication.Core.DTOs
         [StringLength(100, ErrorMessage = "Email cannot exceed 100 characters")]
         public string Email { get; set; }
 
+        [StringLength(100, ErrorMessage = "Full name cannot exceed 100 characters")]
+        public string FullName { get; set; }
+
         [StringLength(50, ErrorMessage = "Username cannot exceed 50 characters")]
         public string Username { get; set; }
 
@@ -65,6 +72,7 @@ namespace FNBReservation.Modules.Authentication.Core.DTOs
         public Guid OutletId { get; set; }
         public string OutletName { get; set; }
         public string Email { get; set; }
+        public string FullName { get; set; }
         public string Username { get; set; }
         public string Phone { get; set; }
         public string Role { get; set; }

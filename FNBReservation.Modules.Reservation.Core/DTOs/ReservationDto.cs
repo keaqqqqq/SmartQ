@@ -32,6 +32,12 @@ namespace FNBReservation.Modules.Reservation.Core.DTOs
 
         [StringLength(500, ErrorMessage = "Special requests cannot exceed 500 characters")]
         public string SpecialRequests { get; set; }
+
+        // Add these new properties
+        // Add these properties for table hold support
+        public Guid HoldId { get; set; } = Guid.Empty;
+
+        public string SessionId { get; set; } = string.Empty;
     }
 
     public class UpdateReservationDto
@@ -125,5 +131,47 @@ namespace FNBReservation.Modules.Reservation.Core.DTOs
         public DateTime Date { get; set; }
         public List<AvailableTimeslotDto> AvailableTimeSlots { get; set; } = new List<AvailableTimeslotDto>();
         public List<AvailableTimeslotDto> AlternativeTimeSlots { get; set; } = new List<AvailableTimeslotDto>();
+    }
+
+    // In FNBReservation.Modules.Reservation.Core/DTOs/TableHoldDto.cs
+    public class TableHoldRequestDto
+    {
+        [Required]
+        public Guid OutletId { get; set; }
+
+        [Required]
+        public int PartySize { get; set; }
+
+        [Required]
+        public DateTime ReservationDateTime { get; set; }
+
+        [Required]
+        public string SessionId { get; set; }
+    }
+
+    public class TableHoldResponseDto
+    {
+        public Guid HoldId { get; set; }
+        public Guid OutletId { get; set; }
+        public DateTime ReservationDateTime { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public bool IsSuccessful { get; set; }
+        public string ErrorMessage { get; set; }
+        public List<string> TableNumbers { get; set; } = new List<string>();
+    }
+
+    public class CreateReservationWithHoldDto : CreateReservationDto
+    {
+        [Required]
+        public Guid HoldId { get; set; }
+
+        [Required]
+        public string SessionId { get; set; }
+    }
+    public class TimeSlotDto
+    {
+        public DateTime DateTime { get; set; }
+        public int AvailableCapacity { get; set; }
+        public bool IsAvailable { get; set; }
     }
 }

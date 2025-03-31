@@ -177,5 +177,85 @@ namespace FNBReservation.Modules.Reservation.API.Controllers
                 return StatusCode(500, new { message = "An error occurred while canceling the reservation" });
             }
         }
+
+        [HttpPost("hold-tables")]
+        public async Task<IActionResult> HoldTablesForReservation([FromBody] TableHoldRequestDto request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var result = await _reservationService.HoldTablesForReservationAsync(request);
+
+                if (!result.IsSuccessful)
+                    return BadRequest(new { message = result.ErrorMessage });
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error holding tables for reservation");
+                return StatusCode(500, new { message = "An error occurred while holding tables" });
+            }
+        }
+
+        [HttpPost("release-hold/{holdId}")]
+        public async Task<IActionResult> ReleaseTableHold(Guid holdId)
+        {
+            try
+            {
+                var result = await _reservationService.ReleaseTableHoldAsync(holdId);
+                return Ok(new { success = result });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error releasing table hold {HoldId}", holdId);
+                return StatusCode(500, new { message = "An error occurred while releasing the table hold" });
+            }
+        }
+
+        [HttpPut("update-hold-time")]
+        public async Task<IActionResult> UpdateHoldTime([FromBody] UpdateHoldTimeRequestDto request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var result = await _reservationService.UpdateTableHoldTimeAsync(request);
+
+                if (!result.IsSuccessful)
+                    return BadRequest(new { message = result.ErrorMessage });
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating hold time");
+                return StatusCode(500, new { message = "An error occurred while updating the hold time" });
+            }
+        }
+
+        [HttpGet("alternative-times")]
+        public async Task<IActionResult> GetAlternativeTimeSlots(
+            [FromQuery] Guid outletId,
+            [FromQuery] DateTime referenceTime,
+            [FromQuery] int partySize,
+            [FromQuery] int rangeMinutes = 30)
+        {
+            try
+            {
+                var timeSlots = await _reservationService.GetAlternativeTimeSlotsAsync(
+                    outletId, referenceTime, partySize, rangeMinutes);
+
+                return Ok(timeSlots);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting alternative time slots");
+                return StatusCode(500, new { message = "An error occurred while retrieving alternative time slots" });
+            }
+        }
     }
 }

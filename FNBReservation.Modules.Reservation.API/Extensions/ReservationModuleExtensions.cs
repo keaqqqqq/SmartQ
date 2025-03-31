@@ -35,6 +35,8 @@ namespace FNBReservation.Modules.Reservation.API.Extensions
 
             // Register the WhatsApp service (mock for development)
             services.AddScoped<IWhatsAppService, MockWhatsAppService>();
+            // Add this line to AddReservationModule method
+            services.AddHostedService<TableHoldCleanupService>();
 
             // Register hosted service for processing reminders (would be uncommented in the real implementation)
             // services.AddHostedService<ReminderProcessingService>();
