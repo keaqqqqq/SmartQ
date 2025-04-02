@@ -146,12 +146,15 @@ const ReservationForm = () => {
         }
     };
 
+    // State for timeout dialog
+    const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
+
     // Countdown timer implementation
     useEffect(() => {
         if (step !== 2) return;
 
         // Start with 4:59 (299 seconds)
-        let totalSeconds = 299;
+        let totalSeconds = 10;
 
         const countdownElement = document.getElementById('countdown-timer');
         if (!countdownElement) return;
@@ -166,19 +169,23 @@ const ReservationForm = () => {
             // Decrease the countdown
             totalSeconds--;
 
-            // When timer reaches 0, handle expiration (optional)
+            // When timer reaches 0, show timeout dialog
             if (totalSeconds < 0) {
                 clearInterval(timer);
                 countdownElement.textContent = "0:00";
-                // Optionally show an alert or take some action when time expires
-                // setError("Your table hold has expired. Please try again.");
-                // setStep(1);
+                setShowTimeoutDialog(true);
             }
         }, 1000);
 
         // Clean up timer
         return () => clearInterval(timer);
     }, [step]);
+
+    // Handle timeout dialog close
+    const handleTimeoutDialogClose = () => {
+        setShowTimeoutDialog(false);
+        setStep(1); // Go back to availability check page
+    };
 
     // Select a time slot
     const selectTimeSlot = (slot) => {
@@ -375,6 +382,37 @@ const ReservationForm = () => {
                 {/* Step 2: Personal Details */}
                 {step === 2 && (
                     <div className="grid md:grid-cols-12 gap-6">
+                        {/* Timeout Dialog */}
+                        {showTimeoutDialog && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+                                <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4 p-6 animate-fade-in">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <h2 className="text-xl font-semibold text-gray-800">Time Expired</h2>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <div className="flex justify-center mb-4">
+                                            <svg className="w-16 h-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-gray-600">
+                                            We're sorry, but your table hold has expired. To continue making a reservation, you'll need to check availability again.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex justify-center">
+                                        <button
+                                            onClick={handleTimeoutDialogClose}
+                                            className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded"
+                                        >
+                                            Check Availability Again
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Main reservation form */}
                         <div className="md:col-span-8">
                             <div className="bg-white rounded-lg shadow-md p-6 mb-4">
