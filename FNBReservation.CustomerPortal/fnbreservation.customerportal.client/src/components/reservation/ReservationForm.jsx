@@ -25,22 +25,55 @@ const FormInput = ({ label, type, name, value, onChange, required, placeholder, 
 // Step Indicator Component
 const StepIndicator = ({ currentStep }) => (
     <div className="mb-8">
-        <div className="flex items-center">
-            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${currentStep === 1 ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                1
+        <div className="flex items-center justify-center">
+            {/* Step 1 */}
+            <div className="flex flex-col items-center">
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${currentStep === 1
+                        ? 'border-green-600 bg-green-600 text-white'
+                        : currentStep > 1
+                            ? 'border-green-600 bg-white text-green-600'
+                            : 'border-gray-300 bg-white text-gray-500'
+                    }`}>
+                    {currentStep > 1 ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    ) : (
+                        <span>1</span>
+                    )}
+                </div>
+                <span className={`mt-2 text-sm font-medium ${currentStep === 1
+                        ? 'text-green-600'
+                        : currentStep > 1
+                            ? 'text-green-600'
+                            : 'text-gray-500'
+                    }`}>
+                    Find Table
+                </span>
             </div>
-            <div className={`flex-1 h-1 mx-2 ${currentStep === 2 ? 'bg-green-600' : 'bg-gray-200'}`}></div>
-            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${currentStep === 2 ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                2
+
+            {/* Connector */}
+            <div className={`w-24 h-1 mx-2 ${currentStep > 1 ? 'bg-green-600' : 'bg-gray-300'
+                }`}></div>
+
+            {/* Step 2 */}
+            <div className="flex flex-col items-center">
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${currentStep === 2
+                        ? 'border-green-600 bg-green-600 text-white'
+                        : currentStep > 2
+                            ? 'border-green-600 bg-white text-green-600'
+                            : 'border-gray-300 bg-white text-gray-500'
+                    }`}>
+                    <span>2</span>
+                </div>
+                <span className={`mt-2 text-sm font-medium ${currentStep === 2 ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                    Fill in Details
+                </span>
             </div>
-        </div>
-        <div className="flex text-sm mt-2">
-            <div className={`flex-1 text-center ${currentStep === 1 ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
-                Find Table
-            </div>
-            <div className={`flex-1 text-center ${currentStep === 2 ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
-                Fill in Details
-            </div>
+
+
+
         </div>
     </div>
 );
