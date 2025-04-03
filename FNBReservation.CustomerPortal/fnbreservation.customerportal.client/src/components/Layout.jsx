@@ -10,7 +10,7 @@ const Layout = ({ children }) => {
     return (
         <div className={isHomePage ? '' : 'min-h-screen flex flex-col'}>
             <Header />
-            <main className={isHomePage ? '' : 'flex-grow py-8'}>
+            <main className={isHomePage ? '' : 'flex-grow '}>
                 {children}
             </main>
         </div>
