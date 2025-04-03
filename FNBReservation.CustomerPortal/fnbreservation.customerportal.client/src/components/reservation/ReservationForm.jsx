@@ -22,6 +22,29 @@ const FormInput = ({ label, type, name, value, onChange, required, placeholder, 
     </div>
 );
 
+// Step Indicator Component
+const StepIndicator = ({ currentStep }) => (
+    <div className="mb-8">
+        <div className="flex items-center">
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${currentStep === 1 ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                1
+            </div>
+            <div className={`flex-1 h-1 mx-2 ${currentStep === 2 ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full ${currentStep === 2 ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                2
+            </div>
+        </div>
+        <div className="flex text-sm mt-2">
+            <div className={`flex-1 text-center ${currentStep === 1 ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                Find Table
+            </div>
+            <div className={`flex-1 text-center ${currentStep === 2 ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                Fill in Details
+            </div>
+        </div>
+    </div>
+);
+
 const ReservationForm = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Initial Check, 2: Personal Details, 3: Confirmation
@@ -30,7 +53,9 @@ const ReservationForm = () => {
     const [availableSlots, setAvailableSlots] = useState([]);
     const [alternativeOutlets, setAlternativeOutlets] = useState([]);
     const [selectedSlot, setSelectedSlot] = useState(null);
+    const [selectedOption, setSelectedOption] = useState(null);
     const [reservationCode, setReservationCode] = useState(null);
+    const [noAvailability, setNoAvailability] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -78,45 +103,78 @@ const ReservationForm = () => {
         e?.preventDefault();
         setLoading(true);
         setError(null);
+        setNoAvailability(false);
+        // Clear any previous selections
+        setSelectedOption(null);
 
         try {
             // Simulating API call for available time slots
             // In a real implementation, this would call your actual API
             setTimeout(() => {
-                // These would come from the API
-                const timeSlots = [
-                    { time: "18:00:00", available: true },
-                    { time: "18:15:00", available: true },
-                    { time: "18:30:00", available: true },
-                    { time: "18:45:00", available: true },
-                    { time: formData.time, available: true },
-                    { time: "19:15:00", available: true },
-                    { time: "19:30:00", available: true },
-                    { time: "19:45:00", available: true },
-                    { time: "20:00:00", available: true }
-                ];
+                // For this example, let's simulate a scenario where no table is available
+                // at the requested time to demonstrate the alternative options
 
-                // Alternative outlets would also come from the API
-                const alternatives = outlets
-                    .filter(outlet => outlet.id !== formData.outletId)
-                    .map(outlet => {
-                        return {
-                            ...outlet,
-                            availableTimes: [
-                                { time: "18:15:00", available: true },
-                                { time: "18:30:00", available: true },
-                                { time: "18:45:00", available: true },
-                                { time: "19:00:00", available: true },
-                                { time: "19:15:00", available: true },
-                                { time: "20:15:00", available: true }
-                            ]
-                        };
+                // Force the time to always be unavailable for demo purposes
+                const isTimeAvailable = false; // Always show alternatives
+
+                if (isTimeAvailable) {
+                    // Tables available case
+                    const timeSlots = [
+                        { time: "18:00:00", available: true },
+                        { time: "18:15:00", available: true },
+                        { time: "18:30:00", available: true },
+                        { time: "18:45:00", available: true },
+                        { time: formData.time, available: true },
+                        { time: "19:15:00", available: true },
+                        { time: "19:30:00", available: true },
+                        { time: "19:45:00", available: true },
+                        { time: "20:00:00", available: true }
+                    ];
+
+                    setAvailableSlots(timeSlots);
+                    setSelectedOption({
+                        outletId: formData.outletId,
+                        outletName: outlets.find(o => o.id === formData.outletId)?.name,
+                        time: formData.time,
+                        displayTime: formatDisplayTime(formData.time)
                     });
+                    setStep(2); // Move to personal details step
+                } else {
+                    // No tables available - show alternatives
+                    const nearbyTimeSlots = [
+                        { time: "18:00:00", available: true },
+                        { time: "18:15:00", available: true },
+                        { time: "18:30:00", available: true },
+                        { time: "18:45:00", available: true },
+                        { time: "19:15:00", available: true },
+                        { time: "19:30:00", available: true },
+                        { time: "19:45:00", available: true },
+                        { time: "20:00:00", available: true }
+                    ];
 
-                setAvailableSlots(timeSlots);
-                setAlternativeOutlets(alternatives);
-                setSelectedSlot(formData.time);
-                setStep(2); // Move to personal details step
+                    // Alternative outlets
+                    const alternatives = outlets
+                        .filter(outlet => outlet.id !== formData.outletId)
+                        .map(outlet => {
+                            return {
+                                ...outlet,
+                                availableTimes: [
+                                    { time: "18:15:00", available: true },
+                                    { time: "18:30:00", available: true },
+                                    { time: "18:45:00", available: true },
+                                    { time: "19:00:00", available: true },
+                                    { time: "19:15:00", available: true },
+                                    { time: "20:15:00", available: true }
+                                ]
+                            };
+                        });
+
+                    setAvailableSlots(nearbyTimeSlots);
+                    setAlternativeOutlets(alternatives);
+                    setNoAvailability(true);
+                    // Stay on step 1, but show alternatives
+                }
+
                 setLoading(false);
             }, 1000);
         } catch (err) {
@@ -146,6 +204,21 @@ const ReservationForm = () => {
         }
     };
 
+    // Proceed to details step after selecting an alternative
+    const proceedToDetails = () => {
+        // If user selected an alternative outlet/time, update form data now
+        if (selectedOption) {
+            setFormData({
+                ...formData,
+                outletId: selectedOption.outletId,
+                time: selectedOption.time
+            });
+        }
+
+        setNoAvailability(false);
+        setStep(2);
+    };
+
     // State for timeout dialog
     const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
 
@@ -154,7 +227,7 @@ const ReservationForm = () => {
         if (step !== 2) return;
 
         // Start with 4:59 (299 seconds)
-        let totalSeconds = 10;
+        let totalSeconds = 299;
 
         const countdownElement = document.getElementById('countdown-timer');
         if (!countdownElement) return;
@@ -187,23 +260,30 @@ const ReservationForm = () => {
         setStep(1); // Go back to availability check page
     };
 
-    // Select a time slot
+    // Select a time slot at current outlet
     const selectTimeSlot = (slot) => {
-        setSelectedSlot(slot);
-        setFormData({
-            ...formData,
-            time: slot
+        // Clear any previous selections at other outlets
+        setSelectedOption({
+            outletId: formData.outletId,
+            outletName: outlets.find(o => o.id === formData.outletId)?.name,
+            time: slot,
+            displayTime: formatDisplayTime(slot)
         });
+        setSelectedSlot(null); // Clear current slot selection
     };
 
-    // Select alternative outlet
+    // Select from alternative outlet
     const selectAlternativeOutlet = (outletId, time) => {
-        setFormData({
-            ...formData,
+        const selectedOutlet = outlets.find(o => o.id === outletId);
+
+        // Update selection and clear any previous selections
+        setSelectedOption({
             outletId: outletId,
-            time: time
+            outletName: selectedOutlet?.name,
+            time: time,
+            displayTime: formatDisplayTime(time)
         });
-        setSelectedSlot(time);
+        setSelectedSlot(null); // Clear current slot selection
     };
 
     // Generate date options for the next 14 days
@@ -269,24 +349,27 @@ const ReservationForm = () => {
 
     return (
         <div className="w-full">
-            {/* Full-width header image */}
+            {/* Full-width header image with proper spacing */}
             <div
-                className="w-full h-72 bg-cover bg-center relative"
+                className="w-full h-72 bg-cover bg-center mb-8"
                 style={{ backgroundImage: "url('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80')" }}
             >
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center">
+                <div className="w-full h-full bg-black bg-opacity-50 flex flex-col items-center justify-center">
                     <h1 className="text-white text-4xl font-bold mb-2">RESERVATION</h1>
                     <p className="text-white text-xl italic">Book A Table</p>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-4 py-8">
+            <div className="max-w-5xl mx-auto px-4 pb-12">
                 {/* Error Message */}
                 {error && (
                     <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6" role="alert">
                         <span className="block sm:inline">{error}</span>
                     </div>
                 )}
+
+                {/* Step Indicator */}
+                {step !== 3 && <StepIndicator currentStep={step} />}
 
                 {/* Step 1: Initial availability check */}
                 {step === 1 && (
@@ -376,6 +459,90 @@ const ReservationForm = () => {
                                 </button>
                             </div>
                         </form>
+
+                        {/* No Availability Section - Show alternatives */}
+                        {noAvailability && !loading && (
+                            <div className="mt-8">
+                                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md mb-6">
+                                    <p className="text-yellow-800 font-medium">
+                                        Sorry, we don't have availability at {formatDisplayTime(formData.time)} for {formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}.
+                                    </p>
+                                    <p className="text-yellow-700 mt-1">
+                                        Please select one alternative time from below.
+                                    </p>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {/* Alternative time slots for current outlet */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                                        <h3 className="font-bold text-lg mb-4">Alternative Times at {outlets.find(o => o.id === formData.outletId)?.name}</h3>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {availableSlots.map((slot, index) => (
+                                                <button
+                                                    key={index}
+                                                    onClick={() => selectTimeSlot(slot.time)}
+                                                    className={`py-2 px-3 rounded text-center text-sm ${slot.time === selectedSlot
+                                                        ? 'bg-green-600 text-white'
+                                                        : 'border border-gray-300 hover:bg-gray-100'
+                                                        }`}
+                                                >
+                                                    {formatDisplayTime(slot.time)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Alternative outlets */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                                        <h3 className="font-bold text-lg mb-4">Other Available Restaurants</h3>
+
+                                        {alternativeOutlets.map((outlet, outletIndex) => (
+                                            <div key={outletIndex} className="mb-4 pb-4 border-b border-gray-200 last:border-0 last:mb-0 last:pb-0">
+                                                <p className="font-medium mb-1">{outlet.name}</p>
+                                                <p className="text-sm text-gray-600 mb-2">{outlet.address}</p>
+
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    {outlet.availableTimes.map((timeSlot, timeIndex) => (
+                                                        <button
+                                                            key={timeIndex}
+                                                            onClick={() => selectAlternativeOutlet(outlet.id, timeSlot.time)}
+                                                            className={`py-2 px-3 rounded text-center text-sm ${selectedOption &&
+                                                                    selectedOption.outletId === outlet.id &&
+                                                                    selectedOption.time === timeSlot.time
+                                                                    ? 'bg-green-600 text-white'
+                                                                    : 'border border-gray-300 hover:bg-gray-100'
+                                                                }`}
+                                                        >
+                                                            {formatDisplayTime(timeSlot.time)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Continue with selected alternative */}
+                                <div className="mt-6 text-center">
+                                    {/* Show selection info */}
+                                    {selectedOption && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4 text-left">
+                                            <p className="text-blue-800 font-medium">Selected Option:</p>
+                                            <p className="text-blue-700 mt-1">
+                                                {selectedOption.outletName} at {selectedOption.displayTime}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={proceedToDetails}
+                                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded"
+                                    >
+                                        Continue with Selected Time
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -502,7 +669,7 @@ const ReservationForm = () => {
                             </div>
                         </div>
 
-                        {/* Sidebar with reservation info and alternative times */}
+                        {/* Sidebar with reservation info */}
                         <div className="md:col-span-4">
                             <div className="bg-white rounded-lg shadow-md p-6 mb-4">
                                 <h3 className="font-bold text-lg mb-4">Reservation Details</h3>
@@ -524,51 +691,6 @@ const ReservationForm = () => {
                                     <p className="font-medium">{formData.partySize} {formData.partySize === 1 ? 'person' : 'people'}</p>
                                 </div>
                             </div>
-
-                            {/* Alternative time slots for current outlet */}
-                            <div className="bg-white rounded-lg shadow-md p-6 mb-4">
-                                <h3 className="font-bold text-lg mb-4">Other Available Times</h3>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {availableSlots.map((slot, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => selectTimeSlot(slot.time)}
-                                            className={`py-2 px-3 rounded text-center text-sm ${slot.time === selectedSlot
-                                                    ? 'bg-green-600 text-white'
-                                                    : 'border border-gray-300 hover:bg-gray-100'
-                                                }`}
-                                        >
-                                            {formatDisplayTime(slot.time)}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Alternative outlets */}
-                            {alternativeOutlets.length > 0 && (
-                                <div className="bg-white rounded-lg shadow-md p-6">
-                                    <h3 className="font-bold text-lg mb-4">Other Available Restaurants</h3>
-
-                                    {alternativeOutlets.map((outlet, outletIndex) => (
-                                        <div key={outletIndex} className="mb-4 pb-4 border-b border-gray-200 last:border-0 last:mb-0 last:pb-0">
-                                            <p className="font-medium mb-2">{outlet.name}</p>
-                                            <p className="text-sm text-gray-600 mb-2">{outlet.address}</p>
-
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {outlet.availableTimes.map((timeSlot, timeIndex) => (
-                                                    <button
-                                                        key={timeIndex}
-                                                        onClick={() => selectAlternativeOutlet(outlet.id, timeSlot.time)}
-                                                        className="py-2 px-3 rounded text-center text-sm border border-gray-300 hover:bg-gray-100"
-                                                    >
-                                                        {formatDisplayTime(timeSlot.time)}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
@@ -628,6 +750,7 @@ const ReservationForm = () => {
                                     setStep(1);
                                     setSelectedSlot(null);
                                     setReservationCode(null);
+                                    setNoAvailability(false);
                                 }}
                                 className="border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50"
                             >
