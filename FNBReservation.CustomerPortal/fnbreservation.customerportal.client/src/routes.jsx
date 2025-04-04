@@ -8,11 +8,13 @@ import ReservationDetail from "./components/reservation/ReservationDetail";
 import ReservationList from "./components/reservation/ReservationList";
 import ReservationLookup from "./components/reservation/ReservationLookup";
 import ModifyReservation from "./components/reservation/ModifyReservation";
+import Outlet from "./components/Outlet/Outlets";
 
 const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/Outlets" element={<Outlet />} />
             <Route path="/reservation/new" element={<ReservationForm />} />
             <Route path="/reservation/:id" element={<ReservationDetail />} />
             <Route path="/reservation/code/:code" element={<ReservationDetail />} />

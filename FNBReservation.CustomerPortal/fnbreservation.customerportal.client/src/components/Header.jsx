@@ -90,13 +90,6 @@ const Header = () => {
                         >
                             Find a reservation
                         </Link>
-                        <Link
-                            to="/reservations"
-                            className="block px-3 py-2 text-white hover:bg-gray-900 hover:text-green-400 rounded-md"
-                            onClick={() => setMobileMenuOpen(false)}
-                        >
-                            My Reservation
-                        </Link>
                     </div>
                 </div>
             )}

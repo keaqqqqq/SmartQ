@@ -139,7 +139,7 @@ export const ReservationProvider = ({ children }) => {
             if (code === "RES9299") {
                 // Return dummy data for this special code
                 const dummyReservation = {
-                    id: "12345",
+                    id: "RES9299",
                     reservationCode: "RES9299",
                     outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
                     outletName: "Main Branch",
@@ -152,6 +152,8 @@ export const ReservationProvider = ({ children }) => {
                     specialRequests: "Window seat if possible, celebrating anniversary",
                     createdAt: "2025-04-04T14:30:00+08:00"
                 };
+
+
 
                 // Simulate network delay
                 await new Promise(resolve => setTimeout(resolve, 1000));
