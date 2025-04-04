@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useCallback } from 'react';
 import ReservationService from '../services/ReservationService';
 import { useLocation } from './LocationContext';
@@ -130,12 +129,38 @@ export const ReservationProvider = ({ children }) => {
         }
     }, []);
 
-    // Get reservation by code
+    // Get reservation by code - MODIFIED TO INCLUDE DUMMY DATA
     const getReservationByCode = useCallback(async (code) => {
         setLoading(true);
         setError(null);
 
         try {
+            // Check if the code is our special test code "RES9299"
+            if (code === "RES9299") {
+                // Return dummy data for this special code
+                const dummyReservation = {
+                    id: "12345",
+                    reservationCode: "RES9299",
+                    outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
+                    outletName: "Main Branch",
+                    customerName: "John Doe",
+                    customerPhone: "+60 12-345-6789",
+                    customerEmail: "john.doe@example.com",
+                    partySize: 4,
+                    reservationDate: "2025-04-10T19:30:00+08:00",
+                    status: "Confirmed",
+                    specialRequests: "Window seat if possible, celebrating anniversary",
+                    createdAt: "2025-04-04T14:30:00+08:00"
+                };
+
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                setReservationDetails(dummyReservation);
+                return dummyReservation;
+            }
+
+            // For any other code, proceed with the regular API call
             const response = await ReservationService.getReservationByCode(code);
             setReservationDetails(response);
             return response;
@@ -148,15 +173,51 @@ export const ReservationProvider = ({ children }) => {
         }
     }, []);
 
-    // Get reservations by phone
+    // Get reservations by phone - MODIFIED TO INCLUDE DUMMY DATA
     const getReservationsByPhone = useCallback(async (phone) => {
         setLoading(true);
         setError(null);
 
         try {
+            // Check if this is our test phone number
+            if (phone === "+60 12-345-6789") {
+                // Return dummy reservations for this phone
+                const dummyReservations = [
+                    {
+                        id: "12345",
+                        reservationCode: "RES9299",
+                        outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
+                        outletName: "Main Branch",
+                        customerName: "John Doe",
+                        customerPhone: "+60 12-345-6789",
+                        partySize: 4,
+                        reservationDate: "2025-04-10T19:30:00+08:00",
+                        status: "Confirmed"
+                    },
+                    {
+                        id: "12346",
+                        reservationCode: "RES8192",
+                        outletId: "8a2417c7-bc1f-4cd2-9c42-2a858271c2f5",
+                        outletName: "Downtown Location",
+                        customerName: "John Doe",
+                        customerPhone: "+60 12-345-6789",
+                        partySize: 2,
+                        reservationDate: "2025-03-28T18:00:00+08:00",
+                        status: "Completed"
+                    }
+                ];
+
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                setUserReservations(dummyReservations);
+                return { reservations: dummyReservations };
+            }
+
+            // For any other phone, proceed with the regular API call
             const response = await ReservationService.getReservationsByPhone(phone);
             setUserReservations(response.reservations || []);
-            return response.reservations || [];
+            return response;
         } catch (err) {
             setError('Failed to fetch your reservations. Please try again.');
             console.error('Error fetching reservations by phone:', err);
@@ -184,17 +245,47 @@ export const ReservationProvider = ({ children }) => {
         }
     }, []);
 
-    // Cancel reservation
+    // Cancel reservation with dummy support
     const cancelReservation = useCallback(async (id) => {
         setLoading(true);
         setError(null);
 
         try {
+            // For our dummy reservation
+            if (id === "12345") {
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Update the user reservations if they exist
+                if (userReservations.length > 0) {
+                    const updatedReservations = userReservations.map(res => {
+                        if (res.id === id) {
+                            return { ...res, status: "Cancelled" };
+                        }
+                        return res;
+                    });
+                    setUserReservations(updatedReservations);
+                }
+
+                // Also update reservation details if currently viewing this reservation
+                if (reservationDetails && reservationDetails.id === id) {
+                    setReservationDetails({
+                        ...reservationDetails,
+                        status: "Cancelled"
+                    });
+                }
+
+                return { success: true, message: "Reservation cancelled successfully" };
+            }
+
+            // For any other ID, proceed with the regular API call
             const response = await ReservationService.cancelReservation(id);
+
             // Update user reservations if they exist
             if (userReservations.length > 0) {
                 setUserReservations(userReservations.filter(res => res.id !== id));
             }
+
             return response;
         } catch (err) {
             setError('Failed to cancel reservation. Please try again.');
@@ -203,7 +294,7 @@ export const ReservationProvider = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [userReservations]);
+    }, [userReservations, reservationDetails]);
 
     // Clear reservation details
     const clearReservationDetails = useCallback(() => {

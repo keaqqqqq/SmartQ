@@ -50,7 +50,7 @@ const ReservationDetail = () => {
             setIsModalOpen(false);
             // Show temporary success message
             alert('Your reservation has been successfully cancelled.');
-            navigate('/reservations');
+            navigate('/');
         } catch (err) {
             console.error('Failed to cancel reservation', err);
         }
@@ -71,10 +71,10 @@ const ReservationDetail = () => {
                     <span className="block sm:inline">{error}</span>
                 </div>
                 <button
-                    onClick={() => navigate('/reservations')}
+                    onClick={() => navigate('/')}
                     className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded"
                 >
-                    Back to My Reservations
+                    Back to Home
                 </button>
             </div>
         );
@@ -86,10 +86,10 @@ const ReservationDetail = () => {
                 <h2 className="text-xl font-bold mb-4">Reservation Not Found</h2>
                 <p className="mb-4">Sorry, we couldn't find the reservation you're looking for.</p>
                 <button
-                    onClick={() => navigate('/reservations')}
+                    onClick={() => navigate('/')}
                     className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded"
                 >
-                    Back to My Reservations
+                    Back to Home
                 </button>
             </div>
         );
@@ -171,10 +171,10 @@ const ReservationDetail = () => {
             {/* Action buttons */}
             <div className="flex flex-col md:flex-row gap-3">
                 <button
-                    onClick={() => navigate('/reservations')}
+                    onClick={() => navigate('/')}
                     className="bg-white border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50"
                 >
-                    Back to My Reservations
+                    Back to Home
                 </button>
 
                 {isUpcoming() && reservationDetails.status === 'Confirmed' && (

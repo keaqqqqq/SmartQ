@@ -38,9 +38,6 @@ const Header = () => {
                         <Link to="/reservation/lookup" className={linkClasses}>
                             Find a reservation
                         </Link>
-                        <Link to="/reservations" className={linkClasses}>
-                            My Reservation
-                        </Link>
                     </nav>
 
                     {/* Mobile menu button */}
