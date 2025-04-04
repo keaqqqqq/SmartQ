@@ -33,7 +33,7 @@ const Header = () => {
                             Reservation
                         </Link>
                         <Link to="/outlets" className={linkClasses}>
-                            Outlet
+                            Our Locations
                         </Link>
                         <Link to="/reservation/lookup" className={linkClasses}>
                             Find a reservation
@@ -63,7 +63,7 @@ const Header = () => {
 
             {/* Mobile menu, show/hide based on menu state */}
             {mobileMenuOpen && (
-                <div className="md:hidden bg-black shadow-lg rounded-b-lg absolute w-full">
+                <div className="md:hidden bg-black shadow-lg rounded-b-lg absolute w-full z-50">
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         <Link
                             to="/"
@@ -84,7 +84,7 @@ const Header = () => {
                             className="block px-3 py-2 text-white hover:bg-gray-900 hover:text-green-400 rounded-md"
                             onClick={() => setMobileMenuOpen(false)}
                         >
-                            Outlet
+                            Our Locations
                         </Link>
                         <Link
                             to="/reservation/lookup"
