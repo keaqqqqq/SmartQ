@@ -10,6 +10,13 @@ import ReservationLookup from "./components/reservation/ReservationLookup";
 import ModifyReservation from "./components/reservation/ModifyReservation";
 import Outlet from "./components/Outlet/Outlets";
 
+
+// Import queue components
+import QueueForm from "./components/queue/QueueForm";
+import QueueStatus from "./components/queue/QueueStatus";
+import QueueConfirmation from "./components/queue/QueueConfirmation";
+import QRCodeGenerator from "./components/queue/QRCodeGenerator";
+
 const AppRoutes = () => {
     return (
         <Routes>
@@ -21,7 +28,15 @@ const AppRoutes = () => {
             <Route path="/reservations" element={<ReservationList />} />
             <Route path="/reservation/lookup" element={<ReservationLookup />} />
             <Route path="/update-reservation/:id" element={<ModifyReservation />} />
-        </Routes>
+
+            {/* Queue routes */}
+            <Route path="/queue/join" element={<QueueForm />} />
+            <Route path="/queue/status/:id" element={<QueueStatus />} />
+            <Route path="/queue/confirm/:id" element={<QueueConfirmation />} />
+
+            {/* Admin/Staff tools */}
+            <Route path="/admin/qrcode-generator" element={<QRCodeGenerator />} />
+               </Routes>
     );
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation, Navigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQueue } from "../../contexts/QueueContext";
 
 // Reusable Input Component
@@ -26,20 +26,16 @@ const QueueForm = () => {
     const location = useLocation();
     const { joinQueue, getQueueEstimation, queueEstimation, loading, error } = useQueue();
 
-    // Parse URL parameters (from QR code scan)
+    // Parse URL parameters (for QR code scan)
     const queryParams = new URLSearchParams(location.search);
     const outletIdFromQR = queryParams.get('outletId');
 
-    // Redirect to home if not accessed via QR code
-    if (!outletIdFromQR) {
-        return <Navigate to="/" replace />;
-    }
-
     // State for the form
     const [formData, setFormData] = useState({
-        outletId: outletIdFromQR,
+        outletId: outletIdFromQR || "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
         customerName: "",
         customerPhone: "",
+        customerEmail: "", // Added email field
         partySize: 2,
         specialRequests: ""
     });
@@ -51,13 +47,10 @@ const QueueForm = () => {
         { id: "9c3417c7-cc1f-4cd2-9c42-2a858271c2f5", name: "Riverside Branch", address: "789 River Road" }
     ]);
 
-    // Get the current outlet info
-    const currentOutlet = outlets.find(outlet => outlet.id === outletIdFromQR) || { name: "Restaurant", address: "Address unavailable" };
-
     // Local state for validation
     const [hasEstimation, setHasEstimation] = useState(false);
 
-    // Get wait time estimation when party size changes
+    // Get wait time estimation when party size or outlet changes
     useEffect(() => {
         const fetchEstimation = async () => {
             try {
@@ -71,7 +64,7 @@ const QueueForm = () => {
         if (formData.outletId && formData.partySize) {
             fetchEstimation();
         }
-    }, [formData.partySize, getQueueEstimation, formData.outletId]);
+    }, [formData.outletId, formData.partySize, getQueueEstimation]);
 
     // Handle form input changes
     const handleChange = (e) => {
@@ -118,19 +111,6 @@ const QueueForm = () => {
 
                 {/* Main Form */}
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-lg">
-                        <div className="flex items-start">
-                            <svg className="h-6 w-6 text-green-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <div>
-                                <h2 className="text-lg font-bold text-green-800">{currentOutlet.name}</h2>
-                                <p className="text-green-700">{currentOutlet.address}</p>
-                            </div>
-                        </div>
-                    </div>
-
                     <h2 className="text-2xl font-bold mb-6">Join Our Queue</h2>
 
                     {/* Estimated Wait Time Display */}
@@ -153,8 +133,35 @@ const QueueForm = () => {
                     )}
 
                     <form onSubmit={handleSubmit}>
-                        {/* Hidden input for outlet ID */}
-                        <input type="hidden" name="outletId" value={formData.outletId} />
+                        {/* Restaurant Selection - Only show if not from QR code */}
+                        {!outletIdFromQR && (
+                            <div className="mb-4">
+                                <label htmlFor="outletId" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Restaurant <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    id="outletId"
+                                    name="outletId"
+                                    value={formData.outletId}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    required
+                                >
+                                    {outlets.map(outlet => (
+                                        <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Show selected outlet name if from QR code */}
+                        {outletIdFromQR && (
+                            <div className="mb-4 bg-gray-50 p-4 rounded-lg">
+                                <p className="text-gray-600">
+                                    <strong>Restaurant:</strong> {outlets.find(o => o.id === outletIdFromQR)?.name || "Selected Restaurant"}
+                                </p>
+                            </div>
+                        )}
 
                         {/* Party Size */}
                         <div className="mb-4">
@@ -194,6 +201,17 @@ const QueueForm = () => {
                             onChange={handleChange}
                             required
                             placeholder="+60 12-345 6789"
+                        />
+
+                        {/* New Email Field */}
+                        <FormInput
+                            label="Email Address"
+                            type="email"
+                            name="customerEmail"
+                            value={formData.customerEmail}
+                            onChange={handleChange}
+                            required
+                            placeholder="john@example.com"
                         />
 
                         <div className="mb-6">
