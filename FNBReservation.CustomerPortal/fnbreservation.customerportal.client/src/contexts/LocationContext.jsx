@@ -1,5 +1,4 @@
-
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useCallback } from 'react';
 
 // Create context
 const LocationContext = createContext();
@@ -7,31 +6,38 @@ const LocationContext = createContext();
 export const useLocation = () => useContext(LocationContext);
 
 export const LocationProvider = ({ children }) => {
-    const [location, setLocation] = useState(null);
-    const [locationStatus, setLocationStatus] = useState('initial'); // 'initial', 'granted', 'denied', 'requesting', 'unavailable'
+    // Location status: 'initial', 'requesting', 'granted', 'denied', 'unavailable'
+    const [locationStatus, setLocationStatus] = useState(() => {
+        // Check localStorage for previously saved permission
+        const savedPermission = localStorage.getItem('locationPermission');
+        if (savedPermission === 'granted') return 'granted';
+        if (savedPermission === 'denied') return 'denied';
+        return 'initial';
+    });
 
-    useEffect(() => {
-        // Check stored permission on component mount
-        const storedPermission = localStorage.getItem('locationPermission');
+    // Current user location
+    const [userLocation, setUserLocation] = useState(null);
 
-        if (storedPermission === 'granted') {
-            requestLocationAccess();
-        } else if (storedPermission === 'denied') {
-            setLocationStatus('denied');
+    // Request location access
+    const requestLocationAccess = useCallback(() => {
+        // Skip if already granted or unavailable
+        if (locationStatus === 'granted' || locationStatus === 'unavailable') {
+            return;
         }
-    }, []);
 
-    const requestLocationAccess = () => {
+        // Check if geolocation is available
         if (!navigator.geolocation) {
             setLocationStatus('unavailable');
             return;
         }
 
+        // Request location
         setLocationStatus('requesting');
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                setLocation({
+                // Success
+                setUserLocation({
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude
                 });
@@ -39,30 +45,24 @@ export const LocationProvider = ({ children }) => {
                 localStorage.setItem('locationPermission', 'granted');
             },
             (error) => {
-                console.error('Error getting location:', error);
+                // Error
+                console.error('Location error:', error);
                 setLocationStatus('denied');
                 localStorage.setItem('locationPermission', 'denied');
             },
             {
                 enableHighAccuracy: true,
-                timeout: 5000,
+                timeout: 10000,
                 maximumAge: 0
             }
         );
-    };
-
-    const resetLocation = () => {
-        setLocation(null);
-        setLocationStatus('initial');
-        localStorage.removeItem('locationPermission');
-    };
+    }, [locationStatus]);
 
     // Context value
     const value = {
-        location,
         locationStatus,
-        requestLocationAccess,
-        resetLocation
+        userLocation,
+        requestLocationAccess
     };
 
     return (
