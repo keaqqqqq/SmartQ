@@ -27,7 +27,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: FNBReservation.API/Dockerfile
+      dockerfile: FNBReservation.MainAPI/Dockerfile
     container_name: fb_reservation_api
     restart: unless-stopped
     depends_on:
@@ -38,7 +38,7 @@ services:
       - "${API_HTTPS_PORT:-5001}:443"
     environment:
       - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
-      - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=${DB_DATABASE:-fb_reservation};User=${DB_USERNAME:-fbuser};Password=${DB_PASSWORD:-fbpassword};
+      - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
       - ASPNETCORE_URLS=http://+:80; #in production, Obtain a valid SSL certificate
     networks:
       - fb_reservation_network

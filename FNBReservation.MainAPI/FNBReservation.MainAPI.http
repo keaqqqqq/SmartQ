@@ -1,0 +1,6 @@
+@FNBReservation.API_HostAddress = http://localhost:5208
+
+GET {{FNBReservation.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
