@@ -227,7 +227,7 @@
     <!-- Summary Cards -->
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4">
+            <MudPaper Class=" summary-card pa-4">
                 <div class="d-flex justify-space-between">
                     <div>
                         <MudText Typo="Typo.overline">ACTIVE3 TABLES</MudText>
@@ -244,12 +244,12 @@
         </MudItem>
         
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="summary-card secondary-card pa-4">
+            <MudPaper Class="summary-card pa-4">
                 <div class="d-flex justify-space-between">
                     <div>
-                        <MudText Typo="Typo.overline" Style="color: rgba(255,255,255,0.7);">IN QUEUE</MudText>
-                        <MudText Typo="Typo.h2" Style="color: white;">@(_waitingQueue.Count)</MudText>
-                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+                        <MudText Typo="Typo.overline" >IN QUEUE</MudText>
+                        <MudText Typo="Typo.h2" Style="color: orangered;">@(_waitingQueue.Count)</MudText>
+                        <MudText Typo="Typo.body2">
                             Avg. Wait Time: @(GetAverageWaitTime())
                         </MudText>
                     </div>
@@ -259,14 +259,14 @@
         </MudItem>
         
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="summary-card success-card pa-4">
+            <MudPaper Class="summary-card pa-4">
                 <div class="d-flex justify-space-between">
                     <div>
-                        <MudText Typo="Typo.overline" Style="color: rgba(255,255,255,0.7);">AVAILABLE TABLES</MudText>
-                        <MudText Typo="Typo.h2" Style="color: white;">
+                        <MudText Typo="Typo.overline" >AVAILABLE TABLES</MudText>
+                        <MudText Typo="Typo.h2" Style="color: green;">
                             @(_reservationTables.Count(t => t.CurrentReservation == null) + _queueTables.Count(t => t.Status == "available"))
                         </MudText>
-                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+                        <MudText Typo="Typo.body2">
                             Ready for Seating
                         </MudText>
                     </div>
@@ -276,12 +276,12 @@
         </MudItem>
         
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="summary-card info-card pa-4">
+            <MudPaper Class="summary-card pa-4">
                 <div class="d-flex justify-space-between">
                     <div>
-                        <MudText Typo="Typo.overline" Style="color: rgba(255,255,255,0.7);">TODAY'S RESERVATIONS</MudText>
-                        <MudText Typo="Typo.h2" Style="color: white;">@(_totalReservations)</MudText>
-                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+                        <MudText Typo="Typo.overline">TODAY'S RESERVATIONS</MudText>
+                        <MudText Typo="Typo.h2" Style="color: deepskyblue;">@(_totalReservations)</MudText>
+                        <MudText Typo="Typo.body2" >
                             @(_reservationTables.Sum(t => t.UpcomingReservations.Count)) Upcoming
                         </MudText>
                     </div>
@@ -325,7 +325,7 @@
                                 <MudGrid>
                                     @foreach (var table in _reservationTables)
                                     {
-                                        <MudItem xs="12" sm="6" md="4">
+                                        <MudItem xs="12" md="6">
                                             <MudPaper Elevation="3" Class="table-card">
                                                 @if (table.CurrentReservation != null)
                                                 {
@@ -439,7 +439,7 @@
                                 <MudGrid>
                                     @foreach (var table in _queueTables)
                                     {
-                                        <MudItem xs="12" sm="6" md="4">
+                                        <MudItem xs="12" md="6">
                                             <MudPaper Elevation="3" Class="table-card">
                                                 @if (table.Status == "seated")
                                                 {
