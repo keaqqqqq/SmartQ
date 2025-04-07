@@ -1,4 +1,4 @@
-﻿@page "/outlet-dashboard"
+﻿@page "/"
 @using System.Linq
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
@@ -221,26 +221,20 @@
                 </MudText>
             </div>
         </div>
-        <div>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                      StartIcon="@Icons.Material.Filled.QrCodeScanner" 
-                      Class="mr-2" Size="Size.Medium">CHECK-IN CUSTOMER</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" 
-                      StartIcon="@Icons.Material.Filled.PersonAdd" Size="Size.Medium">ADD TO QUEUE</MudButton>
-        </div>
+
     </div>
 
     <!-- Summary Cards -->
     <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="summary-card primary-card pa-4">
+            <MudPaper Class="pa-4">
                 <div class="d-flex justify-space-between">
                     <div>
-                        <MudText Typo="Typo.overline" Style="color: rgba(255,255,255,0.7);">ACTIVE TABLES</MudText>
-                        <MudText Typo="Typo.h2" Style="color: white;">
+                        <MudText Typo="Typo.overline">ACTIVE3 TABLES</MudText>
+                        <MudText Typo="Typo.h2" Style="color: mediumpurple;">
                             @(_reservationTables.Count(t => t.CurrentReservation != null) + _queueTables.Count(t => t.Status == "seated"))
                         </MudText>
-                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+                        <MudText Typo="Typo.body2">
                             Occupancy Rate: @((_reservationTables.Count(t => t.CurrentReservation != null) + _queueTables.Count(t => t.Status == "seated")) * 100 / (_reservationTables.Count + _queueTables.Count))%
                         </MudText>
                     </div>
