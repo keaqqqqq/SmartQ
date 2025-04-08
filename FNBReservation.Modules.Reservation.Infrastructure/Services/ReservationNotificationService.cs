@@ -1,10 +1,9 @@
-﻿using System;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using System.Text;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
 using FNBReservation.Modules.Reservation.Core.Entities;
+using FNBReservation.Modules.Notification.Core.Interfaces;
 
 namespace FNBReservation.Modules.Reservation.Infrastructure.Services
 {
@@ -15,7 +14,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
         private readonly ILogger<ReservationNotificationService> _logger;
         private readonly IConfiguration _configuration;
 
-        // This class would need to be replaced with an actual WhatsApp API integration
+        // WhatsApp service for sending messages
         private readonly IWhatsAppService _whatsAppService;
 
         public ReservationNotificationService(
@@ -52,11 +51,38 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     return;
                 }
 
-                // Create confirmation message
-                var message = BuildConfirmationMessage(reservation, outlet.Name);
+                // Determine which method to use based on configuration
+                var useTemplates = _configuration.GetValue<bool>("WhatsAppApi:UseTemplates", false);
 
-                // Send the message first
-                await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                if (useTemplates)
+                {
+                    // Use template-based messaging
+                    var templateParams = new List<object>
+                    {
+                        reservation.CustomerName,
+                        outlet.Name,
+                        reservation.ReservationCode,
+                        reservation.ReservationDate.ToLocalTime().ToString("dddd, MMMM d, yyyy"),
+                        reservation.ReservationDate.ToLocalTime().ToString("h:mm tt"),
+                        GetAssignedTableNumbers(reservation),
+                        reservation.PartySize.ToString(),
+                        !string.IsNullOrEmpty(reservation.SpecialRequests) ?
+                        reservation.SpecialRequests : "None"
+                    };
+
+                    // Send using template
+                    await _whatsAppService.SendTemplateMessageAsync(
+                        reservation.CustomerPhone,
+                        "reservation_confirmation",
+                        templateParams
+                    );
+                }
+                else
+                {
+                    // Use regular text-based messaging
+                    var message = BuildConfirmationMessage(reservation, outlet.Name);
+                    await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                }
 
                 // Check if we already have this reminder - if this is called from ScheduleRemindersAsync
                 // the reminder record might already exist
@@ -74,7 +100,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                         SentAt = DateTime.UtcNow,
                         Status = "Sent",
                         Channel = "WhatsApp",
-                        Content = message
+                        Content = useTemplates ? "Template: reservation_confirmation" : "Text message"
                     };
 
                     // Save the reminder
@@ -86,7 +112,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     var reminder = existingReminders.First();
                     reminder.Status = "Sent";
                     reminder.SentAt = DateTime.UtcNow;
-                    reminder.Content = message;
+                    reminder.Content = useTemplates ? "Template: reservation_confirmation" : "Text message";
                     await _reservationRepository.UpdateReminderAsync(reminder);
                 }
 
@@ -119,16 +145,71 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     return;
                 }
 
-                // Create reminder message based on type
-                string message = reminderType switch
-                {
-                    "24Hour" => Build24HourReminderMessage(reservation, outlet.Name),
-                    "1Hour" => Build1HourReminderMessage(reservation, outlet.Name),
-                    _ => BuildGenericReminderMessage(reservation, outlet.Name)
-                };
+                // Determine which method to use based on configuration
+                var useTemplates = _configuration.GetValue<bool>("WhatsAppApi:UseTemplates", false);
+                string templateName = null;
+                List<object> templateParams = null;
 
-                // Send the message
-                await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                if (useTemplates)
+                {
+                    // Prepare template parameters based on reminder type
+                    switch (reminderType)
+                    {
+                        case "24Hour":
+                            templateName = "reservation_reminder_1day";
+                            templateParams = new List<object>
+                            {
+                                reservation.CustomerName,
+                                outlet.Name,
+                                reservation.ReservationCode,
+                                reservation.ReservationDate.ToLocalTime().ToString("dddd, MMMM d, yyyy"),
+                                reservation.ReservationDate.ToLocalTime().ToString("h:mm tt"),
+                                GetAssignedTableNumbers(reservation)
+                            };
+                            break;
+                        case "1Hour":
+                            templateName = "reservation_reminder_1h";
+                            templateParams = new List<object>
+                            {
+                                reservation.CustomerName,
+                                outlet.Name,
+                                reservation.ReservationCode,
+                                reservation.ReservationDate.ToLocalTime().ToString("h:mm tt"),
+                                GetAssignedTableNumbers(reservation)
+                            };
+                            break;
+                        default:
+                            // Fallback to regular messaging if no matching template
+                            useTemplates = false;
+                            break;
+                    }
+                }
+
+                string messageContent;
+                if (useTemplates && templateName != null)
+                {
+                    // Send using template
+                    await _whatsAppService.SendTemplateMessageAsync(
+                        reservation.CustomerPhone,
+                        templateName,
+                        templateParams
+                    );
+                    messageContent = $"Template: {templateName}";
+                }
+                else
+                {
+                    // Create reminder message based on type
+                    string message = reminderType switch
+                    {
+                        "24Hour" => Build24HourReminderMessage(reservation, outlet.Name),
+                        "1Hour" => Build1HourReminderMessage(reservation, outlet.Name),
+                        _ => BuildGenericReminderMessage(reservation, outlet.Name)
+                    };
+
+                    // Send the message
+                    await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                    messageContent = message;
+                }
 
                 // Check if we already have this reminder
                 var existingReminders = reservation.Reminders.Where(r => r.ReminderType == reminderType).ToList();
@@ -145,7 +226,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                         SentAt = DateTime.UtcNow,
                         Status = "Sent",
                         Channel = "WhatsApp",
-                        Content = message
+                        Content = messageContent
                     };
 
                     // Save the reminder
@@ -157,7 +238,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     var reminder = existingReminders.First();
                     reminder.Status = "Sent";
                     reminder.SentAt = DateTime.UtcNow;
-                    reminder.Content = message;
+                    reminder.Content = messageContent;
                     await _reservationRepository.UpdateReminderAsync(reminder);
                 }
 
@@ -191,8 +272,40 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     return;
                 }
 
-                // Create cancellation message
-                var message = BuildCancellationMessage(reservation, outlet.Name, reason);
+                // Determine which method to use based on configuration
+                var useTemplates = _configuration.GetValue<bool>("WhatsAppApi:UseTemplates", false);
+                string messageContent;
+
+                if (useTemplates)
+                {
+                    // Use template-based messaging
+                    var templateParams = new List<object>
+                    {
+                        reservation.CustomerName,
+                        outlet.Name,
+                        reservation.ReservationCode,
+                        reservation.ReservationDate.ToLocalTime().ToString("dddd, MMMM d, yyyy"),
+                        reservation.ReservationDate.ToLocalTime().ToString("h:mm tt"),
+                        !string.IsNullOrEmpty(reason) ? reason : "Canceled by request"
+                    };
+
+                    // Send using template
+                    await _whatsAppService.SendTemplateMessageAsync(
+                        reservation.CustomerPhone,
+                        "reservation_cancellation",
+                        templateParams
+                    );
+                    messageContent = "Template: reservation_cancellation";
+                }
+                else
+                {
+                    // Create cancellation message
+                    var message = BuildCancellationMessage(reservation, outlet.Name, reason);
+
+                    // Send the message
+                    await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                    messageContent = message;
+                }
 
                 // Log the notification in the database
                 var reminder = new ReservationReminder
@@ -204,11 +317,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     SentAt = DateTime.UtcNow,
                     Status = "Sent",
                     Channel = "WhatsApp",
-                    Content = message
+                    Content = messageContent
                 };
-
-                // Send the message
-                await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
 
                 // Save the notification
                 await _reservationRepository.AddReminderAsync(reminder);
@@ -242,8 +352,38 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     return;
                 }
 
-                // Create modification message
-                var message = BuildModificationMessage(reservation, outlet.Name, changes);
+                // Determine which method to use based on configuration
+                var useTemplates = _configuration.GetValue<bool>("WhatsAppApi:UseTemplates", false);
+                string messageContent;
+
+                if (useTemplates)
+                {
+                    // Use template-based messaging
+                    var templateParams = new List<object>
+                    {
+                        reservation.CustomerName,
+                        outlet.Name,
+                        reservation.ReservationCode,
+                        !string.IsNullOrEmpty(changes) ? changes : "Details updated"
+                    };
+
+                    // Send using template
+                    await _whatsAppService.SendTemplateMessageAsync(
+                        reservation.CustomerPhone,
+                        "reservation_modification",
+                        templateParams
+                    );
+                    messageContent = "Template: reservation_modification";
+                }
+                else
+                {
+                    // Create modification message
+                    var message = BuildModificationMessage(reservation, outlet.Name, changes);
+
+                    // Send the message
+                    await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
+                    messageContent = message;
+                }
 
                 // Log the notification in the database
                 var reminder = new ReservationReminder
@@ -255,11 +395,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     SentAt = DateTime.UtcNow,
                     Status = "Sent",
                     Channel = "WhatsApp",
-                    Content = message
+                    Content = messageContent
                 };
-
-                // Send the message
-                await _whatsAppService.SendMessageAsync(reservation.CustomerPhone, message);
 
                 // Save the notification
                 await _reservationRepository.AddReminderAsync(reminder);
@@ -336,6 +473,14 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 _logger.LogError(ex, "Error processing pending reminders");
                 throw;
             }
+        }
+
+        private string GetAssignedTableNumbers(ReservationEntity reservation)
+        {
+            if (reservation.TableAssignments == null || !reservation.TableAssignments.Any())
+                return "To be assigned";
+
+            return string.Join(", ", reservation.TableAssignments.Select(t => t.TableNumber));
         }
 
         #region Helper Methods
@@ -474,31 +619,5 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             return messageBuilder.ToString();
         }
         #endregion
-    }
-
-    // This interface would need to be implemented with an actual WhatsApp API integration
-    public interface IWhatsAppService
-    {
-        Task SendMessageAsync(string phoneNumber, string message);
-    }
-
-    // Mock implementation for example purposes
-    public class MockWhatsAppService : IWhatsAppService
-    {
-        private readonly ILogger<MockWhatsAppService> _logger;
-
-        public MockWhatsAppService(ILogger<MockWhatsAppService> logger)
-        {
-            _logger = logger;
-        }
-
-        public Task SendMessageAsync(string phoneNumber, string message)
-        {
-            _logger.LogInformation("MOCK: Sending WhatsApp message to {PhoneNumber}", phoneNumber);
-            _logger.LogDebug("Message content: {Message}", message);
-
-            // In a real implementation, this would call the WhatsApp API
-            return Task.CompletedTask;
-        }
     }
 }

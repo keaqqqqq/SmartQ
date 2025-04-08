@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using FNBReservation.Modules.Reservation.Core.DTOs;
+﻿using FNBReservation.Modules.Reservation.Core.DTOs;
 using FNBReservation.Modules.Reservation.Core.Entities;
 
 namespace FNBReservation.Modules.Reservation.Core.Interfaces
@@ -23,9 +20,19 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
         Task<bool> ReleaseTableHoldAsync(Guid tableHoldId);
         Task<TableHoldResponseDto> HoldTablesForReservationAsync(TableHoldRequestDto request);
         Task<TableHoldResponseDto> UpdateTableHoldTimeAsync(UpdateHoldTimeRequestDto request);
-
         Task<List<TimeSlotDto>> GetAlternativeTimeSlotsAsync(
             Guid outletId, DateTime referenceTime, int partySize, int rangeMinutes = 30);
+        Task<List<TimeSlotDto>> GetAlternativeTimesForHoldAsync(Guid holdId);
+
+        Task<ReservationSearchResultDto> SearchReservationsAsync(
+            List<Guid> outletIds,
+            string searchTerm,
+            List<string> statuses,
+            DateTime? startDate,
+            DateTime? endDate,
+            int page,
+            int pageSize,
+            bool isAdmin);
 
     }
 
@@ -54,7 +61,15 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
         Task<List<Guid>> GetHeldTableIdsForTimeSlotAsync(Guid outletId, DateTime startTime, DateTime endTime, string excludeSessionId = null);
         Task<bool> ReleaseTableHoldAsync(Guid tableHoldId);
         Task<TableHold> GetTableHoldByIdAsync(Guid holdId);
-
+        Task<(List<ReservationEntity> Reservations, int TotalCount)> SearchReservationsAsync(
+            List<Guid> outletIds,
+            string searchTerm,
+            List<string> statuses,
+            DateTime? startDate,
+            DateTime? endDate,
+            int page,
+            int pageSize);
+        Task<int> GetReservedTableCapacityAsync(Guid outletId, DateTime startTime, DateTime endTime);
     }
 
     public interface IReservationNotificationService

@@ -1,10 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Reservation.Core.DTOs;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
-using System.Runtime.InteropServices;
 
 namespace FNBReservation.Modules.Reservation.API.Controllers
 {
@@ -13,13 +10,19 @@ namespace FNBReservation.Modules.Reservation.API.Controllers
     public class ReservationController : ControllerBase
     {
         private readonly IReservationService _reservationService;
+        private readonly INearbyOutletsAvailabilityService _nearbyOutletsAvailabilityService;
+        private readonly FNBReservation.Modules.Outlet.Core.Interfaces.IGeolocationService _geolocationService;
         private readonly ILogger<ReservationController> _logger;
 
         public ReservationController(
             IReservationService reservationService,
+            INearbyOutletsAvailabilityService nearbyOutletsAvailabilityService,
+            FNBReservation.Modules.Outlet.Core.Interfaces.IGeolocationService geolocationService,
             ILogger<ReservationController> logger)
         {
             _reservationService = reservationService ?? throw new ArgumentNullException(nameof(reservationService));
+            _nearbyOutletsAvailabilityService = nearbyOutletsAvailabilityService ?? throw new ArgumentNullException(nameof(nearbyOutletsAvailabilityService));
+            _geolocationService = geolocationService ?? throw new ArgumentNullException(nameof(geolocationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -255,6 +258,139 @@ namespace FNBReservation.Modules.Reservation.API.Controllers
             {
                 _logger.LogError(ex, "Error getting alternative time slots");
                 return StatusCode(500, new { message = "An error occurred while retrieving alternative time slots" });
+            }
+        }
+
+        // In ReservationController.cs
+        [HttpGet("alternative-times-for-hold/{holdId}")]
+        public async Task<IActionResult> GetAlternativeTimesForHold(Guid holdId)
+        {
+            try
+            {
+                var timeSlots = await _reservationService.GetAlternativeTimesForHoldAsync(holdId);
+
+                return Ok(timeSlots);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting alternative times for hold: {HoldId}", holdId);
+                return StatusCode(500, new { message = "An error occurred while retrieving alternative times" });
+            }
+        }
+
+        [HttpPost("check-availability-with-nearby")]
+        public async Task<IActionResult> CheckAvailabilityWithNearby([FromBody] CheckAvailabilityWithNearbyRequestDto request)
+        {
+            _logger.LogInformation("Received check availability with nearby outlets request for outlet: {OutletId}", request.OutletId);
+
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                // First check availability at the original outlet
+                var availabilityRequest = new CheckAvailabilityRequestDto
+                {
+                    OutletId = request.OutletId,
+                    PartySize = request.PartySize,
+                    Date = request.Date,
+                    PreferredTime = request.PreferredTime
+                };
+
+                var availability = await _reservationService.CheckAvailabilityAsync(availabilityRequest);
+
+                // Create the combined response
+                var response = new CheckAvailabilityWithNearbyResponseDto
+                {
+                    OriginalOutletAvailability = availability,
+                    NearbyOutletsAvailability = null
+                };
+
+                // If preferred time is not available at the original outlet, check nearby outlets
+                if (availability.AvailableTimeSlots.Count == 0)
+                {
+                    // Only check nearby outlets if requested
+                    if (request.CheckNearbyOutlets)
+                    {
+                        var nearbyRequest = new NearbyOutletsAvailabilityRequestDto
+                        {
+                            OriginalOutletId = request.OutletId,
+                            PartySize = request.PartySize,
+                            Date = request.Date,
+                            PreferredTime = request.PreferredTime,
+                            HasLocationPermission = request.HasLocationPermission,
+                            Latitude = request.Latitude,
+                            Longitude = request.Longitude,
+                            MaxNearbyOutlets = request.MaxNearbyOutlets
+                        };
+
+                        response.NearbyOutletsAvailability = await _nearbyOutletsAvailabilityService.GetNearbyOutletsAvailabilityAsync(nearbyRequest);
+                    }
+                }
+
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking availability with nearby outlets for outlet: {OutletId}", request.OutletId);
+                return StatusCode(500, new { message = "An error occurred while checking availability" });
+            }
+        }
+
+        [HttpGet("nearest-outlet")]
+        public async Task<IActionResult> GetNearestOutlet([FromQuery] double latitude, [FromQuery] double longitude)
+        {
+            _logger.LogInformation("Finding nearest outlet for coordinates ({Latitude}, {Longitude})",
+                latitude, longitude);
+
+            try
+            {
+                // Validate coordinates
+                if (latitude < -90 || latitude > 90)
+                {
+                    return BadRequest(new { message = "Latitude must be between -90 and 90" });
+                }
+
+                if (longitude < -180 || longitude > 180)
+                {
+                    return BadRequest(new { message = "Longitude must be between -180 and 180" });
+                }
+
+                // Use GeolocationService to find the nearest outlet
+                var nearestOutlets = await _geolocationService.FindNearestOutletsAsync(latitude, longitude, 1);
+
+                if (!nearestOutlets.Any())
+                {
+                    return NotFound(new { message = "No outlets found nearby" });
+                }
+
+                var nearestOutlet = nearestOutlets.First();
+
+                // Return the nearest outlet with distance information
+                return Ok(new
+                {
+                    outletId = nearestOutlet.Id,
+                    name = nearestOutlet.Name,
+                    location = nearestOutlet.Location,
+                    distanceKm = Math.Round(_geolocationService.CalculateDistance(
+                        latitude, longitude,
+                        nearestOutlet.Latitude.GetValueOrDefault(),
+                        nearestOutlet.Longitude.GetValueOrDefault()), 1)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error finding nearest outlet for coordinates ({Latitude}, {Longitude})",
+                    latitude, longitude);
+                return StatusCode(500, new { message = "An error occurred while finding the nearest outlet" });
             }
         }
     }

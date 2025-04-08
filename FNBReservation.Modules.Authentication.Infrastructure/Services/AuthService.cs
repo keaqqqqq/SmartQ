@@ -60,7 +60,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             await _dbContext.SaveChangesAsync();
 
             // Calculate expiry time in seconds
-            var expiresIn = 900; // 15 minutes in seconds for access token
+            var expiresIn = 86400; // 15 minutes in seconds for access token
 
             return new AuthResult
             {

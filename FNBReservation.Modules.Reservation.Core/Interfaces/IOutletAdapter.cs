@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-namespace FNBReservation.Modules.Reservation.Core.Interfaces
+﻿namespace FNBReservation.Modules.Reservation.Core.Interfaces
 {
     public interface IOutletAdapter
     {

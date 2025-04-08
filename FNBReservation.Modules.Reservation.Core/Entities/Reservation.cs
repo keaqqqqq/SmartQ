@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace FNBReservation.Modules.Reservation.Core.Entities
+﻿namespace FNBReservation.Modules.Reservation.Core.Entities
 {
     public class ReservationEntity
     {

@@ -1,8 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
-using System.IO;
-
 namespace FNBReservation.Modules.Reservation.Infrastructure.Data
 {
     public class ReservationDbContextFactory : IDesignTimeDbContextFactory<ReservationDbContext>

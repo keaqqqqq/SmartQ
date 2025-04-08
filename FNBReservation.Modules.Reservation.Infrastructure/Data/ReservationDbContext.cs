@@ -1,7 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using FNBReservation.Modules.Reservation.Core.Entities;
-using System.Collections.Generic;
-using System.Reflection.Emit;
 using System.Text.Json;
 
 namespace FNBReservation.Modules.Reservation.Infrastructure.Data

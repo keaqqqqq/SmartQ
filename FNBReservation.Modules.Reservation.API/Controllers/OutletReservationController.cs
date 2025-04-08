@@ -11,7 +11,7 @@ namespace FNBReservation.Modules.Reservation.API.Controllers
 {
     [ApiController]
     [Route("api/v1/outlets/{outletId}/reservations")]
-    [Authorize(Policy = "StaffOnly")]  // Requires Admin or OutletStaff role
+    [Authorize(Policy = "StaffOnly")]
     public class OutletReservationController : ControllerBase
     {
         private readonly IReservationService _reservationService;
@@ -255,6 +255,59 @@ namespace FNBReservation.Modules.Reservation.API.Controllers
             }
         }
 
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchReservations(
+            [FromQuery] Guid outletId,
+            [FromQuery] string searchTerm = "",
+            [FromQuery] List<string> statuses = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                // Make sure the outlet ID is valid for the user
+                if (!await HasAccessToOutlet(outletId))
+                {
+                    return Forbid();
+                }
+
+                // Staff can only search within their assigned outlet
+                var result = await _reservationService.SearchReservationsAsync(
+                    new List<Guid> { outletId },
+                    searchTerm,
+                    statuses,
+                    startDate,
+                    endDate,
+                    page,
+                    pageSize,
+                    isAdmin: false);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching reservations for outlet: {OutletId}", outletId);
+                return StatusCode(500, new { message = "An error occurred while searching reservations" });
+            }
+        }
+
+        // In AdminReservationController.cs (and also in OutletReservationController for staff)
+        [HttpGet("statuses")]
+        public IActionResult GetReservationStatuses()
+        {
+            var statuses = new List<string>
+    {
+        "Pending",
+        "Confirmed",
+        "Completed",
+        "Canceled",
+        "NoShow"
+    };
+
+            return Ok(statuses);
+        }
         #region Helper Methods
         private Task<bool> HasAccessToOutlet(Guid outletId)
         {

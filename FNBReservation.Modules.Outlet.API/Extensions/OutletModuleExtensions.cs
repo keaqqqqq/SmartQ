@@ -35,9 +35,7 @@ namespace FNBReservation.Modules.Outlet.API.Extensions
             services.AddScoped<IGeolocationService, GeolocationService>();
             services.AddScoped<ITableService, TableService>();
             services.AddScoped<IPeakHourService, PeakHourService>();
-
-
-
+            services.AddScoped<ITableTypeService, TableTypeService>(); // Add this new service
             return services;
         }
     }

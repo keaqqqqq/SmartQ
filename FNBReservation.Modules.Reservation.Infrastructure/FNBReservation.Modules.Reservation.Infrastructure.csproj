@@ -22,5 +22,9 @@
 	<ItemGroup>
 		<ProjectReference Include="..\FNBReservation.Modules.Reservation.Core\FNBReservation.Modules.Reservation.Core.csproj" />
 		<ProjectReference Include="..\FNBReservation.Modules.Outlet.Core\FNBReservation.Modules.Outlet.Core.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Customer.Core\FNBReservation.Modules.Customer.Core.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Customer.Infrastructure\FNBReservation.Modules.Customer.Infrastructure.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Notification.Core\FNBReservation.Modules.Notification.Core.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Notification.Infrastructure\FNBReservation.Modules.Notification.Infrastructure.csproj" />
 	</ItemGroup>
 </Project>

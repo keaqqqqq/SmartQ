@@ -40,6 +40,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
       - ASPNETCORE_URLS=http://+:80; #in production, Obtain a valid SSL certificate
+      - WhatsAppApi__Enabled=${WHATSAPP_API_ENABLED:-false}
+      - WhatsAppApi__Token=${WHATSAPP_API_TOKEN:-}
+      - WhatsAppApi__PhoneNumberId=${WHATSAPP_API_PHONE_ID:-}
     networks:
       - fb_reservation_network
 

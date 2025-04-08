@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
 using FNBReservation.Modules.Outlet.Core.Interfaces;
-using static System.Runtime.InteropServices.Marshalling.IIUnknownCacheStrategy;
 using ReservationTableInfo = FNBReservation.Modules.Reservation.Core.Interfaces.TableInfo;
 
 namespace FNBReservation.Modules.Reservation.Infrastructure.Adapters

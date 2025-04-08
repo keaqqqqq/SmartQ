@@ -21,8 +21,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FNBReservation.Modules.Authentication.API\FNBReservation.Modules.Authentication.API.csproj" />
+    <ProjectReference Include="..\FNBReservation.Modules.Customer.API\FNBReservation.Modules.Customer.API.csproj" />
     <ProjectReference Include="..\FNBReservation.Modules.Outlet.API\FNBReservation.Modules.Outlet.API.csproj" />
 	<ProjectReference Include="..\FNBReservation.Modules.Reservation.API\FNBReservation.Modules.Reservation.API.csproj" />
+	<ProjectReference Include="..\FNBReservation.Modules.Queue.API\FNBReservation.Modules.Queue.API.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,5 @@
 ﻿// In FNBReservation.Modules.Reservation.Core/DTOs/TableHoldDto.cs
 using System.ComponentModel.DataAnnotations;
-
 public class UpdateHoldTimeRequestDto
 {
     [Required]

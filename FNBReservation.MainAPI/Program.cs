@@ -11,8 +11,12 @@ using FNBReservation.Modules.Outlet.API.Extensions;
 using FNBReservation.Modules.Outlet.Infrastructure.Data;
 using FNBReservation.Modules.Reservation.API.Extensions;
 using FNBReservation.Modules.Reservation.Infrastructure.Data;
-
-// Other module extensions
+using FNBReservation.Modules.Customer.API.Extensions;
+using FNBReservation.Modules.Customer.Infrastructure.Data;
+using FNBReservation.Modules.Queue.API.Extensions;
+using FNBReservation.Modules.Queue.Infrastructure.Data;
+using FNBReservation.Modules.Queue.Infrastructure.Hubs;
+using FNBReservation.Modules.Notification.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,6 +45,16 @@ startupLogger.LogInformation("======== APPLICATION STARTING ========");
 startupLogger.LogDebug("Debug logging is enabled");
 
 builder.Services.AddControllers();
+
+// Configure SignalR in more detail
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.MaximumReceiveMessageSize = 102400; // 100 KB
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+});
 
 // Add services to the container
 builder.Services.AddEndpointsApiExplorer();
@@ -124,6 +138,19 @@ builder.Services.AddAuthentication(options =>
             logger.LogWarning("Authentication challenge issued: {Error}, {ErrorDescription}",
                 context.Error, context.ErrorDescription);
             return Task.CompletedTask;
+        },
+        // Add support for WebSockets
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/queuehub"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
         }
     };
 });
@@ -144,14 +171,17 @@ builder.Services.AddCors(options =>
             "http://localhost:5002",     // Frontend in local dev (non-Docker)
             "https://localhost:5003",    // Frontend in local dev HTTPS (non-Docker)
             "http://localhost:5000",     // API in Docker (if testing from the same host)
-            "http://host.docker.internal:5002"  // Frontend from Docker to API
+            "http://host.docker.internal:5002",  // Frontend from Docker to API
+            "http://localhost:5500"     // Websocket testing
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
-        .AllowCredentials();
+        .AllowCredentials()
+        .SetIsOriginAllowed(origin => true); // For development - more restrictive in production
     });
 });
 
+// Add DB Contexts
 builder.Services.AddDbContext<FNBDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -162,9 +192,10 @@ builder.Services.AddDbContext<FNBDbContext>(options =>
 // Register modules
 builder.Services.AddAuthenticationModule(builder.Configuration);
 builder.Services.AddOutletModule(builder.Configuration);
-builder.Services.AddReservationModule(builder.Configuration); // Add this line
-
-// Other modules...
+builder.Services.AddReservationModule(builder.Configuration);
+builder.Services.AddCustomerModule(builder.Configuration);
+builder.Services.AddQueueModule(builder.Configuration);
+builder.Services.AddNotificationModule(builder.Configuration);
 
 var app = builder.Build();
 
@@ -229,9 +260,11 @@ app.Use(async (context, next) =>
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+app.UseRouting();              // Add this if missing
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<QueueHub>("/queuehub");
 
 // Apply migrations at startup
 using (var scope = app.Services.CreateScope())
@@ -239,12 +272,25 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     try
     {
+        // Apply Authentication DB migrations
+        var authContext = services.GetRequiredService<FNBDbContext>();
+        authContext.Database.Migrate();
+
+        // Apply Outlet DB migrations
         var outletContext = services.GetRequiredService<OutletDbContext>();
         outletContext.Database.Migrate();
 
-        // Add this section:
+        // Apply Reservation DB migrations
         var reservationContext = services.GetRequiredService<ReservationDbContext>();
         reservationContext.Database.Migrate();
+
+        // Apply Customer DB migrations
+        var customerContext = services.GetRequiredService<CustomerDbContext>();
+        customerContext.Database.Migrate();
+
+        // Apply Queue DB migrations
+        var queueContext = services.GetRequiredService<QueueDbContext>();
+        queueContext.Database.Migrate();
 
         app.Logger.LogInformation("Database migrations applied successfully");
     }

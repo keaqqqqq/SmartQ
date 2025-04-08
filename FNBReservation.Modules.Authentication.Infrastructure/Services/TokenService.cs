@@ -35,10 +35,10 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var key = Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]);
 
-                _logger.LogInformation("Generating access token for user: {Username}, ID: {Id}, UserId: {UserId}",
-                    user.Username, user.Id, user.UserId);
+                _logger.LogInformation("Generating access token for user: {Username}, ID: {Id}, UserId: {UserId}, Role: {Role}, OutletId: {OutletId}",
+                    user.Username, user.Id, user.UserId, user.Role, user.OutletId);
 
-                var claims = new[]
+                var claimsList = new List<Claim>
                 {
                     new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                     new Claim(ClaimTypes.Name, user.Username),
@@ -47,9 +47,16 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                     new Claim("UserId", user.UserId)
                 };
 
+                // Add OutletId claim for staff users (not for admins)
+                if (user.OutletId.HasValue && user.Role == "OutletStaff")
+                {
+                    claimsList.Add(new Claim("OutletId", user.OutletId.Value.ToString()));
+                    _logger.LogDebug("Added OutletId claim with value: {OutletId}", user.OutletId.Value);
+                }
+
                 var tokenDescriptor = new SecurityTokenDescriptor
                 {
-                    Subject = new ClaimsIdentity(claims),
+                    Subject = new ClaimsIdentity(claimsList),
                     Expires = DateTime.UtcNow.AddMinutes(15), // 15 minutes
                     SigningCredentials = new SigningCredentials(
                         new SymmetricSecurityKey(key),
@@ -136,7 +143,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 Success = true,
                 AccessToken = accessToken,
                 RefreshToken = newRefreshToken,
-                ExpiresIn = 900, // 15 minutes in seconds
+                ExpiresIn = 86400, // 15 minutes in seconds
                 Role = user.Role,
                 Username = user.Username
             };

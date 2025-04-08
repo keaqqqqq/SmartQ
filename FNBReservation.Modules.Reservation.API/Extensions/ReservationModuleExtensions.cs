@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// FNBReservation.Modules.Reservation.API/Extensions/ReservationModuleExtensions.cs
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
@@ -6,6 +7,7 @@ using FNBReservation.Modules.Reservation.Infrastructure.Services;
 using FNBReservation.Modules.Reservation.Infrastructure.Repositories;
 using FNBReservation.Modules.Reservation.Infrastructure.Adapters;
 using FNBReservation.Modules.Reservation.Infrastructure.Data;
+using FNBReservation.Modules.Notification.Infrastructure.Extensions;
 
 namespace FNBReservation.Modules.Reservation.API.Extensions
 {
@@ -25,21 +27,31 @@ namespace FNBReservation.Modules.Reservation.API.Extensions
                 )
             );
 
+            services.AddNotificationModule(configuration);
+
             // Register repositories
             services.AddScoped<IReservationRepository, ReservationRepository>();
 
             // Register services
             services.AddScoped<IReservationService, ReservationService>();
             services.AddScoped<IReservationNotificationService, ReservationNotificationService>();
-            services.AddScoped<IOutletAdapter, OutletAdapter>();
+            services.AddScoped<INearbyOutletsAvailabilityService, NearbyOutletsAvailabilityService>();
 
-            // Register the WhatsApp service (mock for development)
-            services.AddScoped<IWhatsAppService, MockWhatsAppService>();
-            // Add this line to AddReservationModule method
+            // Register adapters
+            services.AddScoped<IOutletAdapter, OutletAdapter>();
+            services.AddScoped<ICustomerAdapter, CustomerAdapter>();
+
+            // Register and configure WhatsApp service
+            services.AddHttpClient();
+
+            // Check if WhatsApp API is enabled in configuration
+            var useRealWhatsAppApi = configuration.GetValue<bool>("WhatsAppApi:Enabled", false);
+
+            // Register hosted service for table hold cleanup
             services.AddHostedService<TableHoldCleanupService>();
 
-            // Register hosted service for processing reminders (would be uncommented in the real implementation)
-            // services.AddHostedService<ReminderProcessingService>();
+            // Register hosted service for processing reminders
+            services.AddHostedService<ReminderProcessingService>();
 
             return services;
         }
