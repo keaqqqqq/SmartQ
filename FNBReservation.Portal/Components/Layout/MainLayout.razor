@@ -7,16 +7,28 @@
 <MudDialogProvider @rendermode="InteractiveServer" />
 
 <MudLayout>
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="3" Style="top: 0; height: 100%; padding-top: 0">
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudDrawerHeader>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center">
+                <MudImage Src="/images/logo-removebg-preview.png" Alt="SmartQ Logo" Width="40" Height="40" />
+                <MudText Typo="Typo.h6">SmartQ</MudText>
+            </MudStack>
+        </MudDrawerHeader>
+        <MudSpacer />
+       
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu></NavMenu>
     </MudDrawer>
+
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="p-0">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="my-4 pt-4">
             @Body
         </MudContainer>
     </MudMainContent>
 </MudLayout>
-
 @code {
     private bool _drawerOpen = true;
 

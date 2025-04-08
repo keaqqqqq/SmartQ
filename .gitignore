@@ -354,3 +354,4 @@ FodyWeavers.xsd
 
 # Environment variables
 .env
+/.cursor/rules/my-custom-rule.mdc
