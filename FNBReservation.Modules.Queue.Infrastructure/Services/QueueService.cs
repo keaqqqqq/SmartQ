@@ -283,12 +283,14 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                 queueEntry.Status = statusUpdateDto.Status;
                 queueEntry.UpdatedAt = DateTime.UtcNow;
 
+                // Handle specific status updates
                 switch (statusUpdateDto.Status)
                 {
                     case "Called":
                         queueEntry.CalledAt = DateTime.UtcNow;
                         queueEntry.QueuePosition = 0;
-                        await ReorderQueueAsync(queueEntry.OutletId);
+                        // Remove this call to ReorderQueueAsync - we'll do it once at the end
+                        // await ReorderQueueAsync(queueEntry.OutletId);
                         break;
                     case "Seated":
                         queueEntry.SeatedAt = DateTime.UtcNow;
@@ -311,11 +313,9 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                 };
 
                 await _queueRepository.AddStatusChangeAsync(statusChange);
-
-                // Update the queue entry
                 var updatedEntry = await _queueRepository.UpdateAsync(queueEntry);
 
-                // Update table assignments if status changed to Seated or Completed
+                // Update table assignments if needed
                 if (statusUpdateDto.Status == "Seated")
                 {
                     foreach (var assignment in queueEntry.TableAssignments)
@@ -336,38 +336,35 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                     }
                 }
 
-                // If status changed to one that should reduce wait times for others, update wait times
-                if (statusUpdateDto.Status == "Called" || statusUpdateDto.Status == "Seated" ||
-                    statusUpdateDto.Status == "Completed" || statusUpdateDto.Status == "NoShow" ||
-                    statusUpdateDto.Status == "Cancelled")
-                {
-                    // Always reorder the queue when status changes
-                    await ReorderQueueAsync(updatedEntry.OutletId);
-
-                    // Update wait times for all remaining customers
-                    await UpdateWaitTimesAsync(updatedEntry.OutletId);
-                }
-
-                // If status changed to Called, send notification
+                // Send table ready notification if status changed to Called
                 if (statusUpdateDto.Status == "Called")
                 {
                     await _notificationService.SendTableReadyNotificationAsync(updatedEntry.Id);
                 }
 
-                // If status changed to one that removes from active queue, reorder the queue
-                if (statusUpdateDto.Status == "Seated" ||
-                    statusUpdateDto.Status == "Completed" ||
-                    statusUpdateDto.Status == "NoShow" ||
-                    statusUpdateDto.Status == "Cancelled")
+                // Single consolidated check to determine if we need to reorder and update wait times
+                bool shouldReorderAndUpdate = statusUpdateDto.Status == "Called" ||
+                                             statusUpdateDto.Status == "Seated" ||
+                                             statusUpdateDto.Status == "Completed" ||
+                                             statusUpdateDto.Status == "NoShow" ||
+                                             statusUpdateDto.Status == "Cancelled";
+
+                if (shouldReorderAndUpdate)
                 {
+                    // This single call will handle both reordering and notifications
                     await ReorderQueueAsync(updatedEntry.OutletId);
+
+                    // Update wait times for all remaining customers
+                    await UpdateWaitTimesAsync(updatedEntry.OutletId);
+                }
+                else
+                {
+                    // Only notify about this specific customer's status change
+                    await NotifyCustomerOfQueueStatusUpdateAsync(updatedEntry);
                 }
 
-                // Notify clients about queue update
-                await _queueHub.NotifyQueueUpdated(updatedEntry.OutletId);
-
-                // Update specific customer's view
-                await NotifyCustomerOfQueueStatusUpdateAsync(updatedEntry);
+                // Remove this direct call - we're centralizing notifications through ReorderQueueAsync
+                // await _queueHub.NotifyQueueUpdated(updatedEntry.OutletId);
 
                 var outlet = await _outletService.GetOutletByIdAsync(updatedEntry.OutletId);
                 return await MapToQueueEntryDtoAsync(updatedEntry, outlet?.Name ?? "Unknown Outlet");
@@ -785,7 +782,7 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                     throw new ArgumentException($"Table with ID {tableId} not found");
                 }
 
-                // Get recommendation for this table - this uses our improved algorithm
+                // Get recommendation for this table
                 var recommendation = await GetTableRecommendationAsync(outletId, tableId);
 
                 // Get all waiting entries to properly track which ones are skipped
@@ -829,12 +826,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                             StaffId = staffId
                         };
 
-                        var result = await AssignTableToQueueEntryAsync(queueEntry.Id, assignTableDto);
-
-                        // Reorder the queue after assigning a table
-                        await ReorderQueueAsync(outletId);
-
-                        return result;
+                        // AssignTableToQueueEntryAsync will handle the necessary reordering internally
+                        return await AssignTableToQueueEntryAsync(queueEntry.Id, assignTableDto);
                     }
                 }
 
@@ -854,12 +847,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                     StaffId = staffId
                 };
 
-                var response = await AssignTableToQueueEntryAsync(nextCustomer.Id, assignTableRequest);
-
-                // Always reorder the queue after assigning a table
-                await ReorderQueueAsync(outletId);
-
-                return response;
+                // Remove the explicit call to ReorderQueueAsync below, as it will be handled in AssignTableToQueueEntryAsync
+                return await AssignTableToQueueEntryAsync(nextCustomer.Id, assignTableRequest);
             }
             catch (Exception ex)
             {
