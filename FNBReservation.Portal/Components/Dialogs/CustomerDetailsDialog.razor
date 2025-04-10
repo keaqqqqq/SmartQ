@@ -173,7 +173,7 @@
                                 <MudTh>Outlet</MudTh>
                                 <MudTh>Guests</MudTh>
                                 <MudTh>Status</MudTh>
-                                <MudTh>Notes</MudTh>
+                                <MudTh>Special Request</MudTh>
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Date">@context.ReservationDate.ToString("d MMM yyyy HH:mm")</MudTd>
@@ -184,39 +184,10 @@
                                         @context.Status
                                     </MudChip>
                                 </MudTd>
-                                <MudTd DataLabel="Notes">@context.Notes</MudTd>
+                                <MudTd DataLabel="Notes">@context.Notes</MudTd> 
                             </RowTemplate>
                         </MudTable>
                     }
-                </MudTabPanel>
-
-                <MudTabPanel Icon="@Icons.Material.Filled.Notes" Text="NOTES">
-                    <div class="pa-4">
-                        @if (!string.IsNullOrEmpty(customer.Notes))
-                        {
-                            <div class="mb-6">
-                                @((MarkupString)FormatNotes(customer.Notes))
-                            </div>
-                        }
-                        else
-                        {
-                            <MudText Class="mb-6">No notes available for this customer.</MudText>
-                        }
-
-                        <MudPaper Elevation="0" Class="pa-0">
-                            <MudTextField @bind-Value="newNote" Placeholder="Add Note"
-                                          Variant="Variant.Outlined" Lines="3" FullWidth="true"
-                                          Class="mb-2" />
-
-                            <div class="d-flex justify-end">
-                                <MudButton Variant="Variant.Filled" Color="Color.Default"
-                                           OnClick="SaveNote" Disabled="@string.IsNullOrWhiteSpace(newNote)"
-                                           Style="text-transform: uppercase;">
-                                    Save Note
-                                </MudButton>
-                            </div>
-                        </MudPaper>
-                    </div>
                 </MudTabPanel>
             </MudTabs>
         }

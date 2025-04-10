@@ -157,7 +157,7 @@ class QueueService {
                     partySize: 4,
                     position: position,
                     estimatedWaitTime: position * 8, // Each position is about 8 mins
-                    status: "Seated",
+                    status: "Waiting",
                     joinedAt: new Date(Date.now() - 20 * 60000).toISOString(), // Joined 20 mins ago
                     specialRequests: "Prefer window seat"
                 });
