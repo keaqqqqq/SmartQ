@@ -40,6 +40,9 @@ namespace FNBReservation.Modules.Queue.API.Extensions
             services.AddScoped<IQueueNotificationService, QueueNotificationService>();
             services.AddScoped<IWaitTimeEstimationService, WaitTimeEstimationService>();
 
+            services.AddScoped<IQueueMaintenanceService, QueueMaintenanceService>();
+            services.AddHostedService<QueueCleanupBackgroundService>();
+
             return services;
         }
     }

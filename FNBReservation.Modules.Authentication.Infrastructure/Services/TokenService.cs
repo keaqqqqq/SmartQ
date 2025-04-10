@@ -12,6 +12,7 @@ using FNBReservation.Modules.Authentication.Core.Entities;
 using FNBReservation.Modules.Authentication.Core.Interfaces;
 using FNBReservation.Modules.Authentication.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http;
 
 namespace FNBReservation.Modules.Authentication.Infrastructure.Services
 {
@@ -20,12 +21,18 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
         private readonly IConfiguration _configuration;
         private readonly FNBDbContext _dbContext;
         private readonly ILogger<TokenService> _logger;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public TokenService(IConfiguration configuration, FNBDbContext dbContext, ILogger<TokenService> logger)
+        public TokenService(
+            IConfiguration configuration,
+            FNBDbContext dbContext,
+            ILogger<TokenService> logger,
+            IHttpContextAccessor httpContextAccessor)
         {
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
         }
 
         public string GenerateAccessToken(User user)
@@ -75,6 +82,9 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 _logger.LogDebug("Token contains expected dots: {DotsCount}",
                     encodedToken.Count(c => c == '.'));
 
+                // Set the JWT token as a HTTP-only cookie
+                SetAccessTokenCookie(encodedToken);
+
                 return encodedToken;
             }
             catch (Exception ex)
@@ -93,11 +103,25 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             var refreshToken = Convert.ToBase64String(randomNumber);
             var expiryTime = DateTime.UtcNow.AddDays(7); // Refresh token valid for 7 days
 
+            // Set refresh token as a HTTP-only cookie
+            SetRefreshTokenCookie(refreshToken, expiryTime);
+
             return (refreshToken, expiryTime);
         }
 
         public async Task<TokenResult> RefreshTokenAsync(string refreshToken)
         {
+            // If refresh token wasn't provided in the request body, try to get it from the cookie
+            if (string.IsNullOrEmpty(refreshToken) && _httpContextAccessor.HttpContext != null)
+            {
+                refreshToken = _httpContextAccessor.HttpContext.Request.Cookies["refreshToken"];
+
+                if (string.IsNullOrEmpty(refreshToken))
+                {
+                    return new TokenResult { Success = false, ErrorMessage = "Refresh token not found" };
+                }
+            }
+
             // Find the refresh token in the database
             var storedToken = await _dbContext.RefreshTokens
                 .Include(rt => rt.User)
@@ -113,6 +137,10 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             {
                 storedToken.IsRevoked = true;
                 await _dbContext.SaveChangesAsync();
+
+                // Clear the cookies if token is expired
+                ClearAuthCookies();
+
                 return new TokenResult { Success = false, ErrorMessage = "Refresh token expired" };
             }
 
@@ -143,7 +171,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 Success = true,
                 AccessToken = accessToken,
                 RefreshToken = newRefreshToken,
-                ExpiresIn = 86400, // 15 minutes in seconds
+                ExpiresIn = 900, // 15 minutes in seconds
                 Role = user.Role,
                 Username = user.Username
             };
@@ -151,6 +179,17 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
 
         public async Task<bool> RevokeRefreshTokenAsync(string refreshToken)
         {
+            // If refresh token wasn't provided, try to get it from the cookie
+            if (string.IsNullOrEmpty(refreshToken) && _httpContextAccessor.HttpContext != null)
+            {
+                refreshToken = _httpContextAccessor.HttpContext.Request.Cookies["refreshToken"];
+
+                if (string.IsNullOrEmpty(refreshToken))
+                {
+                    return false;
+                }
+            }
+
             var storedToken = await _dbContext.RefreshTokens
                 .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
 
@@ -162,6 +201,9 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             storedToken.IsRevoked = true;
             await _dbContext.SaveChangesAsync();
 
+            // Clear the auth cookies
+            ClearAuthCookies();
+
             return true;
         }
 
@@ -169,6 +211,17 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
         {
             try
             {
+                // If token wasn't provided in the request body, try to get it from the cookie
+                if (string.IsNullOrEmpty(token) && _httpContextAccessor.HttpContext != null)
+                {
+                    token = _httpContextAccessor.HttpContext.Request.Cookies["accessToken"];
+
+                    if (string.IsNullOrEmpty(token))
+                    {
+                        throw new SecurityTokenException("Access token not found");
+                    }
+                }
+
                 var tokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -207,6 +260,53 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             {
                 _logger.LogError(ex, "Error validating token");
                 throw;
+            }
+        }
+
+        // Helper methods for managing cookies
+        private void SetAccessTokenCookie(string token)
+        {
+            if (_httpContextAccessor.HttpContext != null)
+            {
+                var cookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = _configuration.GetValue<bool>("Cookies:SecureOnly", true), // Set to true in production
+                    SameSite = SameSiteMode.Strict,
+                    Expires = DateTime.UtcNow.AddMinutes(15), // Match token expiry
+                    Path = "/"
+                };
+
+                _httpContextAccessor.HttpContext.Response.Cookies.Append("accessToken", token, cookieOptions);
+                _logger.LogDebug("Access token cookie set");
+            }
+        }
+
+        private void SetRefreshTokenCookie(string token, DateTime expires)
+        {
+            if (_httpContextAccessor.HttpContext != null)
+            {
+                var cookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = _configuration.GetValue<bool>("Cookies:SecureOnly", true), // Set to true in production
+                    SameSite = SameSiteMode.Strict,
+                    Expires = expires,
+                    Path = "/"
+                };
+
+                _httpContextAccessor.HttpContext.Response.Cookies.Append("refreshToken", token, cookieOptions);
+                _logger.LogDebug("Refresh token cookie set");
+            }
+        }
+
+        private void ClearAuthCookies()
+        {
+            if (_httpContextAccessor.HttpContext != null)
+            {
+                _httpContextAccessor.HttpContext.Response.Cookies.Delete("accessToken");
+                _httpContextAccessor.HttpContext.Response.Cookies.Delete("refreshToken");
+                _logger.LogDebug("Auth cookies cleared");
             }
         }
     }
