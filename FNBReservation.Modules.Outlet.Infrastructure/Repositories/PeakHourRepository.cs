@@ -51,16 +51,6 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<IEnumerable<PeakHourSetting>> GetRamadanSettingsByOutletIdAsync(Guid outletId)
-        {
-            _logger.LogInformation("Getting all Ramadan settings for outlet {OutletId}", outletId);
-
-            return await _dbContext.PeakHourSettings
-                .Where(p => p.OutletId == outletId && p.IsRamadanSetting)
-                .OrderBy(p => p.StartTime)
-                .ToListAsync();
-        }
-
         public async Task<IEnumerable<PeakHourSetting>> GetActiveSettingsForDateAsync(Guid outletId, DateTime date)
         {
             _logger.LogInformation("Getting active peak hour settings for outlet {OutletId} on date {Date}",
@@ -72,30 +62,13 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
 
             string dayOfWeekStr = dayOfWeek.ToString();
 
-            // Get active standard settings for this day of week
-            var standardSettings = await _dbContext.PeakHourSettings
+            // Get active settings for this day of week
+            return await _dbContext.PeakHourSettings
                 .Where(p => p.OutletId == outletId
                        && p.IsActive
-                       && !p.IsRamadanSetting
                        && p.DaysOfWeek.Contains(dayOfWeekStr))
                 .OrderBy(p => p.StartTime)
                 .ToListAsync();
-
-            // Check if today is within any Ramadan period
-            var ramadanSettings = await _dbContext.PeakHourSettings
-                .Where(p => p.OutletId == outletId
-                       && p.IsActive
-                       && p.IsRamadanSetting
-                       && p.RamadanStartDate.HasValue
-                       && p.RamadanEndDate.HasValue
-                       && date.Date >= p.RamadanStartDate.Value.Date
-                       && date.Date <= p.RamadanEndDate.Value.Date
-                       && p.DaysOfWeek.Contains(dayOfWeekStr))
-                .OrderBy(p => p.StartTime)
-                .ToListAsync();
-
-            // If we're in Ramadan, return Ramadan settings, otherwise return standard settings
-            return ramadanSettings.Any() ? ramadanSettings : standardSettings;
         }
 
         public async Task<PeakHourSetting> GetActiveSettingForDateTimeAsync(Guid outletId, DateTime dateTime)

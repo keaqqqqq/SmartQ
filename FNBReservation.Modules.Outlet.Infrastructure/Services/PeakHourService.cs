@@ -56,29 +56,10 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
                 EndTime = createDto.EndTime,
                 ReservationAllocationPercent = createDto.ReservationAllocationPercent,
                 IsActive = createDto.IsActive,
-                IsRamadanSetting = createDto.IsRamadanSetting,
-                RamadanStartDate = createDto.RamadanStartDate,
-                RamadanEndDate = createDto.RamadanEndDate,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 CreatedBy = userId
             };
-
-            // For Ramadan settings, make sure dates are provided
-            if (peakHourSetting.IsRamadanSetting)
-            {
-                if (!peakHourSetting.RamadanStartDate.HasValue || !peakHourSetting.RamadanEndDate.HasValue)
-                {
-                    _logger.LogWarning("Ramadan start and end dates must be provided for Ramadan settings");
-                    throw new ArgumentException("Ramadan start and end dates must be provided for Ramadan settings");
-                }
-
-                if (peakHourSetting.RamadanEndDate < peakHourSetting.RamadanStartDate)
-                {
-                    _logger.LogWarning("Ramadan end date must be after Ramadan start date");
-                    throw new ArgumentException("Ramadan end date must be after Ramadan start date");
-                }
-            }
 
             // Save to database
             var createdSetting = await _peakHourRepository.CreateAsync(peakHourSetting);
@@ -105,14 +86,6 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
             _logger.LogInformation("Getting all peak hour settings for outlet {OutletId}", outletId);
 
             var settings = await _peakHourRepository.GetByOutletIdAsync(outletId);
-            return settings.Select(MapToPeakHourSettingDto);
-        }
-
-        public async Task<IEnumerable<PeakHourSettingDto>> GetRamadanSettingsByOutletIdAsync(Guid outletId)
-        {
-            _logger.LogInformation("Getting Ramadan settings for outlet {OutletId}", outletId);
-
-            var settings = await _peakHourRepository.GetRamadanSettingsByOutletIdAsync(outletId);
             return settings.Select(MapToPeakHourSettingDto);
         }
 
@@ -158,37 +131,11 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
             if (updateDto.IsActive.HasValue)
                 setting.IsActive = updateDto.IsActive.Value;
 
-            if (updateDto.IsRamadanSetting.HasValue)
-                setting.IsRamadanSetting = updateDto.IsRamadanSetting.Value;
-
-            // Update Ramadan dates if provided
-            if (updateDto.RamadanStartDate.HasValue)
-                setting.RamadanStartDate = updateDto.RamadanStartDate;
-
-            if (updateDto.RamadanEndDate.HasValue)
-                setting.RamadanEndDate = updateDto.RamadanEndDate;
-
             // Validate times
             if (setting.EndTime <= setting.StartTime)
             {
                 _logger.LogWarning("End time must be after start time");
                 throw new ArgumentException("End time must be after start time");
-            }
-
-            // For Ramadan settings, make sure dates are provided
-            if (setting.IsRamadanSetting)
-            {
-                if (!setting.RamadanStartDate.HasValue || !setting.RamadanEndDate.HasValue)
-                {
-                    _logger.LogWarning("Ramadan start and end dates must be provided for Ramadan settings");
-                    throw new ArgumentException("Ramadan start and end dates must be provided for Ramadan settings");
-                }
-
-                if (setting.RamadanEndDate < setting.RamadanStartDate)
-                {
-                    _logger.LogWarning("Ramadan end date must be after Ramadan start date");
-                    throw new ArgumentException("Ramadan end date must be after Ramadan start date");
-                }
             }
 
             setting.UpdatedAt = DateTime.UtcNow;
@@ -247,10 +194,7 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
                 StartTime = entity.StartTime,
                 EndTime = entity.EndTime,
                 ReservationAllocationPercent = entity.ReservationAllocationPercent,
-                IsActive = entity.IsActive,
-                IsRamadanSetting = entity.IsRamadanSetting,
-                RamadanStartDate = entity.RamadanStartDate,
-                RamadanEndDate = entity.RamadanEndDate
+                IsActive = entity.IsActive
             };
         }
     }

@@ -4,16 +4,19 @@ using FNBReservation.Modules.Outlet.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace FNBReservation.Modules.Outlet.Infrastructure.Migrations
+namespace FNBReservation.Modules.Outlet.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(OutletDbContext))]
-    partial class OutletDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250411032814_RemoveRamadan")]
+    partial class RemoveRamadan
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
