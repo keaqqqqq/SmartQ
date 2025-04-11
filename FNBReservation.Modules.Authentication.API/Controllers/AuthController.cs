@@ -61,32 +61,29 @@ namespace FNBReservation.Modules.Authentication.API.Controllers
             if (!authResult.Success)
                 return Unauthorized(new { message = authResult.ErrorMessage });
 
+            // Tokens are now set as HTTP-only cookies by the TokenService
+            // Return minimal information to the client
             return Ok(new
             {
-                accessToken = authResult.AccessToken,
-                refreshToken = authResult.RefreshToken,
-                expiresIn = authResult.ExpiresIn,
+                success = true,
                 role = authResult.Role,
                 username = authResult.Username
             });
         }
 
         [HttpPost("refresh-token")]
-        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
+        public async Task<IActionResult> RefreshToken()
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var tokenResult = await _tokenService.RefreshTokenAsync(refreshTokenDto.RefreshToken);
+            // No need to explicitly pass the refresh token as it's retrieved from the cookie
+            var tokenResult = await _tokenService.RefreshTokenAsync();
 
             if (!tokenResult.Success)
                 return Unauthorized(new { message = tokenResult.ErrorMessage });
 
+            // Return minimal information as tokens are in cookies
             return Ok(new
             {
-                accessToken = tokenResult.AccessToken,
-                refreshToken = tokenResult.RefreshToken,
-                expiresIn = tokenResult.ExpiresIn,
+                success = true,
                 role = tokenResult.Role,
                 username = tokenResult.Username
             });
@@ -124,87 +121,26 @@ namespace FNBReservation.Modules.Authentication.API.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
-            // Try to get the user ID from the NameIdentifier claim
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            Console.WriteLine($"Initial userId from NameIdentifier: {userId ?? "null"}");
-
-            // If that fails, try to get it from the "nameid" claim directly
-            if (string.IsNullOrEmpty(userId))
-            {
-                userId = User.FindFirst("nameid")?.Value;
-                Console.WriteLine($"userId from 'nameid' claim: {userId ?? "null"}");
-            }
-
-            // If we still don't have a user ID, try the "UserId" custom claim
-            if (string.IsNullOrEmpty(userId))
-            {
-                userId = User.FindFirst("UserId")?.Value;
-                Console.WriteLine($"userId from 'UserId' claim: {userId ?? "null"}");
-            }
-
-            // Finally, try to use any available identifier
-            if (string.IsNullOrEmpty(userId))
-            {
-                userId = User.FindFirst(ClaimTypes.Name)?.Value ??
-                        User.FindFirst("unique_name")?.Value;
-                Console.WriteLine($"userId from Name or unique_name: {userId ?? "null"}");
-            }
-
-            // Log all claims for debugging
-            Console.WriteLine("All claims in the token:");
-            foreach (var claim in User.Claims)
-            {
-                Console.WriteLine($"Claim: {claim.Type} = {claim.Value}");
-            }
-
-            // If we still don't have any identifier, return unauthorized
-            if (string.IsNullOrEmpty(userId))
-            {
-                Console.WriteLine("No valid user identifier found in token");
-                return Unauthorized(new { message = "User identifier not found in token" });
-            }
-
-            Console.WriteLine($"Final userId being passed to LogoutAsync: {userId}");
-
             try
             {
-                // Process the logout
+                // Get the user ID from the claims
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { message = "User identifier not found in token" });
+                }
+
+                // Process the logout - this will revoke tokens and clear cookies
                 await _authService.LogoutAsync(userId);
+
                 return Ok(new { message = "Logged out successfully" });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Exception in logout: {ex.Message}");
-                return StatusCode(500, new { message = "Error during logout process", error = ex.Message });
+                _logger.LogError(ex, "Error during logout process");
+                return StatusCode(500, new { message = "Error during logout process" });
             }
         }
-
-
-
-        /// <summary>
-        /// FOR DEVELOPMENT TESTING ONLY - DO NOT USE IN PRODUCTION
-        /// </summary>
-        [HttpPost("test-email")]
-        public async Task<IActionResult> TestEmailService([FromBody] TestEmailDto testEmailDto)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            try
-            {
-                // Generate a test token
-                var testToken = Guid.NewGuid().ToString();
-
-                // Send test email
-                await _emailService.SendPasswordResetEmailAsync(testEmailDto.Email, testToken);
-
-                return Ok(new { message = $"Test email sent to {testEmailDto.Email}" });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = $"Failed to send email: {ex.Message}" });
-            }
-        }
-
     }
 }

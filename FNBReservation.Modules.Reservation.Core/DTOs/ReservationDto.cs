@@ -58,6 +58,11 @@ namespace FNBReservation.Modules.Reservation.Core.DTOs
 
         [StringLength(500, ErrorMessage = "Special requests cannot exceed 500 characters")]
         public string? SpecialRequests { get; set; }
+
+        // Optional hold information
+        public Guid? HoldId { get; set; }
+
+        public string? SessionId { get; set; }
     }
 
     public class CancelReservationDto

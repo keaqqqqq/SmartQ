@@ -33,7 +33,6 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
             int page,
             int pageSize,
             bool isAdmin);
-
     }
 
     public interface IReservationRepository
@@ -70,6 +69,8 @@ namespace FNBReservation.Modules.Reservation.Core.Interfaces
             int page,
             int pageSize);
         Task<int> GetReservedTableCapacityAsync(Guid outletId, DateTime startTime, DateTime endTime);
+        Task<List<ReservationReminder>> GetAllRemindersByReservationIdAsync(Guid reservationId);
+
     }
 
     public interface IReservationNotificationService

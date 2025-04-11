@@ -444,5 +444,12 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
                 return await GetReservedCapacityForTimeSlotAsync(outletId, startTime, endTime);
             }
         }
+
+        public async Task<List<ReservationReminder>> GetAllRemindersByReservationIdAsync(Guid reservationId)
+        {
+            return await _dbContext.Reminders
+                .Where(r => r.ReservationId == reservationId)
+                .ToListAsync();
+        }
     }
 }

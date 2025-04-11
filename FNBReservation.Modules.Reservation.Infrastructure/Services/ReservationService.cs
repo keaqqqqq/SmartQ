@@ -4,6 +4,7 @@ using FNBReservation.Modules.Reservation.Core.Entities;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
 using ReservationTableInfo = FNBReservation.Modules.Reservation.Core.Interfaces.TableInfo;
 using FNBReservation.Modules.Outlet.Core.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 // Ensure that the ICustomerAdapter interface is defined in the FNBReservation.Modules.Reservation.Core.Adapters namespace
 namespace FNBReservation.Modules.Reservation.Infrastructure.Services
@@ -127,8 +128,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     // Calculate the capacity of tables already reserved (this is the key fix)
                     int reservedCapacity = reservedTables.Sum(t => t.Capacity);
 
-                    // Calculate the max capacity allowed for reservations based on allocation percentage
-                    int maxReservationCapacity = (int)Math.Ceiling(totalCapacity * (preferredSettings.ReservationAllocationPercent / 100.0));
+                    var reservationTables = await _tableTypeService.GetReservationTablesAsync(request.OutletId, exactPreferredDateTime);
+                    int maxReservationCapacity = reservationTables.Sum(t => t.Capacity);
 
                     // Calculate the remaining capacity for reservations
                     int remainingReservationCapacity = maxReservationCapacity - reservedCapacity;
@@ -246,95 +247,81 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                         // Calculate the end time for this reservation based on the dining duration
                         DateTime endTime = slotTime.AddMinutes(settings.DefaultDiningDurationMinutes);
 
-                        // Get all tables for this outlet
-                        var allTables = await _outletAdapter.GetTablesAsync(request.OutletId);
+                        // Get tables designated for reservations at this time slot
+                        var reservationTables = await _tableTypeService.GetReservationTablesAsync(request.OutletId, slotTime);
 
-                        // Get tables that are already reserved for this time slot
+                        if (!reservationTables.Any())
+                        {
+                            _logger.LogInformation("No tables designated for reservations at time {DateTime} for outlet {OutletId}",
+                                slotTime, request.OutletId);
+                            continue;
+                        }
+
+                        // Get already reserved tables for this time slot
                         var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
                             request.OutletId, slotTime, endTime);
 
-                        // Get reserved and available tables
-                        var reservedTables = allTables.Where(t => reservedTableIds.Contains(t.Id)).ToList();
-                        var availableTables = allTables.Where(t => t.IsActive && !reservedTableIds.Contains(t.Id)).ToList();
+                        // Get held tables
+                        var heldTableIds = await _reservationRepository.GetHeldTableIdsForTimeSlotAsync(
+                            request.OutletId, slotTime, endTime);
 
-                        // Calculate the total capacity of all active tables
-                        int totalCapacity = allTables.Where(t => t.IsActive).Sum(t => t.Capacity);
+                        // Combine reserved and held tables to get all unavailable tables
+                        var unavailableTableIds = reservedTableIds.Concat(heldTableIds).Distinct().ToList();
 
-                        // Calculate the capacity of tables already reserved
-                        int reservedCapacity = reservedTables.Sum(t => t.Capacity);
+                        // Get available reservation tables
+                        var availableReservationTables = reservationTables
+                            .Where(t => t.IsActive && !unavailableTableIds.Contains(t.Id))
+                            .ToList();
 
-                        // Calculate the max capacity allowed for reservations based on allocation percentage
-                        int maxReservationCapacity = (int)Math.Ceiling(totalCapacity * (settings.ReservationAllocationPercent / 100.0));
+                        // Calculate the total available capacity for informational purposes
+                        int availableCapacity = availableReservationTables.Sum(t => t.Capacity);
 
-                        // Calculate the remaining capacity for reservations
-                        int remainingReservationCapacity = maxReservationCapacity - reservedCapacity;
+                        // Check if we can accommodate this party size with the available tables
+                        bool hasSuitableTables = false;
 
-                        // Check if the party can be accommodated within the remaining capacity
-                        if (request.PartySize <= remainingReservationCapacity)
+                        // First try exact match table (no wasted capacity)
+                        if (availableReservationTables.Any(t => t.Capacity == request.PartySize))
                         {
-                            // Now we need to find suitable tables that won't exceed the remaining capacity
-                            bool hasSuitableTables = false;
+                            hasSuitableTables = true;
+                        }
+                        else if (availableReservationTables.Any(t => t.Capacity >= request.PartySize))
+                        {
+                            // Try to find a single table that can accommodate the party
+                            hasSuitableTables = true;
+                        }
+                        else
+                        {
+                            // Try combining smaller tables
+                            var smallerTables = availableReservationTables
+                                .Where(t => t.Capacity < request.PartySize)
+                                .OrderByDescending(t => t.Capacity)
+                                .ToList();
 
-                            // First try exact match table (no wasted capacity)
-                            var exactMatchTable = availableTables.FirstOrDefault(t => t.Capacity == request.PartySize);
-                            if (exactMatchTable != null)
+                            if (smallerTables.Any())
                             {
-                                hasSuitableTables = true;
-                            }
-                            else
-                            {
-                                // Try to find the smallest table that can fit the party without exceeding the limit
-                                var suitableTables = availableTables
-                                    .Where(t => t.Capacity >= request.PartySize && t.Capacity <= remainingReservationCapacity)
-                                    .OrderBy(t => t.Capacity)
-                                    .ToList();
+                                int combinedCapacity = 0;
 
-                                if (suitableTables.Any())
+                                foreach (var table in smallerTables)
                                 {
-                                    hasSuitableTables = true;
-                                }
-                                else
-                                {
-                                    // Try combining smaller tables
-                                    var smallerTables = availableTables
-                                        .Where(t => t.Capacity < request.PartySize)
-                                        .OrderByDescending(t => t.Capacity)
-                                        .ToList();
-
-                                    if (smallerTables.Any())
+                                    combinedCapacity += table.Capacity;
+                                    if (combinedCapacity >= request.PartySize)
                                     {
-                                        var selectedTables = new List<ReservationTableInfo>();
-                                        int currentCapacity = 0;
-                                        int remainingPartySize = request.PartySize;
-
-                                        foreach (var table in smallerTables)
-                                        {
-                                            if (remainingPartySize <= 0) break;
-
-                                            // Check if adding this table would exceed the remaining allocation
-                                            if (currentCapacity + table.Capacity > remainingReservationCapacity)
-                                                continue;
-
-                                            selectedTables.Add(table);
-                                            currentCapacity += table.Capacity;
-                                            remainingPartySize -= table.Capacity;
-                                        }
-
-                                        hasSuitableTables = remainingPartySize <= 0;
+                                        hasSuitableTables = true;
+                                        break;
                                     }
                                 }
                             }
+                        }
 
-                            if (hasSuitableTables)
+                        if (hasSuitableTables)
+                        {
+                            // Only add as available if we can actually accommodate this party
+                            response.AlternativeTimeSlots.Add(new AvailableTimeslotDto
                             {
-                                // Only add as available if we can actually accommodate this party
-                                response.AlternativeTimeSlots.Add(new AvailableTimeslotDto
-                                {
-                                    DateTime = slotTime,
-                                    AvailableCapacity = remainingReservationCapacity,
-                                    IsPreferred = false
-                                });
-                            }
+                                DateTime = slotTime,
+                                AvailableCapacity = availableCapacity, // Using actual table capacity now
+                                IsPreferred = false
+                            });
                         }
                     }
 
@@ -405,7 +392,21 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                         .Where(t => hold.TableIds.Contains(t.Id))
                         .ToList();
 
-                    // Verify the hold tables still respect the reservation allocation limit
+                    // Verify that the hold tables are still valid reservation tables
+                    var reservationTables = await _tableTypeService.GetReservationTablesAsync(
+                        createReservationDto.OutletId,
+                        createReservationDto.ReservationDate);
+
+                    var reservationTableIds = reservationTables.Select(t => t.Id).ToHashSet();
+
+                    // Check if all held tables are still designated as reservation tables
+                    if (hold.TableIds.Any(id => !reservationTableIds.Contains(id)))
+                    {
+                        _logger.LogWarning("Some held tables are no longer designated as reservation tables");
+                        throw new InvalidOperationException("The reservation tables have changed. Please try again.");
+                    }
+
+                    // Check if the tables are still free (not already reserved)
                     var holdSettings = await _outletAdapter.GetReservationSettingsAsync(
                         createReservationDto.OutletId,
                         createReservationDto.ReservationDate);
@@ -416,18 +417,18 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                         throw new InvalidOperationException("Could not retrieve reservation settings");
                     }
 
-                    // Get current reserved capacity excluding this hold
+                    // Get already reserved tables for this time slot
                     DateTime endTime = createReservationDto.ReservationDate.AddMinutes(holdSettings.DefaultDiningDurationMinutes);
-                    int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                        createReservationDto.OutletId, createReservationDto.ReservationDate, endTime);
+                    var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
+                        createReservationDto.OutletId,
+                        createReservationDto.ReservationDate,
+                        endTime);
 
-                    // Check if assigning these tables would exceed reservation allocation
-                    if (reservedCapacity + createReservationDto.PartySize > holdSettings.ReservationCapacity)
+                    // Check if any of the held tables are now reserved by someone else
+                    if (hold.TableIds.Any(id => reservedTableIds.Contains(id)))
                     {
-                        _logger.LogWarning("Held tables would exceed reservation allocation. Reserved: {Reserved}, " +
-                            "Party Size: {PartySize}, Limit: {Limit}",
-                            reservedCapacity, createReservationDto.PartySize, holdSettings.ReservationCapacity);
-                        throw new InvalidOperationException("The reservation would exceed the outlet's allocation limit. Please try a different time.");
+                        _logger.LogWarning("Some held tables are already reserved by others");
+                        throw new InvalidOperationException("Some tables are no longer available. Please try again or select a different time.");
                     }
 
                     // Mark the hold as used
@@ -480,35 +481,61 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 // Check if there's capacity for this reservation (skip if we already have a table hold)
                 if (tablesToAssign.Count == 0)
                 {
-                    DateTime endTime = createReservationDto.ReservationDate.Add(duration);
-                    int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                        createReservationDto.OutletId, createReservationDto.ReservationDate, endTime);
+                    // Get tables designated for reservations at this time
+                    var reservationTables = await _tableTypeService.GetReservationTablesAsync(
+                        createReservationDto.OutletId,
+                        createReservationDto.ReservationDate);
 
-                    // Calculate available capacity for reservations specifically
-                    int availableReservationCapacity = settings.ReservationCapacity - reservedCapacity;
-
-                    if (availableReservationCapacity < createReservationDto.PartySize)
+                    if (!reservationTables.Any())
                     {
-                        _logger.LogWarning("Not enough reservation capacity for party size {PartySize}. Available: {AvailableCapacity}",
-                            createReservationDto.PartySize, availableReservationCapacity);
-                        throw new InvalidOperationException("Not enough capacity for this reservation");
+                        _logger.LogWarning("No tables designated for reservations at this time");
+                        throw new InvalidOperationException("No tables are available for reservations at this time.");
                     }
 
-                    // Find tables if we don't have a hold
-                    var availableTables = await _outletAdapter.GetTablesAsync(createReservationDto.OutletId);
-                    tablesToAssign = await FindOptimalTableCombinationAsync(
-                        availableTables.ToList(),
-                        createReservationDto.PartySize,
+                    // Get already reserved tables for this time slot
+                    DateTime endTime = createReservationDto.ReservationDate.Add(duration);
+                    var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
                         createReservationDto.OutletId,
                         createReservationDto.ReservationDate,
-                        createReservationDto.ReservationDate.Add(duration)
-                    );
+                        endTime);
 
-                    // Double-check we found suitable tables
+                    // Get held tables (excluding tables being reserved right now)
+                    var heldTableIds = await _reservationRepository.GetHeldTableIdsForTimeSlotAsync(
+                        createReservationDto.OutletId,
+                        createReservationDto.ReservationDate,
+                        endTime,
+                        createReservationDto.SessionId);
+
+                    // Combine reserved and held tables to get all unavailable tables
+                    var unavailableTableIds = reservedTableIds.Concat(heldTableIds).Distinct().ToList();
+
+                    // Convert TableDto to ReservationTableInfo for available tables
+                    var availableReservationTables = reservationTables
+                        .Where(t => t.IsActive && !unavailableTableIds.Contains(t.Id))
+                        .Select(t => new ReservationTableInfo
+                        {
+                            Id = t.Id,
+                            TableNumber = t.TableNumber,
+                            Capacity = t.Capacity,
+                            Section = t.Section,
+                            IsActive = t.IsActive
+                        })
+                        .ToList();
+
+                    _logger.LogInformation("Found {Count} available reservation tables for outlet {OutletId} at {DateTime}",
+                        availableReservationTables.Count, createReservationDto.OutletId, createReservationDto.ReservationDate);
+
+                    // Find optimal combination of tables for this party size
+                    tablesToAssign = await FindOptimalTableCombinationFromAvailableTablesAsync(
+                        availableReservationTables,
+                        createReservationDto.PartySize);
+
+                    // Check if we found suitable tables
                     if (tablesToAssign == null || tablesToAssign.Count == 0)
                     {
-                        _logger.LogWarning("No suitable tables found for party size {PartySize}", createReservationDto.PartySize);
-                        throw new InvalidOperationException("No suitable tables available for this reservation");
+                        _logger.LogWarning("No suitable reservation tables available for party size {PartySize}",
+                            createReservationDto.PartySize);
+                        throw new InvalidOperationException("No suitable tables available for this reservation. Please try a different time or party size.");
                     }
                 }
 
@@ -579,7 +606,10 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
 
                 await _reservationRepository.AddStatusChangeAsync(statusChange);
 
-                // Schedule reminders
+                // Schedule initial confirmation reminder
+                await ScheduleInitialConfirmationReminderAsync(createdReservation.Id);
+
+                // Schedule other reminders
                 await ScheduleRemindersAsync(createdReservation.Id, createdReservation.ReservationDate);
 
                 // Send confirmation notification
@@ -595,6 +625,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 throw;
             }
         }
+
 
         public async Task<ReservationDto> GetReservationByIdAsync(Guid id)
         {
@@ -746,21 +777,52 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 }
 
                 // Calculate the minimum time allowed for modifications
-                // Use half of the minimum advance reservation time as the cutoff for modifications
                 int modificationCutoffHours = Math.Max(2, outlet.MinAdvanceReservationTime / 2);
                 DateTime cutoffTime = reservation.ReservationDate.AddHours(-modificationCutoffHours);
 
                 if (DateTime.UtcNow > cutoffTime)
                 {
-                    _logger.LogWarning("Reservation too close to start time for updates: {ReservationId}, starts at {StartTime}, cutoff was {CutoffTime}",
-                        id, reservation.ReservationDate, cutoffTime);
+                    _logger.LogWarning("Reservation too close to start time for updates: {ReservationId}", id);
                     throw new InvalidOperationException($"Reservations cannot be updated within {modificationCutoffHours} hours of the reservation time");
                 }
 
                 // Track changes for notification
                 List<string> changes = new List<string>();
 
-                // Update fields if provided
+                // Check if we're attempting to change party size or date/time
+                bool isChangingTableAllocation = updateReservationDto.PartySize.HasValue || updateReservationDto.ReservationDate.HasValue;
+
+                // Verify hold if changing table allocation
+                TableHold hold = null;
+                if (isChangingTableAllocation)
+                {
+                    // If changing party size or date/time, we must have a hold
+                    if (!updateReservationDto.HoldId.HasValue || string.IsNullOrEmpty(updateReservationDto.SessionId))
+                    {
+                        _logger.LogWarning("Attempt to change party size or date/time without a hold: {ReservationId}", id);
+                        throw new InvalidOperationException("Changing party size or reservation time requires a table hold");
+                    }
+
+                    // Verify the hold
+                    hold = await _reservationRepository.GetTableHoldByIdAsync(updateReservationDto.HoldId.Value);
+
+                    if (hold == null || !hold.IsActive)
+                    {
+                        throw new InvalidOperationException("The table hold has expired or is invalid. Please start again.");
+                    }
+
+                    if (hold.SessionId != updateReservationDto.SessionId)
+                    {
+                        throw new InvalidOperationException("This hold belongs to another session.");
+                    }
+
+                    if (DateTime.UtcNow > hold.HoldExpiresAt)
+                    {
+                        throw new InvalidOperationException("The table hold has expired. Please start again.");
+                    }
+                }
+
+                // Update basic fields
                 if (!string.IsNullOrEmpty(updateReservationDto.CustomerName) &&
                     updateReservationDto.CustomerName != reservation.CustomerName)
                 {
@@ -789,142 +851,62 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     reservation.SpecialRequests = updateReservationDto.SpecialRequests;
                 }
 
-                // Handle more complex updates that need validation
-                if (updateReservationDto.PartySize.HasValue || updateReservationDto.ReservationDate.HasValue)
+                // Handle party size and date/time updates if a valid hold is provided
+                if (isChangingTableAllocation && hold != null)
                 {
-
-                    // Handle party size change
-                    int newPartySize = updateReservationDto.PartySize ?? reservation.PartySize;
-
-                    // Handle date change
-                    DateTime newReservationDate = updateReservationDto.ReservationDate ?? reservation.ReservationDate;
-
-                    // If either changed, we need to validate capacity
-                    if (newPartySize != reservation.PartySize || newReservationDate != reservation.ReservationDate)
+                    // Update party size
+                    if (updateReservationDto.PartySize.HasValue && updateReservationDto.PartySize.Value != reservation.PartySize)
                     {
-                        // Check reservation limits if date changed
-                        if (newReservationDate != reservation.ReservationDate)
-                        {
-                            DateTime now = DateTime.UtcNow;
-                            DateTime minAllowedTime = now.AddHours(outlet.MinAdvanceReservationTime);
-                            DateTime maxAllowedTime = now.AddDays(outlet.MaxAdvanceReservationTime);
-
-                            if (newReservationDate < minAllowedTime)
-                            {
-                                _logger.LogWarning("New reservation time is too soon: {ReservationDate}", newReservationDate);
-                                throw new ArgumentException($"Reservations must be made at least {outlet.MinAdvanceReservationTime} hours in advance");
-                            }
-
-                            if (newReservationDate > maxAllowedTime)
-                            {
-                                _logger.LogWarning("New reservation time is too far in advance: {ReservationDate}", newReservationDate);
-                                throw new ArgumentException($"Reservations can only be made up to {outlet.MaxAdvanceReservationTime} days in advance");
-                            }
-                        }
-
-                        // Get settings for new date/time
-                        var settings = await _outletAdapter.GetReservationSettingsAsync(
-                            reservation.OutletId, newReservationDate);
-
-                        if (settings == null)
-                        {
-                            _logger.LogWarning("Could not get reservation settings for outlet {OutletId}", reservation.OutletId);
-                            throw new InvalidOperationException("Could not retrieve reservation settings");
-                        }
-
-                        // If reservation allocation is 0%, reject the change
-                        if (settings.ReservationAllocationPercent <= 0)
-                        {
-                            _logger.LogWarning("Reservations not allowed at this time. Allocation: {Allocation}%",
-                                settings.ReservationAllocationPercent);
-                            throw new InvalidOperationException("Reservations are not accepted for this time slot");
-                        }
-
-                        // Update duration if needed
-                        TimeSpan newDuration = TimeSpan.FromMinutes(settings.DefaultDiningDurationMinutes);
-
-                        // Check capacity for the new time/size
-                        DateTime endTime = newReservationDate.Add(newDuration);
-                        int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
-                            reservation.OutletId, newReservationDate, endTime);
-
-                        // Subtract current reservation's capacity from the total
-                        if (newReservationDate == reservation.ReservationDate)
-                        {
-                            reservedCapacity -= reservation.PartySize;
-                        }
-
-                        int availableCapacity = settings.ReservationCapacity - reservedCapacity;
-
-                        if (availableCapacity < newPartySize)
-                        {
-                            _logger.LogWarning("Not enough capacity for new party size {PartySize}. Available: {AvailableCapacity}",
-                                newPartySize, availableCapacity);
-                            throw new InvalidOperationException("Not enough capacity for the updated reservation");
-                        }
-
-                        // Update party size
-                        if (newPartySize != reservation.PartySize)
-                        {
-                            changes.Add($"Party size updated from {reservation.PartySize} to {newPartySize}");
-                            reservation.PartySize = newPartySize;
-                        }
-
-                        // Update reservation date
-                        if (newReservationDate != reservation.ReservationDate)
-                        {
-                            changes.Add($"Date/time updated from {reservation.ReservationDate} to {newReservationDate}");
-                            reservation.ReservationDate = newReservationDate;
-                            reservation.Duration = newDuration;
-                        }
-
-                        // If anything changed, we need to re-assign tables
-                        if (changes.Any())
-                        {
-                            // Clear current table assignments
-                            foreach (var assignment in reservation.TableAssignments.ToList())
-                            {
-                                await _reservationRepository.RemoveTableAssignmentAsync(reservation.Id, assignment.TableId);
-                            }
-
-                            // Assign new tables
-                            var availableTables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
-                            var tablesToAssign = await FindOptimalTableCombinationAsync(
-                                availableTables.ToList(),
-                                newPartySize,
-                                reservation.OutletId,
-                                newReservationDate,
-                                newReservationDate.Add(newDuration)
-                            );
-
-                            if (tablesToAssign != null && tablesToAssign.Count > 0)
-                            {
-                                foreach (var table in tablesToAssign)
-                                {
-                                    var tableAssignment = new ReservationTableAssignment
-                                    {
-                                        Id = Guid.NewGuid(),
-                                        ReservationId = reservation.Id,
-                                        TableId = table.Id,
-                                        TableNumber = table.TableNumber,
-                                        CreatedAt = DateTime.UtcNow
-                                    };
-                                    await _reservationRepository.AddTableAssignmentAsync(tableAssignment);
-                                }
-                            }
-                            else
-                            {
-                                // No tables available - should handle this case
-                                throw new InvalidOperationException("No suitable tables available for this reservation time");
-                            }
-
-                            // If date changed, reschedule reminders
-                            if (newReservationDate != reservation.ReservationDate)
-                            {
-                                await ScheduleRemindersAsync(reservation.Id, newReservationDate);
-                            }
-                        }
+                        changes.Add($"Party size updated from {reservation.PartySize} to {updateReservationDto.PartySize.Value}");
+                        reservation.PartySize = updateReservationDto.PartySize.Value;
                     }
+
+                    // Update reservation date/time
+                    if (updateReservationDto.ReservationDate.HasValue && updateReservationDto.ReservationDate.Value != reservation.ReservationDate)
+                    {
+                        changes.Add($"Date/time updated from {reservation.ReservationDate} to {updateReservationDto.ReservationDate.Value}");
+                        reservation.ReservationDate = updateReservationDto.ReservationDate.Value;
+
+                        // Update duration based on settings
+                        var settings = await _outletAdapter.GetReservationSettingsAsync(
+                            reservation.OutletId, reservation.ReservationDate);
+
+                        if (settings != null)
+                        {
+                            reservation.Duration = TimeSpan.FromMinutes(settings.DefaultDiningDurationMinutes);
+                        }
+
+                        // Reschedule reminders
+                        await ScheduleRemindersAsync(reservation.Id, reservation.ReservationDate);
+                    }
+
+                    // Clear current table assignments
+                    foreach (var assignment in reservation.TableAssignments.ToList())
+                    {
+                        await _reservationRepository.RemoveTableAssignmentAsync(reservation.Id, assignment.TableId);
+                    }
+
+                    // Assign tables from the hold
+                    var availableTables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
+                    var tablesToAssign = availableTables
+                        .Where(t => hold.TableIds.Contains(t.Id))
+                        .ToList();
+
+                    foreach (var table in tablesToAssign)
+                    {
+                        var tableAssignment = new ReservationTableAssignment
+                        {
+                            Id = Guid.NewGuid(),
+                            ReservationId = reservation.Id,
+                            TableId = table.Id,
+                            TableNumber = table.TableNumber,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        await _reservationRepository.AddTableAssignmentAsync(tableAssignment);
+                    }
+
+                    // Release the hold
+                    await _reservationRepository.ReleaseTableHoldAsync(hold.Id);
                 }
 
                 if (changes.Any())
@@ -936,13 +918,12 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     // Notify customer of changes
                     await _notificationService.SendModificationAsync(reservation.Id, string.Join(", ", changes));
 
-                    // Get updated table assignments
+                    // Return updated reservation
                     var tables = await _outletAdapter.GetTablesAsync(reservation.OutletId);
                     var assignedTables = tables
                         .Where(t => updatedReservation.TableAssignments.Any(ta => ta.TableId == t.Id))
                         .ToList();
 
-                    // Return updated reservation
                     return await MapReservationToDto(updatedReservation, outlet?.Name ?? "Unknown Outlet", assignedTables);
                 }
                 else
@@ -1441,7 +1422,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
         }
 
         public async Task<List<TimeSlotDto>> GetAlternativeTimeSlotsAsync(
-        Guid outletId, DateTime referenceTime, int partySize, int rangeMinutes = 30)
+       Guid outletId, DateTime referenceTime, int partySize, int rangeMinutes = 30)
         {
             _logger.LogInformation("Getting alternative time slots around {ReferenceTime} for outlet {OutletId}",
                 referenceTime, outletId);
@@ -1480,16 +1461,40 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     // Calculate the end time for this reservation
                     DateTime slotEndTime = slotTime.AddMinutes(settings.DefaultDiningDurationMinutes);
 
-                    // Get the current reserved capacity
-                    int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
+                    // Get tables designated for reservations at this time
+                    var reservationTables = await _tableTypeService.GetReservationTablesAsync(outletId, slotTime);
+
+                    if (!reservationTables.Any())
+                    {
+                        _logger.LogInformation("No tables designated for reservations at time {DateTime} for outlet {OutletId}",
+                            slotTime, outletId);
+                        continue;
+                    }
+
+                    // Get already reserved tables for this time slot
+                    var reservedTableIds = await _reservationRepository.GetReservedTableIdsForTimeSlotAsync(
                         outletId, slotTime, slotEndTime);
 
-                    // Calculate available capacity
-                    int availableCapacity = settings.ReservationCapacity - reservedCapacity;
+                    // Get held tables
+                    var heldTableIds = await _reservationRepository.GetHeldTableIdsForTimeSlotAsync(
+                        outletId, slotTime, slotEndTime);
 
-                    // Check if the party can be accommodated
-                    if (availableCapacity >= partySize)
+                    // Combine reserved and held tables to get all unavailable tables
+                    var unavailableTableIds = reservedTableIds.Concat(heldTableIds).Distinct().ToList();
+
+                    // Get available reservation tables
+                    var availableReservationTables = reservationTables
+                        .Where(t => t.IsActive && !unavailableTableIds.Contains(t.Id))
+                        .ToList();
+
+                    // Check if we can accommodate this party size with the available tables
+                    bool canAccommodate = CanAccommodatePartySize(availableReservationTables, partySize);
+
+                    if (canAccommodate)
                     {
+                        // Calculate the total available capacity for informational purposes
+                        int availableCapacity = availableReservationTables.Sum(t => t.Capacity);
+
                         timeSlots.Add(new TimeSlotDto
                         {
                             DateTime = slotTime,
@@ -1664,8 +1669,12 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
             int reservedCapacity = await _reservationRepository.GetReservedCapacityForTimeSlotAsync(
                 outletId, startTime, endTime);
 
-            // Calculate the remaining reservation capacity
-            int remainingReservationCapacity = settings.ReservationCapacity - reservedCapacity;
+            // Get reservation tables directly from TableTypeService like in CheckAvailabilityAsync:
+            var allReservationTables = await _tableTypeService.GetReservationTablesAsync(outletId, startTime);
+            int maxReservationCapacity = allReservationTables.Sum(t => t.Capacity);
+
+            // Calculate the remaining capacity
+            int remainingReservationCapacity = maxReservationCapacity - reservedCapacity;
 
             // If the party size exceeds the remaining reservation capacity, fail
             if (partySize > remainingReservationCapacity)
@@ -1903,37 +1912,26 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
         {
             try
             {
-                // Get the reservation to check existing reminders
-                var reservation = await _reservationRepository.GetByIdAsync(reservationId);
-                if (reservation == null)
-                {
-                    _logger.LogWarning("Reservation not found for scheduling reminders: {ReservationId}", reservationId);
-                    return;
-                }
+                // Get ALL reminders for this reservation using repository
+                var existingReminders = await _reservationRepository.GetAllRemindersByReservationIdAsync(reservationId);
 
-                // Schedule confirmation reminder (immediate)
-                // Check if it already exists
-                if (!reservation.Reminders.Any(r => r.ReminderType == "Confirmation"))
-                {
-                    var confirmationReminder = new ReservationReminder
-                    {
-                        Id = Guid.NewGuid(),
-                        ReservationId = reservationId,
-                        ReminderType = "Confirmation",
-                        ScheduledFor = DateTime.UtcNow,
-                        Status = "Pending",
-                        Channel = "WhatsApp",
-                        Content = "Reservation confirmation"
-                    };
-
-                    await _reservationRepository.AddReminderAsync(confirmationReminder);
-                }
-
-                // Schedule 24-hour reminder
+                // For 24-hour reminder
                 DateTime reminder24Hour = reservationDate.AddHours(-24);
-                if (reminder24Hour > DateTime.UtcNow &&
-                    !reservation.Reminders.Any(r => r.ReminderType == "24Hour"))
+                var existing24Hour = existingReminders.FirstOrDefault(r => r.ReminderType == "24Hour");
+
+                if (existing24Hour != null)
                 {
+                    // Update existing reminder if it hasn't been sent yet
+                    if (existing24Hour.Status == "Pending")
+                    {
+                        existing24Hour.ScheduledFor = reminder24Hour;
+                        await _reservationRepository.UpdateReminderAsync(existing24Hour);
+                        _logger.LogInformation("Updated existing 24-hour reminder for reservation: {ReservationId}", reservationId);
+                    }
+                }
+                else if (reminder24Hour > DateTime.UtcNow)
+                {
+                    // Create new 24-hour reminder
                     var reminder24 = new ReservationReminder
                     {
                         Id = Guid.NewGuid(),
@@ -1946,13 +1944,26 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     };
 
                     await _reservationRepository.AddReminderAsync(reminder24);
+                    _logger.LogInformation("Created new 24-hour reminder for reservation: {ReservationId}", reservationId);
                 }
 
-                // Schedule 1-hour reminder
+                // Handle 1-hour reminder similarly
                 DateTime reminder1Hour = reservationDate.AddHours(-1);
-                if (reminder1Hour > DateTime.UtcNow &&
-                    !reservation.Reminders.Any(r => r.ReminderType == "1Hour"))
+                var existing1Hour = existingReminders.FirstOrDefault(r => r.ReminderType == "1Hour");
+
+                if (existing1Hour != null)
                 {
+                    // Update existing reminder if it hasn't been sent yet
+                    if (existing1Hour.Status == "Pending")
+                    {
+                        existing1Hour.ScheduledFor = reminder1Hour;
+                        await _reservationRepository.UpdateReminderAsync(existing1Hour);
+                        _logger.LogInformation("Updated existing 1-hour reminder for reservation: {ReservationId}", reservationId);
+                    }
+                }
+                else if (reminder1Hour > DateTime.UtcNow)
+                {
+                    // Create new 1-hour reminder
                     var reminder1 = new ReservationReminder
                     {
                         Id = Guid.NewGuid(),
@@ -1965,12 +1976,37 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     };
 
                     await _reservationRepository.AddReminderAsync(reminder1);
+                    _logger.LogInformation("Created new 1-hour reminder for reservation: {ReservationId}", reservationId);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error scheduling reminders for reservation: {ReservationId}", reservationId);
-                // We'll handle this as a non-fatal error - the reservation is still created
+                // We'll handle this as a non-fatal error - the reservation is still updated
+            }
+        }
+
+        private async Task ScheduleInitialConfirmationReminderAsync(Guid reservationId)
+        {
+            try
+            {
+                // Create confirmation reminder
+                var confirmationReminder = new ReservationReminder
+                {
+                    Id = Guid.NewGuid(),
+                    ReservationId = reservationId,
+                    ReminderType = "Confirmation",
+                    ScheduledFor = DateTime.UtcNow,
+                    Status = "Pending",
+                    Channel = "WhatsApp",
+                    Content = "Reservation confirmation"
+                };
+
+                await _reservationRepository.AddReminderAsync(confirmationReminder);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error scheduling confirmation reminder for reservation: {ReservationId}", reservationId);
             }
         }
 
@@ -2005,6 +2041,100 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 UpdatedAt = reservation.UpdatedAt,
                 TableAssignments = tableAssignments
             };
+        }
+
+        private async Task<List<ReservationTableInfo>> FindOptimalTableCombinationFromAvailableTablesAsync(
+    List<ReservationTableInfo> availableTables,
+    int partySize)
+        {
+            _logger.LogInformation("Finding optimal table combination for party size: {PartySize} from {Count} available tables",
+                partySize, availableTables.Count);
+
+            // Strategy 1: Look for exact match first (best case - no waste)
+            var exactMatchTable = availableTables.FirstOrDefault(t => t.Capacity == partySize);
+
+            if (exactMatchTable != null)
+            {
+                _logger.LogInformation("Found exact match table {TableNumber} with capacity {Capacity} for party size {PartySize}",
+                    exactMatchTable.TableNumber, exactMatchTable.Capacity, partySize);
+                return new List<ReservationTableInfo> { exactMatchTable };
+            }
+
+            // Strategy 2: Find a table that can accommodate the party
+            var suitableTables = availableTables
+                .Where(t => t.Capacity >= partySize)
+                .OrderBy(t => t.Capacity)  // Get the smallest suitable table (minimize waste)
+                .ToList();
+
+            if (suitableTables.Any())
+            {
+                var bestFitTable = suitableTables.First();
+                _logger.LogInformation("Found suitable table {TableNumber} with capacity {Capacity} for party size {PartySize}",
+                    bestFitTable.TableNumber, bestFitTable.Capacity, partySize);
+                return new List<ReservationTableInfo> { bestFitTable };
+            }
+
+            // Strategy 3: Try combining smaller tables
+            var smallerTables = availableTables
+                .Where(t => t.Capacity < partySize)
+                .OrderByDescending(t => t.Capacity)  // Start with the largest of the smaller tables
+                .ToList();
+
+            if (smallerTables.Any())
+            {
+                var selectedTables = new List<ReservationTableInfo>();
+                var remainingPartySize = partySize;
+
+                foreach (var table in smallerTables)
+                {
+                    if (remainingPartySize <= 0) break;
+
+                    selectedTables.Add(table);
+                    remainingPartySize -= table.Capacity;
+                }
+
+                if (remainingPartySize <= 0)
+                {
+                    _logger.LogInformation("Found combination of {Count} tables with total capacity {TotalCapacity} for party of {PartySize}",
+                        selectedTables.Count, selectedTables.Sum(t => t.Capacity), partySize);
+                    return selectedTables;
+                }
+            }
+
+            // If we couldn't find suitable tables
+            _logger.LogWarning("Unable to find suitable table(s) for party of {PartySize}", partySize);
+            return new List<ReservationTableInfo>();
+        }
+
+        // Update the method signature
+        private bool CanAccommodatePartySize(List<FNBReservation.Modules.Outlet.Core.DTOs.TableDto> availableTables, int partySize)
+        {
+            // Strategy 1: Check for exact match first
+            if (availableTables.Any(t => t.Capacity == partySize))
+                return true;
+
+            // Strategy 2: Check if any single table can accommodate the party
+            if (availableTables.Any(t => t.Capacity >= partySize))
+                return true;
+
+            // Strategy 3: Check if a combination of tables can accommodate the party
+            var smallerTables = availableTables
+                .Where(t => t.Capacity < partySize)
+                .OrderByDescending(t => t.Capacity)
+                .ToList();
+
+            if (smallerTables.Any())
+            {
+                int combinedCapacity = 0;
+                foreach (var table in smallerTables)
+                {
+                    combinedCapacity += table.Capacity;
+                    if (combinedCapacity >= partySize)
+                        return true;
+                }
+            }
+
+            return false;
         }
     }
 }

@@ -3,6 +3,7 @@ using FNBReservation.Modules.Authentication.Infrastructure.Services;
 using FNBReservation.Modules.Authentication.Core.Interfaces;
 using FNBReservation.Infrastructure.Services.Notification;
 using FNBReservation.Modules.Authentication.Infrastructure.Adapters;
+using Microsoft.AspNetCore.Http;
 
 namespace FNBReservation.Modules.Authentication.API.Extensions
 {
@@ -22,13 +23,15 @@ namespace FNBReservation.Modules.Authentication.API.Extensions
                 Console.WriteLine("WARNING: SMTP settings are not properly configured. Email functionality will not work correctly.");
             }
 
+            // Ensure HttpContextAccessor is registered
+            services.AddHttpContextAccessor();
+
             // Register module-specific services
-            // Uncomment these when your services are properly migrated to the modular structure
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<ITokenService, TokenService>();
-            services.AddScoped<IEmailService, EmailService>(); // Add this line
-            services.AddScoped<IStaffService, StaffService>(); // Add this line
-            services.AddScoped<IOutletAdapter, OutletAdapter>(); // Add this line
+            services.AddScoped<IEmailService, EmailService>();
+            services.AddScoped<IStaffService, StaffService>();
+            services.AddScoped<IOutletAdapter, OutletAdapter>();
 
             return services;
         }

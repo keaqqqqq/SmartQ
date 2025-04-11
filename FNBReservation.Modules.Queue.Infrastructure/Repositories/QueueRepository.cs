@@ -73,6 +73,11 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             {
                 query = query.Where(q => q.Status == status);
             }
+            else
+            {
+                // If no specific status is requested, exclude DayEnd entries
+                query = query.Where(q => q.Status != "DayEnd");
+            }
 
             return await query
                 .OrderBy(q => q.QueuePosition)

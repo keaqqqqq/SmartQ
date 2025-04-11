@@ -1225,16 +1225,26 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
             // Get a unique prefix based on outlet (first 3 characters of Guid should be unique enough)
             string outletPrefix = outletId.ToString().Substring(0, 3).ToUpper();
 
-            // Find the highest existing queue number for this outlet
-            var entriesForOutlet = await _queueRepository.GetByOutletIdAsync(outletId);
+            // Add today's date code (e.g., 0409 for April 9)
+            string dateCode = DateTime.UtcNow.ToString("MMdd");
+
+            // Get today's date to find the highest number for TODAY only
+            var today = DateTime.UtcNow.Date;
+
+            // Find the highest existing queue number for this outlet for today only
+            var entriesForOutletToday = await _queueRepository.GetByOutletIdAsync(outletId);
+            entriesForOutletToday = entriesForOutletToday
+                .Where(e => e.CreatedAt.Date == today)
+                .ToList();
+
             int highestNumber = 0;
 
-            // Parse existing queue codes to find the highest number
-            foreach (var entry in entriesForOutlet)
+            // Parse existing queue codes to find the highest number for today
+            foreach (var entry in entriesForOutletToday)
             {
-                if (entry.QueueCode.StartsWith($"{outletPrefix}-"))
+                if (entry.QueueCode.StartsWith($"{outletPrefix}-{dateCode}-"))
                 {
-                    string numberPart = entry.QueueCode.Substring(4); // Skip the "XXX-" prefix
+                    string numberPart = entry.QueueCode.Substring(9); // Skip the "XXX-MMDD-" prefix
                     if (int.TryParse(numberPart, out int queueNumber) && queueNumber > highestNumber)
                     {
                         highestNumber = queueNumber;
@@ -1242,8 +1252,9 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Services
                 }
             }
 
-            // Generate new code with format "XXX-001" where XXX is derived from the outlet ID
-            return $"{outletPrefix}-{(highestNumber + 1):D03}";
+            // Generate new code with format "XXX-MMDD-001" 
+            // (e.g., "3F1-0409-001" for April 9, first queue)
+            return $"{outletPrefix}-{dateCode}-{(highestNumber + 1):D03}";
         }
 
         private void ValidateStatusTransition(string currentStatus, string newStatus)

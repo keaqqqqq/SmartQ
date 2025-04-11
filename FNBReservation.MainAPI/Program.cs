@@ -56,6 +56,9 @@ builder.Services.AddSignalR(options =>
     options.HandshakeTimeout = TimeSpan.FromSeconds(30);
 });
 
+// Add HttpContextAccessor for accessing HttpContext in services
+builder.Services.AddHttpContextAccessor();
+
 // Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -109,6 +112,34 @@ builder.Services.AddAuthentication(options =>
 
     options.Events = new JwtBearerEvents
     {
+        OnMessageReceived = context =>
+        {
+            // Check if token exists in cookie
+            string token = null;
+
+            // First check for token in cookies if available
+            if (context.Request.Cookies.ContainsKey("accessToken"))
+            {
+                token = context.Request.Cookies["accessToken"];
+                // If token found in cookie, use it
+                if (!string.IsNullOrEmpty(token))
+                {
+                    context.Token = token;
+                }
+            }
+
+            // Support for WebSockets
+            if (string.IsNullOrEmpty(context.Token) && context.Request.Path.StartsWithSegments("/queuehub"))
+            {
+                token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token))
+                {
+                    context.Token = token;
+                }
+            }
+
+            return Task.CompletedTask;
+        },
         OnAuthenticationFailed = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
@@ -138,21 +169,15 @@ builder.Services.AddAuthentication(options =>
             logger.LogWarning("Authentication challenge issued: {Error}, {ErrorDescription}",
                 context.Error, context.ErrorDescription);
             return Task.CompletedTask;
-        },
-        // Add support for WebSockets
-        OnMessageReceived = context =>
-        {
-            var accessToken = context.Request.Query["access_token"];
-            var path = context.HttpContext.Request.Path;
-
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/queuehub"))
-            {
-                context.Token = accessToken;
-            }
-
-            return Task.CompletedTask;
         }
     };
+});
+
+// Configure cookie policy
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+    options.Secure = CookieSecurePolicy.SameAsRequest; // In production set to Always
 });
 
 // Add Authorization - KEEP THIS
@@ -225,6 +250,7 @@ app.Use(async (context, next) =>
         context.Request.Path,
         context.Request.QueryString.HasValue ? context.Request.QueryString.Value : "");
 
+    // Log authentication info
     if (context.Request.Headers.TryGetValue("Authorization", out var authHeader))
     {
         var headerValue = authHeader.ToString();
@@ -234,9 +260,17 @@ app.Use(async (context, next) =>
 
         logger.LogInformation("Authorization header present: {AuthHeader}", truncatedValue);
     }
+    else if (context.Request.Cookies.TryGetValue("accessToken", out var cookieToken))
+    {
+        var truncatedValue = cookieToken.Length > 20
+            ? cookieToken.Substring(0, 20) + "..."
+            : cookieToken;
+
+        logger.LogInformation("Access token cookie present: {CookieToken}", truncatedValue);
+    }
     else
     {
-        logger.LogWarning("No Authorization header found in request");
+        logger.LogWarning("No authorization token found in request");
     }
 
     // Capture the original body stream
@@ -260,6 +294,7 @@ app.Use(async (context, next) =>
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+app.UseCookiePolicy(); // Add cookie policy middleware
 app.UseRouting();              // Add this if missing
 app.UseAuthentication();
 app.UseAuthorization();

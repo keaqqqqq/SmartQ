@@ -1,5 +1,4 @@
-﻿// FNBReservation.Modules.Outlet.Infrastructure/Services/TableTypeService.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -50,9 +49,12 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
                 return new List<TableDto>();
             }
 
-            // Calculate number of tables for reservations
+            // Calculate number of tables for reservations (use Floor instead of Ceiling)
             int totalTables = activeTables.Count;
-            int reservationTablesCount = (int)Math.Ceiling(totalTables * (reservationAllocationPercent / 100.0));
+            int reservationTablesCount = (int)Math.Floor(totalTables * (reservationAllocationPercent / 100.0));
+
+            // Ensure at least one table for reservations if allocation is not 0%
+            reservationTablesCount = Math.Max(1, reservationTablesCount);
 
             // Select tables for reservations (prefer larger capacity tables for reservations)
             var reservationTables = activeTables
@@ -91,24 +93,18 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
                 return new List<TableDto>();
             }
 
-            // Calculate number of tables for reservations
-            int totalTables = activeTables.Count;
-            int reservationTablesCount = (int)Math.Ceiling(totalTables * (reservationAllocationPercent / 100.0));
+            // Get reservation tables first
+            var reservationTables = await GetReservationTablesAsync(outletId, dateTime);
 
-            // Ensure we leave at least one table for queue if there are tables available
-            // and the allocation isn't 100%
-            int queueTablesCount = Math.Max(1, totalTables - reservationTablesCount);
+            // Filter out the reservation tables to get available tables for queue
+            var reservationTableIds = reservationTables.Select(t => t.Id).ToHashSet();
+            var availableForQueue = activeTables.Where(t => !reservationTableIds.Contains(t.Id)).ToList();
 
-            // Select tables for queue (smaller tables first for queue)
-            var queueTables = activeTables
-                .OrderBy(t => t.Capacity)
-                .Take(queueTablesCount)
-                .ToList();
+            _logger.LogInformation("Found {Count} tables available for queue after reservations for outlet {OutletId}",
+                availableForQueue.Count, outletId);
 
-            _logger.LogInformation("Selected {Count} tables for queue out of {Total} total tables for outlet {OutletId}",
-                queueTables.Count, totalTables, outletId);
-
-            return queueTables;
+            // Return all remaining tables for queue
+            return availableForQueue;
         }
 
         public async Task<bool> IsReservationTableAsync(Guid outletId, Guid tableId, DateTime dateTime)
