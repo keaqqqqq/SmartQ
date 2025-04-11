@@ -142,30 +142,5 @@ namespace FNBReservation.Modules.Authentication.API.Controllers
                 return StatusCode(500, new { message = "Error during logout process" });
             }
         }
-
-        /// <summary>
-        /// FOR DEVELOPMENT TESTING ONLY - DO NOT USE IN PRODUCTION
-        /// </summary>
-        [HttpPost("test-email")]
-        public async Task<IActionResult> TestEmailService([FromBody] TestEmailDto testEmailDto)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            try
-            {
-                // Generate a test token
-                var testToken = Guid.NewGuid().ToString();
-
-                // Send test email
-                await _emailService.SendPasswordResetEmailAsync(testEmailDto.Email, testToken);
-
-                return Ok(new { message = $"Test email sent to {testEmailDto.Email}" });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = $"Failed to send email: {ex.Message}" });
-            }
-        }
     }
 }
