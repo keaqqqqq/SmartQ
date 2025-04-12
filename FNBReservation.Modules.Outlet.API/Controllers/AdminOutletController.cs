@@ -188,9 +188,6 @@ namespace FNBReservation.Modules.Outlet.API.Controllers
                 var today = DateTime.UtcNow.Date;
                 var activePeakHours = await _peakHourService.GetActivePeakHourSettingsAsync(id, today);
 
-                // Get Ramadan settings
-                var ramadanSettings = await _peakHourService.GetRamadanSettingsByOutletIdAsync(id);
-
                 // Build response
                 var summary = new
                 {
@@ -205,11 +202,6 @@ namespace FNBReservation.Modules.Outlet.API.Controllers
                         walkInPercentage = 100 - outlet.ReservationAllocationPercent
                     },
                     activePeakHours = activePeakHours,
-                    ramadanMode = ramadanSettings.Any(s => s.IsActive &&
-                                                     s.RamadanStartDate.HasValue &&
-                                                     s.RamadanEndDate.HasValue &&
-                                                     today >= s.RamadanStartDate.Value.Date &&
-                                                     today <= s.RamadanEndDate.Value.Date)
                 };
 
                 return Ok(summary);

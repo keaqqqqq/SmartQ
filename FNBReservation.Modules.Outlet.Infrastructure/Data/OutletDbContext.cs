@@ -65,7 +65,6 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.OutletId, e.Name }).IsUnique();
-                entity.HasIndex(e => new { e.OutletId, e.IsRamadanSetting });
 
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.DaysOfWeek).IsRequired().HasMaxLength(20);
@@ -73,9 +72,6 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Data
                 entity.Property(e => e.EndTime).IsRequired();
                 entity.Property(e => e.ReservationAllocationPercent).IsRequired();
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
-                entity.Property(e => e.IsRamadanSetting).HasDefaultValue(false);
-                entity.Property(e => e.RamadanStartDate).IsRequired(false);
-                entity.Property(e => e.RamadanEndDate).IsRequired(false);
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 

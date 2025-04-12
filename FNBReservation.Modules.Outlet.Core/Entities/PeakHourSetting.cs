@@ -14,9 +14,6 @@ namespace FNBReservation.Modules.Outlet.Core.Entities
         public TimeSpan EndTime { get; set; }
         public int ReservationAllocationPercent { get; set; }
         public bool IsActive { get; set; }
-        public bool IsRamadanSetting { get; set; }
-        public DateTime? RamadanStartDate { get; set; }
-        public DateTime? RamadanEndDate { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public Guid CreatedBy { get; set; }

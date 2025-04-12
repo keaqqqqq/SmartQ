@@ -14,9 +14,6 @@ namespace FNBReservation.Modules.Outlet.Core.DTOs
         public TimeSpan EndTime { get; set; }
         public int ReservationAllocationPercent { get; set; }
         public bool IsActive { get; set; }
-        public bool IsRamadanSetting { get; set; }
-        public DateTime? RamadanStartDate { get; set; }
-        public DateTime? RamadanEndDate { get; set; }
     }
 
     public class CreatePeakHourSettingDto
@@ -41,11 +38,6 @@ namespace FNBReservation.Modules.Outlet.Core.DTOs
 
         public bool IsActive { get; set; } = true;
 
-        public bool IsRamadanSetting { get; set; } = false;
-
-        public DateTime? RamadanStartDate { get; set; }
-
-        public DateTime? RamadanEndDate { get; set; }
     }
 
     public class UpdatePeakHourSettingDto
@@ -64,11 +56,5 @@ namespace FNBReservation.Modules.Outlet.Core.DTOs
         public int? ReservationAllocationPercent { get; set; }
 
         public bool? IsActive { get; set; }
-
-        public bool? IsRamadanSetting { get; set; }
-
-        public DateTime? RamadanStartDate { get; set; }
-
-        public DateTime? RamadanEndDate { get; set; }
     }
 }

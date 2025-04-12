@@ -64,21 +64,6 @@
                 }
             }
 
-            [HttpGet("ramadan")]
-            public async Task<IActionResult> GetRamadanSettings(Guid outletId)
-            {
-                try
-                {
-                    var settings = await _peakHourService.GetRamadanSettingsByOutletIdAsync(outletId);
-                    return Ok(settings);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error getting Ramadan settings for outlet: {OutletId}", outletId);
-                    return StatusCode(500, new { message = "An error occurred while retrieving Ramadan settings" });
-                }
-            }
-
             [HttpGet("active")]
             public async Task<IActionResult> GetActiveSettings(Guid outletId, [FromQuery] DateTime? date = null)
             {
