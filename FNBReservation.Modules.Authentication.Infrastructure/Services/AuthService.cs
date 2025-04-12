@@ -143,6 +143,8 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 if (refreshTokens.Count == 0)
                 {
                     _logger.LogInformation("No active refresh tokens found for user");
+                    // Even if there are no tokens in DB, still clear cookies
+                    await _tokenService.RevokeRefreshTokenAsync(null);
                     return;
                 }
 
@@ -150,6 +152,9 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 {
                     token.IsRevoked = true;
                     _logger.LogDebug($"Marked token {token.Id} as revoked");
+
+                    // Try to revoke the refresh token cookie if it matches the current one
+                    await _tokenService.RevokeRefreshTokenAsync(token.Token);
                 }
 
                 await _dbContext.SaveChangesAsync();

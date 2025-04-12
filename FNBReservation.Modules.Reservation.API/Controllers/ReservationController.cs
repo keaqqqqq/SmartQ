@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Reservation.Core.DTOs;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
+using System.Security.Claims;
 
 namespace FNBReservation.Modules.Reservation.API.Controllers
 {

@@ -15,11 +15,11 @@ namespace FNBReservation.Modules.Authentication.Core.Interfaces
 
     public interface ITokenService
     {
-        string GenerateAccessToken(User user);
-        (string refreshToken, DateTime expiryTime) GenerateRefreshToken();
-        Task<TokenResult> RefreshTokenAsync(string refreshToken);
-        Task<bool> RevokeRefreshTokenAsync(string refreshToken);
-        ClaimsPrincipal GetPrincipalFromExpiredToken(string token);
+        string GenerateAccessToken(User user); // Now sets HTTP-only cookie
+        (string refreshToken, DateTime expiryTime) GenerateRefreshToken(); // Now sets HTTP-only cookie
+        Task<TokenResult> RefreshTokenAsync(string refreshToken = null); // Can now work with cookie
+        Task<bool> RevokeRefreshTokenAsync(string refreshToken = null); // Can now work with cookie
+        ClaimsPrincipal GetPrincipalFromExpiredToken(string token = null); // Can now work with cookie
     }
 
     public interface IEmailService
