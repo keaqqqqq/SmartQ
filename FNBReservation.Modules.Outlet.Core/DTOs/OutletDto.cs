@@ -116,9 +116,6 @@ namespace FNBReservation.Modules.Outlet.Core.DTOs
         public int DefaultDiningDurationMinutes { get; set; }
         public List<PeakHourSettingDto> PeakHourSettings { get; set; }
 
-        // Calculated properties based on reservation allocation
-        public int ReservationCapacity => (int)Math.Ceiling(Capacity * (ReservationAllocationPercent / 100.0));
-        public int WalkInCapacity => Capacity - ReservationCapacity;
     }
 
     // Existing DTOs remain unchanged
