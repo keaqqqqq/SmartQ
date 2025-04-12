@@ -6,24 +6,42 @@
 @inject IDialogService DialogService
 @inject IStaffService StaffService
 @rendermode InteractiveServer
+@inject IJSRuntime JS
 
 <head>
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
 </head>
 
-<MudStack>
-    <MudDateRangePicker @ref="_picker" Label="With action buttons" @bind-DateRange="_dateRange"
-                        AutoClose="@_autoClose" PickerVariant="PickerVariant.Dialog">
-        <PickerActions>
-            <MudButton Class="mr-auto align-self-start" OnClick="@(() => _picker.ClearAsync())">Clear</MudButton>
-            <MudButton OnClick="@(() => _picker.CloseAsync(false))">Cancel</MudButton>
-            <MudButton Color="Color.Primary" OnClick="@(() => _picker.CloseAsync())">Ok</MudButton>
-        </PickerActions>
-    </MudDateRangePicker>
-    <MudSwitch @bind-Value="_autoClose" Color="Color.Secondary">AutoClose</MudSwitch>
-</MudStack>
+<MudButton OnClick="LogSomething">Log to Console</MudButton>
+<MudButton OnClick="LogWarning" Color="Color.Warning">Log Warning</MudButton>
+<MudButton OnClick="LogError" Color="Color.Error">Log Error</MudButton>
+<MudButton OnClick="LogObject" Color="Color.Info">Log Object</MudButton>
+
 @code {
-    private MudDateRangePicker _picker;
-    private DateRange _dateRange = new DateRange(DateTime.Now.Date, DateTime.Now.AddDays(5).Date);
-    private bool _autoClose;
+    async Task LogSomething()
+    {
+        await JS.InvokeVoidAsync("console.log", "Hello from MudBlazor!");
+    }
+
+    async Task LogWarning()
+    {
+        await JS.InvokeVoidAsync("console.warn", "This is a warning message");
+    }
+
+    async Task LogError()
+    {
+        await JS.InvokeVoidAsync("console.error", "This is an error message");
+    }
+
+    async Task LogObject()
+    {
+        var testObject = new
+        {
+            Name = "Test Object",
+            Value = 42,
+            IsWorking = true
+        };
+        
+        await JS.InvokeVoidAsync("console.log", "Object example:", testObject);
+    }
 }
