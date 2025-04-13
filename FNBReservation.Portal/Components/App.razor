@@ -2,6 +2,7 @@
 @using FNBReservation.Portal.Services
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
+@inject JwtTokenService TokenService
 
 <!DOCTYPE html>
 <html lang="en">
@@ -23,6 +24,22 @@
     </CascadingAuthenticationState>
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="js/auth.js"></script>
+    
+    <!-- Add script to ensure JWT token is accessible -->
+    <script>
+        window.getJwtTokenFromStorage = () => {
+            const authData = localStorage.getItem('authData');
+            if (authData) {
+                try {
+                    return JSON.parse(authData);
+                } catch {
+                    return null;
+                }
+            }
+            return null;
+        }
+    </script>
 </body>
 </html>
 
@@ -34,22 +51,45 @@
         if (firstRender)
         {
             _firstRender = false;
-            await LogAuthState();
-            
-            // Call the custom method to load authentication from localStorage
-            if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+            try
             {
-                var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
-                await JS.InvokeVoidAsync("console.log", $"User authenticated from local storage: {(user.Identity?.IsAuthenticated == true ? "Yes" : "No")}");
+                await LogAuthState();
                 
-                if (user.Identity?.IsAuthenticated == true)
+                // Check if token is valid and refresh if needed
+                var isTokenValid = await TokenService.IsTokenValidAsync();
+                if (!isTokenValid)
                 {
-                    await JS.InvokeVoidAsync("console.log", $"Authenticated user: {user.Identity.Name}");
-                    foreach (var claim in user.Claims)
+                    await JS.InvokeVoidAsync("console.log", "Token is invalid or expired, attempting to refresh...");
+                    var refreshResult = await TokenService.RefreshTokenAsync();
+                    if (refreshResult.Success)
                     {
-                        await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+                        await JS.InvokeVoidAsync("console.log", "Token refreshed successfully");
                     }
                 }
+                
+                // Call the custom method to load authentication from localStorage
+                if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+                {
+                    var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                    await JS.InvokeVoidAsync("console.log", $"User authenticated from local storage: {(user.Identity?.IsAuthenticated == true ? "Yes" : "No")}");
+                    
+                    if (user.Identity?.IsAuthenticated == true)
+                    {
+                        await JS.InvokeVoidAsync("console.log", $"Authenticated user: {user.Identity.Name}");
+                        foreach (var claim in user.Claims)
+                        {
+                            await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+                        }
+                        
+                        // Force authentication state update using the wrapper method
+                        var authState = new AuthenticationState(user);
+                        customAuthProvider.UpdateAuthenticationState(authState);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", "Error in App initialization: " + ex.Message);
             }
         }
         await base.OnAfterRenderAsync(firstRender);
@@ -71,6 +111,25 @@
             {
                 await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
             }
+        }
+    }
+
+    private async Task<RefreshTokenResponse> RefreshTokenIfNeededAsync()
+    {
+        try
+        {
+            var tokenValid = await TokenService.IsTokenValidAsync();
+            if (!tokenValid)
+            {
+                return await TokenService.RefreshTokenAsync();
+            }
+            
+            return new RefreshTokenResponse { Success = true };
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", "Error refreshing token: " + ex.Message);
+            return new RefreshTokenResponse { Success = false, ErrorMessage = ex.Message };
         }
     }
 }

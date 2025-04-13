@@ -1,47 +1,115 @@
-﻿@page "/idk"
-@using FNBReservation.Portal.Models
-@using FNBReservation.Portal.Components.Dialogs
+﻿@page "/home"
+@using Microsoft.AspNetCore.Components.Authorization
 @using FNBReservation.Portal.Services
-@inject ISnackbar Snackbar
-@inject IDialogService DialogService
-@inject IStaffService StaffService
-@rendermode InteractiveServer
+@inject NavigationManager NavigationManager
 @inject IJSRuntime JS
+@inject AuthService AuthService
+@rendermode InteractiveServer
 
-<head>
-    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
-</head>
+<PageTitle>Home - SmartQ</PageTitle>
 
-<MudButton OnClick="LogSomething">Log to Console</MudButton>
-<MudButton OnClick="LogWarning" Color="Color.Warning">Log Warning</MudButton>
-<MudButton OnClick="LogError" Color="Color.Error">Log Error</MudButton>
-<MudButton OnClick="LogObject" Color="Color.Info">Log Object</MudButton>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h3" Class="mb-4">Welcome to SmartQ</MudText>
+    
+    <AuthorizeView>
+        <Authorized>
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Hello, @context.User.Identity.Name!</MudText>
+                <MudText Typo="Typo.body1">You are logged in and can access all features of SmartQ.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/dashboard" Class="mt-3">Go to Dashboard</MudButton>
+            </MudPaper>
+        </Authorized>
+        <NotAuthorized>
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Welcome to the SmartQ System</MudText>
+                <MudText Typo="Typo.body1" Class="mb-3">Please log in to access the reservation management features.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">Log In</MudButton>
+            </MudPaper>
+        </NotAuthorized>
+    </AuthorizeView>
+    
+    <MudDivider Class="my-6" />
+    
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Queue Management</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.QueuePlayNext" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Efficiently manage customer queues and optimize wait times for your restaurant.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Table Reservations</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.TableRestaurant" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Handle table reservations with ease and maximize your restaurant's seating capacity.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Customer Management</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Keep track of customer preferences and history to provide personalized service.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
 
 @code {
-    async Task LogSomething()
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; }
+    
+    protected override async Task OnInitializedAsync()
     {
-        await JS.InvokeVoidAsync("console.log", "Hello from MudBlazor!");
+        await base.OnInitializedAsync();
     }
 
-    async Task LogWarning()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await JS.InvokeVoidAsync("console.warn", "This is a warning message");
-    }
-
-    async Task LogError()
-    {
-        await JS.InvokeVoidAsync("console.error", "This is an error message");
-    }
-
-    async Task LogObject()
-    {
-        var testObject = new
+        if (firstRender)
         {
-            Name = "Test Object",
-            Value = 42,
-            IsWorking = true
-        };
-        
-        await JS.InvokeVoidAsync("console.log", "Object example:", testObject);
+            try 
+            {
+                await JS.InvokeVoidAsync("console.log", "Home page loaded");
+                
+                // Check authentication state through the service if needed for logging
+                if (AuthService != null)
+                {
+                    var isAuthenticated = await AuthService.IsUserAuthenticated();
+                    await JS.InvokeVoidAsync("console.log", $"Home page auth check: {isAuthenticated}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // This is safe in OnAfterRenderAsync
+                await JS.InvokeVoidAsync("console.error", $"Error in Home page: {ex.Message}");
+            }
+        }
     }
 }

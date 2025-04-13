@@ -10,6 +10,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace FNBReservation.Portal.Services
 {
@@ -25,19 +26,22 @@ namespace FNBReservation.Portal.Services
         private readonly string _forgotPasswordEndpoint;
         private readonly string _resetPasswordEndpoint;
         private readonly string _logoutEndpoint;
+        private readonly JwtTokenService _tokenService;
 
         public AuthService(
             HttpClient httpClient,
             IJSRuntime jsRuntime,
             AuthenticationStateProvider authStateProvider,
             IConfiguration configuration,
-            IHttpContextAccessor httpContextAccessor = null)
+            IHttpContextAccessor httpContextAccessor = null,
+            JwtTokenService tokenService = null)
         {
             _httpClient = httpClient;
             _jsRuntime = jsRuntime;
             _authStateProvider = authStateProvider;
             _configuration = configuration;
             _httpContextAccessor = httpContextAccessor;
+            _tokenService = tokenService;
 
             _baseUrl = _configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/";
             _loginEndpoint = _configuration["ApiSettings:AuthEndpoints:Login"] ?? "api/v1/auth/login";
@@ -50,7 +54,7 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await _jsRuntime.InvokeVoidAsync("console.log", "Login attempt for: " + username);
+                await _jsRuntime.InvokeVoidAsync("console.log", "Attempting login for: " + username);
 
                 var loginModel = new
                 {
@@ -89,10 +93,38 @@ namespace FNBReservation.Portal.Services
                             string userUsername = apiResponse.Username;
                             string userRole = apiResponse.Role ?? "User";
                             
+                            // Decode JWT token to extract claims if available
+                            if (!string.IsNullOrEmpty(apiResponse.AccessToken))
+                            {
+                                try
+                                {
+                                    var handler = new JwtSecurityTokenHandler();
+                                    var jwtToken = handler.ReadJwtToken(apiResponse.AccessToken);
+                                    
+                                    // Attempt to extract role from token
+                                    var roleClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "role" || c.Type == ClaimTypes.Role);
+                                    if (roleClaim != null)
+                                    {
+                                        userRole = roleClaim.Value;
+                                    }
+                                    
+                                    // Log token info for debugging
+                                    await _jsRuntime.InvokeVoidAsync("console.log", "JWT token decoded successfully");
+                                }
+                                catch (Exception ex)
+                                {
+                                    await _jsRuntime.InvokeVoidAsync("console.log", "Error decoding JWT: " + ex.Message);
+                                }
+                            }
+                            
                             // Notify the auth state provider about successful authentication
                             if (_authStateProvider is CustomAuthStateProvider customProvider)
                             {
-                                customProvider.NotifyUserAuthentication(userUsername, userRole);
+                                customProvider.NotifyUserAuthentication(
+                                    userUsername, 
+                                    userRole, 
+                                    apiResponse.AccessToken, 
+                                    apiResponse.RefreshToken);
                                 await _jsRuntime.InvokeVoidAsync("console.log", "Authentication state updated for: " + userUsername);
                             }
 
@@ -241,6 +273,57 @@ namespace FNBReservation.Portal.Services
             catch (Exception ex)
             {
                 await _jsRuntime.InvokeVoidAsync("console.log", "Logout exception: " + ex.Message);
+            }
+        }
+
+        public async Task<bool> IsUserAuthenticated()
+        {
+            try
+            {
+                // First try to check with the authentication state provider
+                // This is safer during prerendering
+                var authState = await _authStateProvider.GetAuthenticationStateAsync();
+                var isAuthenticatedFromState = authState?.User?.Identity?.IsAuthenticated ?? false;
+                
+                if (isAuthenticatedFromState)
+                {
+                    return true;
+                }
+
+                // Only try token service if the previous check failed
+                // This might use JS interop
+                if (_tokenService != null)
+                {
+                    try
+                    {
+                        var isValid = await _tokenService.IsTokenValidAsync();
+                        return isValid;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // This happens during static rendering, just return false
+                        return false;
+                    }
+                }
+                
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                // This happens during static rendering
+                return false;
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.error", $"Error checking authentication status: {ex.Message}");
+                }
+                catch
+                {
+                    // Ignore JS interop errors
+                }
+                return false;
             }
         }
     }

@@ -59,8 +59,19 @@
             var returnUrlEncoded = string.IsNullOrWhiteSpace(ReturnUrl) ? "" : $"?ReturnUrl={Uri.EscapeDataString(ReturnUrl)}";
             var loginUrl = $"/login{returnUrlEncoded}";
             
-            JS.InvokeVoidAsync("console.log", $"Redirecting to login with return URL: {ReturnUrl}");
+            // Don't use JS interop here during static rendering
             NavigationManager.NavigateTo(loginUrl);
+        }
+        
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            if (firstRender)
+            {
+                // It's safe to use JS interop here
+                await JS.InvokeVoidAsync("console.log", $"Redirected to login with return URL: {ReturnUrl}");
+            }
+            
+            await base.OnAfterRenderAsync(firstRender);
         }
     }
 }

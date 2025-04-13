@@ -4,6 +4,9 @@ using FNBReservation.Portal.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +16,12 @@ builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options => 
+    {
+        options.DetailedErrors = builder.Environment.IsDevelopment();
+    });
+
+builder.Services.AddCascadingAuthenticationState();
 
 // Register HttpClient for authentication API
 builder.Services.AddHttpClient();
@@ -30,6 +38,7 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 
 // Register authentication services
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 
 // Configure Authentication and Authorization
@@ -52,7 +61,15 @@ builder.Services.AddAuthentication(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.Events.OnRedirectToLogin = context =>
     {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        // For API requests return 401
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+        
+        // For browser requests redirect to login page
+        context.Response.Redirect(context.RedirectUri);
         return Task.CompletedTask;
     };
 });
@@ -78,6 +95,11 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+else
+{
+    // In development, show detailed errors
+    app.UseDeveloperExceptionPage();
 }
 
 app.UseHttpsRedirection();
