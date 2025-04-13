@@ -1,4 +1,8 @@
-﻿<!DOCTYPE html>
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@inject AuthenticationStateProvider AuthStateProvider
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -13,8 +17,29 @@
     <HeadOutlet />
 </head>
 <body>
-    <Routes />
+    <CascadingAuthenticationState>
+        <Routes />
+    </CascadingAuthenticationState>
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
 </body>
 </html>
+
+@code {
+    private bool _firstRender = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Call the custom method to load authentication from localStorage
+            // which will notify the auth state provider if a user is found
+            if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+            {
+                await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+            }
+            _firstRender = false;
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+}
