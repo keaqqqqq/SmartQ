@@ -1,6 +1,7 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
 @using FNBReservation.Portal.Services
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 
 <!DOCTYPE html>
 <html lang="en">
@@ -32,14 +33,44 @@
     {
         if (firstRender)
         {
+            _firstRender = false;
+            await LogAuthState();
+            
             // Call the custom method to load authentication from localStorage
-            // which will notify the auth state provider if a user is found
             if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
             {
-                await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                await JS.InvokeVoidAsync("console.log", $"User authenticated from local storage: {(user.Identity?.IsAuthenticated == true ? "Yes" : "No")}");
+                
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Authenticated user: {user.Identity.Name}");
+                    foreach (var claim in user.Claims)
+                    {
+                        await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+                    }
+                }
             }
-            _firstRender = false;
         }
         await base.OnAfterRenderAsync(firstRender);
+    }
+    
+    private async Task LogAuthState()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState?.User;
+        
+        await JS.InvokeVoidAsync("console.log", $"IsAuthenticated: {user?.Identity?.IsAuthenticated}");
+        
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Username: {user.Identity.Name}");
+            await JS.InvokeVoidAsync("console.log", $"Auth type: {user.Identity.AuthenticationType}");
+            
+            foreach (var claim in user.Claims)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+            }
+        }
     }
 }

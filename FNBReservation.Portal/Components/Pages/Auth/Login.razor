@@ -1,6 +1,7 @@
 ﻿@page "/login"
 @using System.ComponentModel.DataAnnotations
 @using FNBReservation.Portal.Services
+@using Microsoft.AspNetCore.WebUtilities
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject AuthService AuthService
@@ -82,6 +83,16 @@
     private bool rememberMe = false;
     private bool isLoading = false;
     private string errorMessage = string.Empty;
+    private string returnUrl = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("ReturnUrl", out var param))
+        {
+            returnUrl = param.ToString();
+        }
+    }
 
     private class LoginModel
     {
@@ -110,8 +121,17 @@
             if (result.Success)
             {
                 Snackbar.Add($"Welcome back, {result.Username}!", Severity.Success);
-                await JS.InvokeVoidAsync("console.log", "Successful: " + loginModel.Username);
-                NavigationManager.NavigateTo("/");
+                
+                // Small delay to ensure authentication state is updated
+                await Task.Delay(300);
+                
+                // Navigate to return URL if it exists, otherwise to home
+                var targetUrl = string.IsNullOrEmpty(returnUrl) ? "/" : returnUrl;
+                
+                await JS.InvokeVoidAsync("console.log", "Login successful, redirecting to: " + targetUrl);
+                
+                // Force reload the page to ensure auth state is recognized
+                NavigationManager.NavigateTo(targetUrl, forceLoad: true);
             }
             else
             {

@@ -1,4 +1,6 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
@@ -6,11 +8,22 @@
             <NotAuthorized>
                 @if (context.User.Identity?.IsAuthenticated != true)
                 {
-                    <RedirectToLogin />
+                    <RedirectToLogin ReturnUrl="@NavigationManager.ToBaseRelativePath(NavigationManager.Uri)" />
                 }
                 else
                 {
-                    <p class="alert alert-danger">You are not authorized to access this resource.</p>
+                    <MudContainer MaxWidth="MaxWidth.Small" Class="py-8">
+                        <MudPaper Elevation="3" Class="pa-8 text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" Size="Size.Large" Class="mb-4" />
+                            <MudText Typo="Typo.h4" Class="mb-3">Access Denied</MudText>
+                            <MudText Typo="Typo.body1" Class="mb-4">
+                                You do not have permission to access this resource.
+                            </MudText>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/" Class="mt-2">
+                                Return to Dashboard
+                            </MudButton>
+                        </MudPaper>
+                    </MudContainer>
                 }
             </NotAuthorized>
             <Authorizing>
@@ -34,10 +47,20 @@
     {
         [Inject]
         private NavigationManager NavigationManager { get; set; }
+        
+        [Inject]
+        private IJSRuntime JS { get; set; }
+
+        [Parameter]
+        public string ReturnUrl { get; set; }
 
         protected override void OnInitialized()
         {
-            NavigationManager.NavigateTo("/login", true);
+            var returnUrlEncoded = string.IsNullOrWhiteSpace(ReturnUrl) ? "" : $"?ReturnUrl={Uri.EscapeDataString(ReturnUrl)}";
+            var loginUrl = $"/login{returnUrlEncoded}";
+            
+            JS.InvokeVoidAsync("console.log", $"Redirecting to login with return URL: {ReturnUrl}");
+            NavigationManager.NavigateTo(loginUrl);
         }
     }
 }

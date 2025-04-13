@@ -1,8 +1,19 @@
-@page "/"
+@page "/idw"
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @rendermode InteractiveServer
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard</PageTitle>
 
-<MudText Typo="Typo.h3" Class="mb-4">Dashboard</MudText> 
+<MudText Typo="Typo.h3" Class="mb-4">Dashboard</MudText>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("console.log", "Dashboard loaded - user is authenticated");
+        }
+    }
+} 
