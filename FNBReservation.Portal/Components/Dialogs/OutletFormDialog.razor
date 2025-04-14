@@ -44,11 +44,25 @@
                         </MudItem>
                         <MudItem xs="12">
                             <MudGrid>
-                                <MudItem xs="6">
-                                    <MudSwitch @bind-Checked="OutletModel.QueueEnabled" Label="Enable Queue Management" Color="Color.Primary" T="bool" />
+                                <MudItem xs="6" Class="d-flex align-center">
+                                    <!-- Use standard HTML checkbox for maximum compatibility -->
+                                    <div class="d-flex align-center">
+                                        <input type="checkbox" id="queueEnabled"
+                                               checked="@OutletModel.QueueEnabled"
+                                               @onchange="@(e => OnQueueEnabledChanged(e))"
+                                               class="mud-checkbox" style="margin-right: 8px; width: 20px; height: 20px;" />
+                                        <label for="queueEnabled" class="mud-typography mud-typography-body1">Enable Queue Management</label>
+                                    </div>
                                 </MudItem>
-                                <MudItem xs="6">
-                                    <MudSwitch @bind-Checked="OutletModel.SpecialRequirements" Label="Enable Special Requirements" Color="Color.Primary" T="bool" />
+                                <MudItem xs="6" Class="d-flex align-center">
+                                    <!-- Use standard HTML checkbox for maximum compatibility -->
+                                    <div class="d-flex align-center">
+                                        <input type="checkbox" id="specialRequirements"
+                                               checked="@OutletModel.SpecialRequirements"
+                                               @onchange="@(e => OnSpecialRequirementsChanged(e))"
+                                               class="mud-checkbox" style="margin-right: 8px; width: 20px; height: 20px;" />
+                                        <label for="specialRequirements" class="mud-typography mud-typography-body1">Enable Special Requirements</label>
+                                    </div>
                                 </MudItem>
                             </MudGrid>
                         </MudItem>
@@ -107,8 +121,8 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" 
-                   Disabled="@(!formIsValid || isSubmitting)">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@(isSubmitting || !IsModelChanged())">
             @if (isSubmitting)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -145,8 +159,9 @@
     [Parameter] public bool IsEdit { get; set; } = false;
 
     private OutletDto OutletModel { get; set; } = new OutletDto();
+    private OutletDto OriginalOutletModel { get; set; } = new OutletDto(); // For change tracking
     private MudForm form;
-    private bool formIsValid = false;
+    private bool formIsValid = true; // Default to true to simplify form handling
     private bool isSubmitting = false;
 
     protected override async Task OnInitializedAsync()
@@ -155,6 +170,8 @@
         if (IsEdit && Outlet != null)
         {
             await JS.InvokeVoidAsync("console.log", $"Editing outlet: {Outlet.Name}");
+            await JS.InvokeVoidAsync("console.log", $"Original values - QueueEnabled: {Outlet.QueueEnabled}, SpecialRequirements: {Outlet.SpecialRequirements}");
+
             // Deep copy the Outlet object to avoid modifying the original
             OutletModel = new OutletDto
                 {
@@ -192,6 +209,29 @@
                         EndDate = p.EndDate
                     }) ?? new List<PeakHour>())
                 };
+
+            // Create a deep copy for change tracking
+            OriginalOutletModel = new OutletDto
+                {
+                    id = Outlet.id,
+                    OutletId = Outlet.OutletId,
+                    Name = Outlet.Name,
+                    Location = Outlet.Location,
+                    OperatingHours = Outlet.OperatingHours,
+                    Status = Outlet.Status,
+                    QueueEnabled = Outlet.QueueEnabled,
+                    SpecialRequirements = Outlet.SpecialRequirements,
+                    Contact = Outlet.Contact,
+                    MinAdvanceReservationTime = Outlet.MinAdvanceReservationTime,
+                    MaxAdvanceReservationTime = Outlet.MaxAdvanceReservationTime,
+                    Latitude = Outlet.Latitude,
+                    Longitude = Outlet.Longitude,
+                    ReservationAllocationPercent = Outlet.ReservationAllocationPercent,
+                    DefaultDiningDurationMinutes = Outlet.DefaultDiningDurationMinutes,
+                // We don't need to deep copy tables and peak hours for change tracking of basic properties
+                };
+
+            await JS.InvokeVoidAsync("console.log", $"After initialization - Model: QueueEnabled={OutletModel.QueueEnabled}, SpecialRequirements={OutletModel.SpecialRequirements}");
         }
         else
         {
@@ -215,6 +255,57 @@
                     Tables = new List<TableInfo>(),
                     PeakHours = new List<PeakHour>()
                 };
+
+            // For new outlets, no need to track changes
+            await JS.InvokeVoidAsync("console.log", $"New outlet - Model: QueueEnabled={OutletModel.QueueEnabled}, SpecialRequirements={OutletModel.SpecialRequirements}");
+        }
+    }
+
+    private bool IsModelChanged()
+    {
+        // For new outlets, always allow save
+        if (!IsEdit)
+            return true;
+
+        // Check if any of the basic properties have changed
+        if (OutletModel.Name != OriginalOutletModel.Name ||
+            OutletModel.Location != OriginalOutletModel.Location ||
+            OutletModel.OperatingHours != OriginalOutletModel.OperatingHours ||
+            OutletModel.Status != OriginalOutletModel.Status ||
+            OutletModel.QueueEnabled != OriginalOutletModel.QueueEnabled ||
+            OutletModel.SpecialRequirements != OriginalOutletModel.SpecialRequirements ||
+            OutletModel.Contact != OriginalOutletModel.Contact ||
+            OutletModel.MinAdvanceReservationTime != OriginalOutletModel.MinAdvanceReservationTime ||
+            OutletModel.MaxAdvanceReservationTime != OriginalOutletModel.MaxAdvanceReservationTime ||
+            OutletModel.Latitude != OriginalOutletModel.Latitude ||
+            OutletModel.Longitude != OriginalOutletModel.Longitude ||
+            OutletModel.ReservationAllocationPercent != OriginalOutletModel.ReservationAllocationPercent ||
+            OutletModel.DefaultDiningDurationMinutes != OriginalOutletModel.DefaultDiningDurationMinutes)
+        {
+            return true;
+        }
+
+        // No changes detected
+        return false;
+    }
+
+    private void OnQueueEnabledChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool value)
+        {
+            OutletModel.QueueEnabled = value;
+            JS.InvokeVoidAsync("console.log", $"QueueEnabled changed to: {value}, Update enabled: {IsModelChanged()}");
+            StateHasChanged(); // Force UI update
+        }
+    }
+
+    private void OnSpecialRequirementsChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool value)
+        {
+            OutletModel.SpecialRequirements = value;
+            JS.InvokeVoidAsync("console.log", $"SpecialRequirements changed to: {value}, Update enabled: {IsModelChanged()}");
+            StateHasChanged(); // Force UI update
         }
     }
 
@@ -230,10 +321,20 @@
         StateHasChanged();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Force JavaScript to update the checkboxes based on the model values
+            await JS.InvokeVoidAsync("eval", $"document.getElementById('queueEnabled').checked = {OutletModel.QueueEnabled.ToString().ToLower()};");
+            await JS.InvokeVoidAsync("eval", $"document.getElementById('specialRequirements').checked = {OutletModel.SpecialRequirements.ToString().ToLower()};");
+
+            await JS.InvokeVoidAsync("console.log", "Forced checkbox states via JavaScript");
+        }
+    }
+
     private async Task Submit()
     {
-        if (!formIsValid) return;
-
         try
         {
             isSubmitting = true;
@@ -242,6 +343,7 @@
             if (IsEdit)
             {
                 await JS.InvokeVoidAsync("console.log", $"Updating outlet: {OutletModel.Name}, ID: {OutletModel.id}");
+                await JS.InvokeVoidAsync("console.log", $"Submitting values - QueueEnabled: {OutletModel.QueueEnabled}, SpecialRequirements: {OutletModel.SpecialRequirements}");
                 result = await OutletService.UpdateOutletAsync(OutletModel);
                 if (result)
                 {
@@ -258,6 +360,7 @@
             else
             {
                 await JS.InvokeVoidAsync("console.log", $"Creating new outlet: {OutletModel.Name}");
+                await JS.InvokeVoidAsync("console.log", $"Submitting values - QueueEnabled: {OutletModel.QueueEnabled}, SpecialRequirements: {OutletModel.SpecialRequirements}");
                 result = await OutletService.CreateOutletAsync(OutletModel);
                 if (result)
                 {
@@ -277,7 +380,7 @@
             string errorMessage = $"Error {(IsEdit ? "updating" : "creating")} outlet: {ex.Message}";
             await JS.InvokeVoidAsync("console.log", errorMessage);
             Snackbar.Add(errorMessage, Severity.Error);
-            
+
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
                 Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
