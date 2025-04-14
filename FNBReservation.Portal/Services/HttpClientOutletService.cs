@@ -161,12 +161,39 @@ namespace FNBReservation.Portal.Services
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"CreateOutletAsync: {endpoint}");
 
-                var jsonContent = JsonSerializer.Serialize(outlet);
+                // Convert OutletDto to CreateOutletDto format which the API expects
+                var createOutletDto = new
+                {
+                    Name = outlet.Name,
+                    Location = outlet.Location,
+                    OperatingHours = outlet.OperatingHours,
+                    MaxAdvanceReservationTime = outlet.MaxAdvanceReservationTime,
+                    MinAdvanceReservationTime = outlet.MinAdvanceReservationTime,
+                    Contact = outlet.Contact,
+                    QueueEnabled = outlet.QueueEnabled,
+                    SpecialRequirements = outlet.SpecialRequirements,
+                    Status = outlet.Status,
+                    Latitude = outlet.Latitude,
+                    Longitude = outlet.Longitude,
+                    ReservationAllocationPercent = outlet.ReservationAllocationPercent,
+                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
+                };
+
+                var jsonContent = JsonSerializer.Serialize(createOutletDto);
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Request payload: {jsonContent}");
+                
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 
                 var response = await _httpClient.PostAsync(endpoint, content);
+                
+                // Log response details for debugging
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
+                }
+                
                 response.EnsureSuccessStatusCode();
-
                 return true;
             }
             catch (Exception ex)
@@ -182,13 +209,41 @@ namespace FNBReservation.Portal.Services
             {
                 await SetAuthorizationHeaderAsync();
 
-                string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlet.OutletId}";
+                string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlet.id}";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"UpdateOutletAsync: {endpoint}");
 
-                var jsonContent = JsonSerializer.Serialize(outlet);
+                // Convert OutletDto to UpdateOutletDto format which the API expects
+                var updateOutletDto = new
+                {
+                    Name = outlet.Name,
+                    Location = outlet.Location,
+                    OperatingHours = outlet.OperatingHours,
+                    MaxAdvanceReservationTime = outlet.MaxAdvanceReservationTime,
+                    MinAdvanceReservationTime = outlet.MinAdvanceReservationTime,
+                    Contact = outlet.Contact,
+                    QueueEnabled = outlet.QueueEnabled,
+                    SpecialRequirements = outlet.SpecialRequirements,
+                    Status = outlet.Status,
+                    Latitude = outlet.Latitude,
+                    Longitude = outlet.Longitude,
+                    ReservationAllocationPercent = outlet.ReservationAllocationPercent,
+                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
+                };
+
+                var jsonContent = JsonSerializer.Serialize(updateOutletDto);
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Request payload: {jsonContent}");
+                
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 
                 var response = await _httpClient.PutAsync(endpoint, content);
+                
+                // Log response details for debugging
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
+                }
+                
                 response.EnsureSuccessStatusCode();
 
                 return true;
@@ -206,10 +261,19 @@ namespace FNBReservation.Portal.Services
             {
                 await SetAuthorizationHeaderAsync();
 
+                // The outletId parameter should be the UUID id, not the business ID
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"DeleteOutletAsync: {endpoint}");
                 
                 var response = await _httpClient.DeleteAsync(endpoint);
+                
+                // Log response details for debugging
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
+                }
+                
                 response.EnsureSuccessStatusCode();
 
                 return true;
