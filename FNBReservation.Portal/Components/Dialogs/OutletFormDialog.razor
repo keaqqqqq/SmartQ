@@ -114,7 +114,11 @@
                 </MudTabPanel>
 
                 <MudTabPanel Text="Peak Hours" Icon="@Icons.Material.Filled.AccessTimeFilled">
-                    <PeakHourEditor PeakHours="@OutletModel.PeakHours" PeakHoursChanged="OnPeakHoursChanged" />
+                    <PeakHourEditor 
+                        PeakHours="@OutletModel.PeakHours" 
+                        PeakHoursChanged="OnPeakHoursChanged" 
+                        OutletId="@OutletModel.id" 
+                        UseApiIntegration="@(IsEdit && !string.IsNullOrEmpty(OutletModel.id))" />
                 </MudTabPanel>
             </MudTabs>
         </MudForm>

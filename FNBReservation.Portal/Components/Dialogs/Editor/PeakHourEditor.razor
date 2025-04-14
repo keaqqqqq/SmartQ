@@ -1,15 +1,18 @@
 ﻿@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IPeakHourService PeakHourService
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudPaper Elevation="0" Class="pa-4">
     <MudText Typo="Typo.subtitle1" Class="mb-4">Peak Hours Configuration</MudText>
 
-    <MudTable Items="@PeakHours" Dense="true" Hover="true" Bordered="true" Striped="true">
+    <MudTable Items="@PeakHours" Dense="true" Hover="true" Bordered="true" Striped="true" Loading="@_loading">
         <ToolBarContent>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="OpenPeakHourDialog" Class="ml-auto">Add Peak Hour</MudButton>
+                       OnClick="OpenPeakHourDialog" Class="ml-auto" Disabled="@_loading">Add Peak Hour</MudButton>
         </ToolBarContent>
         <HeaderContent>
             <MudTh>Name</MudTh>
@@ -32,9 +35,9 @@
             <MudTd>
                 <MudStack Row="true">
                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                   OnClick="@(() => EditPeakHour(context))" />
+                                   OnClick="@(() => EditPeakHour(context))" Disabled="@_loading" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => RemovePeakHour(context))" />
+                                   OnClick="@(() => RemovePeakHour(context))" Disabled="@_loading" />
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -44,6 +47,9 @@
         <PagerContent>
             <MudTablePager />
         </PagerContent>
+        <LoadingContent>
+            <MudText Align="Align.Center">Loading peak hours...</MudText>
+        </LoadingContent>
     </MudTable>
 </MudPaper>
 
@@ -54,7 +60,47 @@
     [Parameter]
     public EventCallback<List<PeakHour>> PeakHoursChanged { get; set; }
 
+    [Parameter]
+    public string OutletId { get; set; }
+
+    [Parameter]
+    public bool UseApiIntegration { get; set; } = false;
+
     private PeakHour currentPeakHour = new();
+    private bool _loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UseApiIntegration && !string.IsNullOrEmpty(OutletId))
+        {
+            await LoadPeakHoursFromApi();
+        }
+    }
+
+    private async Task LoadPeakHoursFromApi()
+    {
+        try
+        {
+            _loading = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading peak hours for outlet {OutletId}");
+            var peakHours = await PeakHourService.GetPeakHoursAsync(OutletId);
+            
+            // Update the local list and notify parent
+            PeakHours = peakHours;
+            await PeakHoursChanged.InvokeAsync(PeakHours);
+            
+            await JS.InvokeVoidAsync("console.log", $"Loaded {peakHours.Count} peak hours");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading peak hours: {ex.Message}");
+            Snackbar.Add($"Error loading peak hours: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
     private string FormatDaysOfWeek(string daysOfWeek)
     {
@@ -133,9 +179,37 @@
 
         if (!result.Canceled && result.Data is PeakHour peakHour)
         {
-            PeakHours.Add(peakHour);
-            await PeakHoursChanged.InvokeAsync(PeakHours);
-            Snackbar.Add("Peak hour added successfully", Severity.Success);
+            try
+            {
+                _loading = true;
+                
+                if (UseApiIntegration && !string.IsNullOrEmpty(OutletId))
+                {
+                    // Save to API
+                    await JS.InvokeVoidAsync("console.log", $"Creating peak hour via API: {peakHour.Name}");
+                    var createdPeakHour = await PeakHourService.CreatePeakHourAsync(OutletId, peakHour);
+                    
+                    // Add to the local list
+                    PeakHours.Add(createdPeakHour);
+                }
+                else
+                {
+                    // Just update local state
+                    PeakHours.Add(peakHour);
+                }
+                
+                await PeakHoursChanged.InvokeAsync(PeakHours);
+                Snackbar.Add("Peak hour added successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error creating peak hour: {ex.Message}");
+                Snackbar.Add($"Error creating peak hour: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _loading = false;
+            }
         }
     }
 
@@ -144,6 +218,7 @@
         // Make a copy of the peak hour to edit
         currentPeakHour = new PeakHour
             {
+                Id = peakHour.Id,
                 Name = peakHour.Name,
                 StartTime = peakHour.StartTime,
                 EndTime = peakHour.EndTime,
@@ -165,12 +240,44 @@
 
         if (!result.Canceled && result.Data is PeakHour updatedPeakHour)
         {
-            var index = PeakHours.IndexOf(peakHour);
-            if (index >= 0)
+            try
             {
-                PeakHours[index] = updatedPeakHour;
+                _loading = true;
+                
+                if (UseApiIntegration && !string.IsNullOrEmpty(OutletId) && !string.IsNullOrEmpty(peakHour.Id))
+                {
+                    // Update via API
+                    await JS.InvokeVoidAsync("console.log", $"Updating peak hour via API: {updatedPeakHour.Name}, ID: {peakHour.Id}");
+                    var apiUpdatedPeakHour = await PeakHourService.UpdatePeakHourAsync(OutletId, peakHour.Id, updatedPeakHour);
+                    
+                    // Update in the local list
+                    var index = PeakHours.IndexOf(peakHour);
+                    if (index >= 0)
+                    {
+                        PeakHours[index] = apiUpdatedPeakHour;
+                    }
+                }
+                else
+                {
+                    // Just update local state
+                    var index = PeakHours.IndexOf(peakHour);
+                    if (index >= 0)
+                    {
+                        PeakHours[index] = updatedPeakHour;
+                    }
+                }
+                
                 await PeakHoursChanged.InvokeAsync(PeakHours);
                 Snackbar.Add("Peak hour updated successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error updating peak hour: {ex.Message}");
+                Snackbar.Add($"Error updating peak hour: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _loading = false;
             }
         }
     }
@@ -189,10 +296,36 @@
 
         if (!result.Canceled)
         {
-            if (PeakHours.Remove(peakHour))
+            try
             {
+                _loading = true;
+                
+                if (UseApiIntegration && !string.IsNullOrEmpty(OutletId) && !string.IsNullOrEmpty(peakHour.Id))
+                {
+                    // Delete via API
+                    await JS.InvokeVoidAsync("console.log", $"Deleting peak hour via API: {peakHour.Name}, ID: {peakHour.Id}");
+                    await PeakHourService.DeletePeakHourAsync(OutletId, peakHour.Id);
+                    
+                    // Remove from local list
+                    PeakHours.Remove(peakHour);
+                }
+                else
+                {
+                    // Just update local state
+                    PeakHours.Remove(peakHour);
+                }
+                
                 await PeakHoursChanged.InvokeAsync(PeakHours);
                 Snackbar.Add("Peak hour removed", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error deleting peak hour: {ex.Message}");
+                Snackbar.Add($"Error deleting peak hour: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _loading = false;
             }
         }
     }

@@ -125,6 +125,21 @@ builder.Services.AddScoped<IOutletService>(sp => {
     );
 });
 
+// Register the real HttpClientPeakHourService for peak hour management
+builder.Services.AddScoped<IPeakHourService>(sp => {
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    
+    return new HttpClientPeakHourService(
+        httpClient,
+        jwtTokenService,
+        jsRuntime,
+        configuration
+    );
+});
+
 // Register other mock services
 builder.Services.AddScoped<IStaffService, MockStaffService>();
 builder.Services.AddScoped<ICustomerService, MockCustomerService>();
