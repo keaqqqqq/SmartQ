@@ -6,6 +6,7 @@
 @using FNBReservation.Portal.Services
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
 @using System.IdentityModel.Tokens.Jwt
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
@@ -23,29 +24,25 @@
             <MudText Typo="Typo.h4">Outlet Management</MudText>
             <MudSpacer />
 
-            <!-- Simple search with button -->
-            <MudTextField @bind-Value="SearchTerm"
-                          Placeholder="Search outlets..."
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          Style="min-width: 300px"
-                          Immediate="true" />
-
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       OnClick="HandleSearch"
-                       StartIcon="@Icons.Material.Filled.Search">
-                Search
-            </MudButton>
-
+            <!-- Enhanced search with debounce and better styling -->
+            <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey);">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, location, status..." 
+                          Immediate="true" OnDebounceIntervalElapsed="HandleSearch" DebounceInterval="300"
+                          DisableUnderLine="true" Variant="Variant.Text"
+                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                          Class="my-0 py-0"
+                          OnKeyDown="@SearchOnEnter" />
+                <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                            OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                            Class="ml-1" />
+            </MudPaper>
+            
             @if (!string.IsNullOrWhiteSpace(SearchTerm))
             {
-                <MudButton Variant="Variant.Text"
-                           Color="Color.Error"
-                           OnClick="ClearSearch"
-                           StartIcon="@Icons.Material.Filled.Clear">
-                    Clear
-                </MudButton>
+                <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                    @($"Search: {SearchTerm}")
+                </MudChip>
             }
         </MudStack>
 
@@ -296,6 +293,20 @@
                     outlets = await OutletService.GetOutletsAsync(SearchTerm);
                     await JS.InvokeVoidAsync("console.log", $"API search returned {outlets.Count} outlets");
                 }
+                
+                // Show a message about search results
+                if (outlets.Count == 0)
+                {
+                    Snackbar.Add($"No outlets found matching '{SearchTerm}'", Severity.Info);
+                }
+                else if (outlets.Count == 1) 
+                {
+                    Snackbar.Add($"Found 1 outlet matching '{SearchTerm}'", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add($"Found {outlets.Count} outlets matching '{SearchTerm}'", Severity.Success);
+                }
             }
         }
         catch (Exception ex)
@@ -318,6 +329,16 @@
         // Reset to show all outlets
         outlets = new List<OutletDto>(allOutlets);
         StateHasChanged();
+    }
+
+    // Handle Enter key for immediate search
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await JS.InvokeVoidAsync("console.log", "Search triggered by Enter key");
+            await HandleSearch();
+        }
     }
 
     private Color GetStatusColor(string status)
