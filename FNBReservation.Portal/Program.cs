@@ -142,6 +142,18 @@ builder.Services.AddScoped<IOutletService>(sp => {
     );
 });
 
+// Register TableService
+builder.Services.AddScoped<ITableService>(sp =>
+{
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var logger = sp.GetRequiredService<ILogger<TableService>>();
+    
+    // Use the API client that has the auth handler configured
+    return new TableService(httpClientFactory.CreateClient("API"), configuration, jwtTokenService, logger);
+});
+
 // Register other mock services
 builder.Services.AddScoped<IStaffService, MockStaffService>();
 builder.Services.AddScoped<ICustomerService, MockCustomerService>();

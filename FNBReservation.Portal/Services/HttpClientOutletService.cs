@@ -164,9 +164,10 @@ namespace FNBReservation.Portal.Services
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"CreateOutletAsync: {endpoint}");
 
-                // Save peak hours for later creation
+                // Save peak hours and tables for later creation
                 var peakHours = outlet.PeakHours?.ToList() ?? new List<PeakHour>();
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Saved {peakHours.Count} peak hours for later creation");
+                var tables = outlet.Tables?.ToList() ?? new List<TableInfo>();
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Saved {peakHours.Count} peak hours and {tables.Count} tables for later creation");
 
                 // Convert OutletDto to CreateOutletDto format which the API expects
                 var createOutletDto = new
@@ -183,9 +184,8 @@ namespace FNBReservation.Portal.Services
                     Latitude = outlet.Latitude,
                     Longitude = outlet.Longitude,
                     ReservationAllocationPercent = outlet.ReservationAllocationPercent,
-                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
-                    Tables = outlet.Tables
-                    // We omit PeakHours since they need to be created separately
+                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
+                    // We omit Tables and PeakHours since they need to be created separately
                 };
 
                 var jsonContent = JsonSerializer.Serialize(createOutletDto);
@@ -211,8 +211,60 @@ namespace FNBReservation.Portal.Services
                     outlet.id = createdOutlet.id;
                     outlet.OutletId = createdOutlet.OutletId;
                     
+                    // Now create the tables
+                    if (tables.Count > 0)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {tables.Count} tables for outlet {createdOutlet.id}");
+                        
+                        try 
+                        {
+                            foreach (var table in tables)
+                            {
+                                // Set the correct outlet ID
+                                table.OutletId = Guid.Parse(createdOutlet.id);
+                                
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"Creating table: {table.TableNumber}");
+                                
+                                // Create the table using the API
+                                string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{createdOutlet.id}/tables";
+                                var tableDto = new
+                                {
+                                    TableNumber = table.TableNumber,
+                                    Capacity = table.Capacity,
+                                    Section = table.Section,
+                                    IsActive = table.IsActive
+                                };
+                                
+                                var tableContent = new StringContent(
+                                    JsonSerializer.Serialize(tableDto), 
+                                    Encoding.UTF8, 
+                                    "application/json");
+                                    
+                                    var tableResponse = await _httpClient.PostAsync(tableEndpoint, tableContent);
+                                    
+                                    if (!tableResponse.IsSuccessStatusCode)
+                                    {
+                                        var errorContent = await tableResponse.Content.ReadAsStringAsync();
+                                        await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating table: {errorContent}");
+                                    }
+                                    else
+                                    {
+                                        var createdTable = await tableResponse.Content.ReadFromJsonAsync<TableInfo>(_jsonOptions);
+                                        await _jsRuntime.InvokeVoidAsync("console.log", $"Table created successfully with ID: {createdTable?.Id}");
+                                    }
+                            }
+                            
+                            await _jsRuntime.InvokeVoidAsync("console.log", "Successfully created all tables");
+                        }
+                        catch (Exception ex)
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating tables: {ex.Message}");
+                            // We don't throw here to avoid failing the outlet creation if table creation fails
+                        }
+                    }
+                    
                     // Now create the peak hours
-                    if (peakHours.Count > 0 && createdOutlet != null)
+                    if (peakHours.Count > 0)
                     {
                         await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {peakHours.Count} peak hours for outlet {createdOutlet.id}");
                         

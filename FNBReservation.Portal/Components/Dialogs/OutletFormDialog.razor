@@ -110,7 +110,11 @@
                 </MudTabPanel>
 
                 <MudTabPanel Text="Tables" Icon="@Icons.Material.Filled.TableBar">
-                    <TablesEditor Tables="@OutletModel.Tables" TablesChanged="OnTablesChanged" />
+                    <TablesEditor 
+                        Tables="@OutletModel.Tables" 
+                        TablesChanged="OnTablesChanged" 
+                        OutletId="@(IsEdit && !string.IsNullOrEmpty(OutletModel.id) ? Guid.Parse(OutletModel.id) : OutletModel.OutletId != null ? Guid.Parse(OutletModel.OutletId) : Guid.Empty)"
+                        UseApiIntegration="@IsEdit" />
                 </MudTabPanel>
 
                 <MudTabPanel Text="Peak Hours" Icon="@Icons.Material.Filled.AccessTimeFilled">
@@ -196,6 +200,8 @@
                     DefaultDiningDurationMinutes = Outlet.DefaultDiningDurationMinutes,
                     Tables = new List<TableInfo>(Outlet.Tables?.Select(t => new TableInfo
                     {
+                        Id = t.Id != Guid.Empty ? t.Id : Guid.NewGuid(),
+                        OutletId = Guid.Parse(Outlet.id),
                         TableNumber = t.TableNumber,
                         Capacity = t.Capacity,
                         Section = t.Section,
