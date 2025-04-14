@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.JSInterop;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,9 +38,38 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 });
 
 // Register authentication services
-builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+
+// Register the API Authorization Handler
+builder.Services.AddTransient<ApiAuthorizationHandler>();
+
+// Configure HttpClient with Authorization Handler
+builder.Services.AddHttpClient("API", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>();
+
+// Register AuthService with the API HttpClient
+builder.Services.AddScoped<AuthService>(sp => {
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var authStateProvider = sp.GetRequiredService<AuthenticationStateProvider>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
+    var tokenService = sp.GetRequiredService<JwtTokenService>();
+    
+    return new AuthService(
+        httpClientFactory.CreateClient("API"),
+        jsRuntime,
+        authStateProvider,
+        configuration,
+        httpContextAccessor,
+        tokenService
+    );
+});
 
 // Configure Authentication and Authorization
 builder.Services.AddAuthentication(options =>

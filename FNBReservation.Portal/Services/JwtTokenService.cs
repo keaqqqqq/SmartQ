@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Net.Http;
 
 namespace FNBReservation.Portal.Services
 {
@@ -16,7 +17,7 @@ namespace FNBReservation.Portal.Services
         public JwtTokenService(IJSRuntime jsRuntime, HttpClient httpClient, IConfiguration configuration)
         {
             _jsRuntime = jsRuntime;
-            _httpClient = httpClient;
+            _httpClient = httpClient; // Use the basic HttpClient
             _baseUrl = configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/";
             _refreshTokenEndpoint = configuration["ApiSettings:AuthEndpoints:RefreshToken"] ?? "api/v1/auth/refresh-token";
         }
