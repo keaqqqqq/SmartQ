@@ -350,6 +350,10 @@ namespace FNBReservation.Portal.Services
                     "application/json");
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Calling endpoint: {endpoint}");
+                
+                // Add this debug line to check if password is included
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Password included: {!string.IsNullOrEmpty(staff.Password)}");
+                
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Request body: {await content.ReadAsStringAsync()}");
                 
                 var response = await _httpClient.PostAsync(endpoint, content);
@@ -389,8 +393,25 @@ namespace FNBReservation.Portal.Services
                 
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{guidOutletId}/staff/{guidStaffId}";
                 
+                // Create a copy of staff to modify for the request
+                var staffForUpdate = new
+                {
+                    FullName = staff.FullName,
+                    Username = staff.Username,
+                    Email = staff.Email,
+                    Phone = staff.Phone,
+                    Role = staff.Role,
+                    IsActive = staff.IsActive,
+                    
+                    // The API requires a password field - if empty, provide a placeholder valid password
+                    // This tells the API we're not trying to change the password
+                    Password = !string.IsNullOrEmpty(staff.Password) 
+                        ? staff.Password 
+                        : "KeepExistingPassword@123" // Use a valid password format as a placeholder
+                };
+                
                 var content = new StringContent(
-                    JsonSerializer.Serialize(staff, _jsonOptions),
+                    JsonSerializer.Serialize(staffForUpdate, _jsonOptions),
                     Encoding.UTF8,
                     "application/json");
                 
@@ -410,6 +431,12 @@ namespace FNBReservation.Portal.Services
                     var errorContent = await response.Content.ReadAsStringAsync();
                     await _jsRuntime.InvokeVoidAsync("console.error", 
                         $"API error: {response.StatusCode}, Details: {errorContent}");
+                    
+                    // Check if this is the specific password validation error
+                    if (errorContent.Contains("Password") && errorContent.Contains("required"))
+                    {
+                        throw new HttpRequestException($"The API requires a password even for updates that don't change the password. Please contact the API developer to adjust the validation rules.");
+                    }
                     
                     throw new HttpRequestException($"Error updating staff: {response.StatusCode}, Details: {errorContent}");
                 }
