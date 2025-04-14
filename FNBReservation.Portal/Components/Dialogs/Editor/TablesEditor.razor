@@ -52,38 +52,6 @@
             <MudTablePager />
         </PagerContent>
     </MudTable>
-
-    <MudGrid Class="mt-4">
-        <MudItem xs="12">
-            <MudPaper Elevation="0" Class="pa-4" Style="background-color: #f5f5f5; border-radius: 4px;">
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Add Multiple Tables</MudText>
-                <MudGrid>
-                    <MudItem xs="3">
-                        <MudTextField @bind-Value="bulkSection" Label="Section"
-                                      Variant="Variant.Outlined" Placeholder="Main Dining" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudTextField @bind-Value="bulkPrefix" Label="Table # Prefix"
-                                      Variant="Variant.Outlined" Placeholder="A" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudNumericField @bind-Value="bulkCount" Label="Number of Tables"
-                                         Variant="Variant.Outlined" Min="1" Max="50" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudNumericField @bind-Value="bulkCapacity" Label="Capacity per Table"
-                                         Variant="Variant.Outlined" Min="1" Max="20" />
-                    </MudItem>
-                    <MudItem xs="12">
-                        <MudButton Variant="Variant.Filled" Color="Color.Secondary"
-                                   OnClick="BulkAddTables" FullWidth="false">
-                            Add Tables
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
 </MudPaper>
 
 @code {
