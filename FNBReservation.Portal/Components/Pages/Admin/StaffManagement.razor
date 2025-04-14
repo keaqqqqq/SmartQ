@@ -30,9 +30,26 @@
                     <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField @bind-Value="searchTerm" Placeholder="Search" Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
-                          OnDebounceIntervalElapsed="SearchStaff" />
+
+            <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey);">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                <MudTextField @bind-Value="searchTerm" Placeholder="Search staff by name, email, phone..." 
+                          Immediate="true" OnDebounceIntervalElapsed="SearchStaff" DebounceInterval="300"
+                          DisableUnderLine="true" Variant="Variant.Text"
+                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                          Class="my-0 py-0"
+                          OnKeyDown="@SearchOnEnter" />
+                <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                               OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                               Class="ml-1" />
+            </MudPaper>
+            
+            @if (!string.IsNullOrEmpty(searchTerm))
+            {
+                <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                    @($"Search: {searchTerm}")
+                </MudChip>
+            }
         </MudStack>
 
         @if (!isAuthenticated)
@@ -286,21 +303,67 @@
 
     private async Task SearchStaff()
     {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            await ClearSearch();
+            return;
+        }
+
         try
         {
             isLoading = true;
             await JS.InvokeVoidAsync("console.log", $"Searching for staff with term: '{searchTerm}'");
 
+            // First, load all staff without filtering
+            List<StaffDto> allResults;
+            
             if (selectedOutletId == "all")
             {
                 // Search across all outlets
-                await LoadAllStaff();
+                allResults = await StaffService.GetAllStaffAsync();
             }
             else
             {
                 // Search within the selected outlet
-                staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
-                await JS.InvokeVoidAsync("console.log", $"Found {staffList.Count} staff members matching search term");
+                allResults = await StaffService.GetStaffAsync(selectedOutletId);
+            }
+            
+            // If API search didn't work or returned unexpected results, apply client-side filtering
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                string search = searchTerm.ToLowerInvariant();
+                
+                // Apply more thorough client-side filtering
+                staffList = allResults.Where(s => 
+                    (s.FullName?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Username?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Email?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Phone?.Contains(search) == true) ||
+                    (s.Role?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.UserId?.ToLowerInvariant().Contains(search) == true)
+                ).ToList();
+                
+                await JS.InvokeVoidAsync("console.log", $"Filtered from {allResults.Count} to {staffList.Count} staff using client-side search");
+            }
+            else
+            {
+                staffList = allResults;
+            }
+
+            await JS.InvokeVoidAsync("console.log", $"Found {staffList.Count} staff members matching search term");
+            
+            // Show a message about search results
+            if (staffList.Count == 0)
+            {
+                Snackbar.Add($"No staff members found matching '{searchTerm}'", Severity.Info);
+            }
+            else if (staffList.Count == 1) 
+            {
+                Snackbar.Add($"Found 1 staff member matching '{searchTerm}'", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Found {staffList.Count} staff members matching '{searchTerm}'", Severity.Success);
             }
         }
         catch (HttpRequestException ex)
@@ -574,6 +637,32 @@
         {
             await JS.InvokeVoidAsync("console.error", $"Error fixing authentication: {ex.Message}");
             Snackbar.Add($"Error fixing authentication: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // Clear search and reload all staff
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        await JS.InvokeVoidAsync("console.log", "Search cleared");
+        
+        if (selectedOutletId == "all")
+        {
+            await LoadAllStaff();
+        }
+        else
+        {
+            await LoadStaff();
+        }
+    }
+    
+    // Handle Enter key for immediate search
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await JS.InvokeVoidAsync("console.log", "Search triggered by Enter key");
+            await SearchStaff();
         }
     }
 

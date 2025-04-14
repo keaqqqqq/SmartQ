@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace FNBReservation.Portal.Services
 {
@@ -114,14 +115,21 @@ namespace FNBReservation.Portal.Services
                 
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{guidOutletId}/staff";
                 
+                // Add search term as query parameter if provided
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
-                    endpoint += $"?search={Uri.EscapeDataString(searchTerm)}";
+                    // Properly encode the search term
+                    var encodedSearchTerm = Uri.EscapeDataString(searchTerm);
+                    endpoint += $"?q={encodedSearchTerm}";
+                    
+                    // Log the search query for debugging
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Search query: {searchTerm}, encoded as: {encodedSearchTerm}, using parameter 'q'");
                 }
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Calling endpoint: {endpoint}");
                 var response = await _httpClient.GetAsync(endpoint);
                 
+                // Process response
                 if (response.IsSuccessStatusCode)
                 {
                     var jsonResponse = await response.Content.ReadAsStringAsync();
@@ -129,6 +137,23 @@ namespace FNBReservation.Portal.Services
                     
                     var result = JsonSerializer.Deserialize<List<StaffDto>>(jsonResponse, _jsonOptions);
                     await _jsRuntime.InvokeVoidAsync("console.log", $"Deserialized {result?.Count ?? 0} staff members");
+                    
+                    // If search was performed, do additional client-side filtering if necessary
+                    if (!string.IsNullOrWhiteSpace(searchTerm) && result != null)
+                    {
+                        var searchTermLower = searchTerm.ToLowerInvariant();
+                        // If server doesn't fully support search, we can filter here too
+                        result = result.Where(staff => 
+                            staff.FullName?.ToLowerInvariant().Contains(searchTermLower) == true ||
+                            staff.Username?.ToLowerInvariant().Contains(searchTermLower) == true || 
+                            staff.Email?.ToLowerInvariant().Contains(searchTermLower) == true ||
+                            staff.Phone?.ToLowerInvariant().Contains(searchTermLower) == true ||
+                            staff.UserId?.ToLowerInvariant().Contains(searchTermLower) == true
+                        ).ToList();
+                        
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"After client-side filtering: {result.Count} staff members");
+                    }
+                    
                     return result ?? new List<StaffDto>();
                 }
                 else
@@ -165,7 +190,9 @@ namespace FNBReservation.Portal.Services
                 string allStaffEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/staff";
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
-                    allStaffEndpoint += $"?search={Uri.EscapeDataString(searchTerm)}";
+                    var encodedSearchTerm = Uri.EscapeDataString(searchTerm);
+                    allStaffEndpoint += $"?q={encodedSearchTerm}";
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Search query: {searchTerm}, encoded as: {encodedSearchTerm}, using parameter 'q'");
                 }
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Trying direct all staff endpoint: {allStaffEndpoint}");
@@ -236,7 +263,7 @@ namespace FNBReservation.Portal.Services
                         
                         if (!string.IsNullOrWhiteSpace(searchTerm))
                         {
-                            staffEndpoint += $"?search={Uri.EscapeDataString(searchTerm)}";
+                            staffEndpoint += $"?q={Uri.EscapeDataString(searchTerm)}";
                         }
                         
                         await _jsRuntime.InvokeVoidAsync("console.log", $"Fetching staff for outlet {outlet.Name}: {staffEndpoint}");
