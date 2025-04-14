@@ -86,15 +86,27 @@ namespace FNBReservation.Portal.Services
                 await SetAuthorizationHeaderAsync();
 
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}/peak-hours";
-                await _jsRuntime.InvokeVoidAsync("console.log", $"GetPeakHoursAsync: {endpoint}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"GetPeakHoursAsync: Making API call to {endpoint}");
 
                 var response = await _httpClient.GetAsync(endpoint);
+                
+                // Log response details for debugging
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}, Status: {response.StatusCode}");
+                }
+                
                 response.EnsureSuccessStatusCode();
 
+                var responseContent = await response.Content.ReadAsStringAsync();
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Raw response: {responseContent}");
+                
                 var peakHoursDto = await response.Content.ReadFromJsonAsync<List<PeakHourSettingDto>>(_jsonOptions);
                 
                 // Convert from API DTO to our model
                 var peakHours = peakHoursDto?.Select(MapToPeakHour).ToList() ?? new List<PeakHour>();
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Converted response to {peakHours.Count} peak hours");
                 return peakHours;
             }
             catch (Exception ex)

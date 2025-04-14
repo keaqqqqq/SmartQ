@@ -2,6 +2,7 @@
 @using FNBReservation.Portal.Services
 @using MudBlazor
 @inject IOutletService OutletService
+@inject IPeakHourService PeakHourService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @rendermode InteractiveServer
@@ -264,6 +265,7 @@
     private List<OutletChangeDto> outletChanges = new();
     private bool isLoading = true;
     private bool isLoadingChanges = true;
+    private bool isLoadingPeakHours = true;
     private string errorMessage;
 
     protected override async Task OnInitializedAsync()
@@ -290,6 +292,9 @@
             
             await JS.InvokeVoidAsync("console.log", $"Successfully loaded outlet: {outlet.Name}");
             
+            // Load peak hours explicitly
+            await LoadPeakHours();
+            
             // Load change history
             await LoadOutletChanges();
         }
@@ -313,6 +318,40 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadPeakHours()
+    {
+        try
+        {
+            isLoadingPeakHours = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading peak hours for outlet ID: {OutletId}");
+            
+            var peakHours = await PeakHourService.GetPeakHoursAsync(OutletId);
+            if (peakHours != null && peakHours.Any())
+            {
+                outlet.PeakHours = peakHours;
+                await JS.InvokeVoidAsync("console.log", $"Successfully loaded {peakHours.Count} peak hours");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "No peak hours found or empty response");
+            }
+        }
+        catch (Exception ex)
+        {
+            string warningMessage = $"Error loading peak hours: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", warningMessage);
+            // Non-critical error, ensure we have at least an empty list
+            if (outlet.PeakHours == null)
+            {
+                outlet.PeakHours = new List<PeakHour>();
+            }
+        }
+        finally
+        {
+            isLoadingPeakHours = false;
         }
     }
 

@@ -71,9 +71,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (UseApiIntegration && !string.IsNullOrEmpty(OutletId))
+        await JS.InvokeVoidAsync("console.log", $"PeakHourEditor initialized: OutletId={OutletId}, UseApiIntegration={UseApiIntegration}");
+        
+        if (UseApiIntegration)
         {
-            await LoadPeakHoursFromApi();
+            if (!string.IsNullOrEmpty(OutletId))
+            {
+                await JS.InvokeVoidAsync("console.log", $"Will attempt to load peak hours from API for outlet {OutletId}");
+                await LoadPeakHoursFromApi();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "Cannot load peak hours: OutletId is empty");
+            }
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("console.log", $"Using local peak hours, count: {PeakHours?.Count ?? 0}");
         }
     }
 
@@ -82,14 +96,27 @@
         try
         {
             _loading = true;
-            await JS.InvokeVoidAsync("console.log", $"Loading peak hours for outlet {OutletId}");
+            await JS.InvokeVoidAsync("console.log", $"LoadPeakHoursFromApi: Loading peak hours for outlet {OutletId}");
+            
             var peakHours = await PeakHourService.GetPeakHoursAsync(OutletId);
             
-            // Update the local list and notify parent
-            PeakHours = peakHours;
-            await PeakHoursChanged.InvokeAsync(PeakHours);
-            
-            await JS.InvokeVoidAsync("console.log", $"Loaded {peakHours.Count} peak hours");
+            if (peakHours != null)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Loaded {peakHours.Count} peak hours from API");
+                
+                // Always update the list with what came from the API
+                PeakHours = peakHours;
+                await PeakHoursChanged.InvokeAsync(PeakHours);
+                
+                if (peakHours.Count == 0)
+                {
+                    await JS.InvokeVoidAsync("console.log", "API returned an empty peak hours list");
+                }
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "API returned null for peak hours");
+            }
         }
         catch (Exception ex)
         {

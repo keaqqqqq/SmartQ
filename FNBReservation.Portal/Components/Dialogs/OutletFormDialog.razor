@@ -117,8 +117,8 @@
                     <PeakHourEditor 
                         PeakHours="@OutletModel.PeakHours" 
                         PeakHoursChanged="OnPeakHoursChanged" 
-                        OutletId="@OutletModel.id" 
-                        UseApiIntegration="@(IsEdit && !string.IsNullOrEmpty(OutletModel.id))" />
+                        OutletId="@(string.IsNullOrEmpty(OutletModel.id) ? OutletModel.OutletId : OutletModel.id)" 
+                        UseApiIntegration="true" />
                 </MudTabPanel>
             </MudTabs>
         </MudForm>
@@ -343,6 +343,13 @@
         {
             isSubmitting = true;
             bool result;
+
+            // Log the current peak hours for debugging
+            await JS.InvokeVoidAsync("console.log", $"Outlet has {OutletModel.PeakHours?.Count ?? 0} peak hours");
+            foreach (var peakHour in OutletModel.PeakHours)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Peak Hour: {peakHour.Name}, Active: {peakHour.IsActive}, Days: {peakHour.DaysOfWeek}");
+            }
 
             if (IsEdit)
             {

@@ -176,7 +176,9 @@ namespace FNBReservation.Portal.Services
                     Latitude = outlet.Latitude,
                     Longitude = outlet.Longitude,
                     ReservationAllocationPercent = outlet.ReservationAllocationPercent,
-                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
+                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
+                    Tables = outlet.Tables,
+                    PeakHours = outlet.PeakHours
                 };
 
                 var jsonContent = JsonSerializer.Serialize(createOutletDto);
@@ -194,6 +196,15 @@ namespace FNBReservation.Portal.Services
                 }
                 
                 response.EnsureSuccessStatusCode();
+                
+                // Read the response to get the created outlet ID
+                var createdOutlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
+                if (createdOutlet != null)
+                {
+                    outlet.id = createdOutlet.id;
+                    outlet.OutletId = createdOutlet.OutletId;
+                }
+                
                 return true;
             }
             catch (Exception ex)
@@ -227,7 +238,9 @@ namespace FNBReservation.Portal.Services
                     Latitude = outlet.Latitude,
                     Longitude = outlet.Longitude,
                     ReservationAllocationPercent = outlet.ReservationAllocationPercent,
-                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
+                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
+                    Tables = outlet.Tables,
+                    PeakHours = outlet.PeakHours
                 };
 
                 var jsonContent = JsonSerializer.Serialize(updateOutletDto);
