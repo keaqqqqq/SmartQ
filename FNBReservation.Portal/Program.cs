@@ -110,8 +110,22 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("UserOnly", policy => policy.RequireRole("User"));
 });
 
-// Register the mock services
-builder.Services.AddSingleton<IOutletService, MockOutletService>();
+// Register the real HttpClientOutletService for outlet management
+builder.Services.AddScoped<IOutletService>(sp => {
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    
+    return new HttpClientOutletService(
+        httpClient,
+        jwtTokenService,
+        jsRuntime,
+        configuration
+    );
+});
+
+// Register other mock services
 builder.Services.AddScoped<IStaffService, MockStaffService>();
 builder.Services.AddScoped<ICustomerService, MockCustomerService>();
 builder.Services.AddScoped<IReservationService, MockReservationService>();

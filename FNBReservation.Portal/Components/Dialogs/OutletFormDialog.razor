@@ -1,8 +1,10 @@
 ﻿@using System.ComponentModel.DataAnnotations
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
+@using MudBlazor
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudDialog MaxWidth="MaxWidth.ExtraLarge" Class="outlet-dialog">
@@ -105,8 +107,17 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!formIsValid)">
-            @(IsEdit ? "Update" : "Create")
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" 
+                   Disabled="@(!formIsValid || isSubmitting)">
+            @if (isSubmitting)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <span class="ms-2">@(IsEdit ? "Updating..." : "Creating...")</span>
+            }
+            else
+            {
+                @(IsEdit ? "Update" : "Create")
+            }
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -120,29 +131,30 @@
     }
 
     @@media (max-width: 600px) {
-        .outlet-dialog
-
-    {
-        min-width: 100%;
-        width: 100%;
-    }
-
+        .outlet-dialog {
+            min-width: 100%;
+            width: 100%;
+        }
     }
 </style>
-@code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
 
-    [Parameter] public OutletDto? Outlet { get; set; }
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public OutletDto Outlet { get; set; }
     [Parameter] public bool IsEdit { get; set; } = false;
 
     private OutletDto OutletModel { get; set; } = new OutletDto();
-    private MudForm form = null!;
+    private MudForm form;
     private bool formIsValid = false;
+    private bool isSubmitting = false;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await JS.InvokeVoidAsync("console.log", IsEdit ? "Editing outlet" : "Creating new outlet");
         if (IsEdit && Outlet != null)
         {
+            await JS.InvokeVoidAsync("console.log", $"Editing outlet: {Outlet.Name}");
             // Deep copy the Outlet object to avoid modifying the original
             OutletModel = new OutletDto
                 {
@@ -160,14 +172,14 @@
                     Longitude = Outlet.Longitude,
                     ReservationAllocationPercent = Outlet.ReservationAllocationPercent,
                     DefaultDiningDurationMinutes = Outlet.DefaultDiningDurationMinutes,
-                    Tables = new List<TableInfo>(Outlet.Tables.Select(t => new TableInfo
+                    Tables = new List<TableInfo>(Outlet.Tables?.Select(t => new TableInfo
                     {
                         TableNumber = t.TableNumber,
                         Capacity = t.Capacity,
                         Section = t.Section,
                         IsActive = t.IsActive
-                    })),
-                    PeakHours = new List<PeakHour>(Outlet.PeakHours.Select(p => new PeakHour
+                    }) ?? new List<TableInfo>()),
+                    PeakHours = new List<PeakHour>(Outlet.PeakHours?.Select(p => new PeakHour
                     {
                         Name = p.Name,
                         DaysOfWeek = p.DaysOfWeek,
@@ -177,7 +189,7 @@
                         IsActive = p.IsActive,
                         StartDate = p.StartDate,
                         EndDate = p.EndDate
-                    }))
+                    }) ?? new List<PeakHour>())
                 };
         }
         else
@@ -205,13 +217,13 @@
         }
     }
 
-    private async Task OnTablesChanged(List<TableInfo> tables)
+    private void OnTablesChanged(List<TableInfo> tables)
     {
         OutletModel.Tables = tables;
         StateHasChanged();
     }
 
-    private async Task OnPeakHoursChanged(List<PeakHour> peakHours)
+    private void OnPeakHoursChanged(List<PeakHour> peakHours)
     {
         OutletModel.PeakHours = peakHours;
         StateHasChanged();
@@ -219,39 +231,67 @@
 
     private async Task Submit()
     {
+        if (!formIsValid) return;
+
         try
         {
+            isSubmitting = true;
             bool result;
+
             if (IsEdit)
             {
+                await JS.InvokeVoidAsync("console.log", $"Updating outlet: {OutletModel.Name}");
                 result = await OutletService.UpdateOutletAsync(OutletModel);
                 if (result)
                 {
+                    await JS.InvokeVoidAsync("console.log", "Outlet updated successfully");
                     Snackbar.Add("Outlet updated successfully", Severity.Success);
                     MudDialog.Close(DialogResult.Ok(true));
                 }
                 else
                 {
+                    await JS.InvokeVoidAsync("console.log", "Failed to update outlet");
                     Snackbar.Add("Failed to update outlet", Severity.Error);
                 }
             }
             else
             {
+                await JS.InvokeVoidAsync("console.log", $"Creating new outlet: {OutletModel.Name}");
                 result = await OutletService.CreateOutletAsync(OutletModel);
                 if (result)
                 {
+                    await JS.InvokeVoidAsync("console.log", "Outlet created successfully");
                     Snackbar.Add("Outlet created successfully", Severity.Success);
                     MudDialog.Close(DialogResult.Ok(true));
                 }
                 else
                 {
+                    await JS.InvokeVoidAsync("console.log", "Failed to create outlet");
                     Snackbar.Add("Failed to create outlet", Severity.Error);
                 }
             }
         }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error {(IsEdit ? "updating" : "creating")} outlet: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+            
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+            }
+        }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            string errorMessage = $"Error {(IsEdit ? "updating" : "creating")} outlet: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
         }
     }
 

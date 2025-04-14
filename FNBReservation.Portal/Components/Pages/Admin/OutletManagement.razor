@@ -4,9 +4,17 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Components.Dialogs
 @using FNBReservation.Portal.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.IdentityModel.Tokens.Jwt
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject JwtTokenService TokenService
+@implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <MudBreakpointProvider>
@@ -16,6 +24,18 @@
             <MudSpacer />
             <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
         </MudStack>
+
+        @if (!isAuthenticated)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText>Authentication issue detected. Please try to fix using one of these options:</MudText>
+                <MudStack Row="true" Class="mt-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="FixAuthentication">Fix Auth</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RedirectToLogin">Login Again</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="DebugAuthToken">Debug Token</MudButton>
+                </MudStack>
+            </MudAlert>
+        }
 
         @if (isLoading)
         {
@@ -47,8 +67,8 @@
                         </MudBreakpointProvider>
                     </MudTd>
                     <MudTd DataLabel="Capacity">
-                        <div>@context.Tables.Sum(t => t.Capacity) seats</div>
-                        <MudText Typo="Typo.caption">@context.Tables.Count tables</MudText>
+                        <div>@(context.Tables?.Sum(t => t.Capacity) ?? 0) seats</div>
+                        <MudText Typo="Typo.caption">@(context.Tables?.Count ?? 0) tables</MudText>
                     </MudTd>
                     <MudTd DataLabel="Queue">
                         <MudBreakpointProvider>
@@ -99,14 +119,258 @@
 </MudBreakpointProvider>
 
 @code {
-    // Your existing code here
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; }
+    
     private List<OutletDto> outlets = new();
     private bool isLoading = true;
     private string SearchTerm = "";
+    private bool isAuthenticated = false;
+    private IJSObjectReference _jsModule;
+    private bool _isFirstLoad = true;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadOutlets();
+        await base.OnInitializedAsync();
+        
+        try
+        {
+            // Defer JS interop calls to OnAfterRenderAsync
+            // Just check auth state without JS calls
+            if (AuthState != null)
+            {
+                var authState = await AuthState;
+                var isAuthViaAuthState = authState?.User?.Identity?.IsAuthenticated ?? false;
+                
+                if (isAuthViaAuthState)
+                {
+                    isAuthenticated = true;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Log exceptions without JS calls
+            RedirectToLogin();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeJavaScriptInterop();
+            
+            try
+            {
+                // First test direct API access to ensure connectivity
+                if (_isFirstLoad)
+                {
+                    await TestDirectApiAccess();
+                    _isFirstLoad = false;
+                }
+
+                // Add JS debugger for auth
+                await JS.InvokeVoidAsync("eval", @"
+                    if (typeof window.debugAuthToken === 'undefined') {
+                        window.debugAuthToken = function() {
+                            var authData = localStorage.getItem('authData');
+                            console.log('Auth data exists: ' + (authData !== null));
+                            if (authData) {
+                                try {
+                                    var parsed = JSON.parse(authData);
+                                    console.log('Username: ' + parsed.Username);
+                                    console.log('Role: ' + parsed.Role);
+                                    console.log('Access token exists: ' + (parsed.AccessToken !== null && parsed.AccessToken !== undefined));
+                                    console.log('Refresh token exists: ' + (parsed.RefreshToken !== null && parsed.RefreshToken !== undefined));
+                                } catch(e) {
+                                    console.error('Failed to parse auth data: ' + e);
+                                }
+                            }
+                        };
+                        
+                        window.fixAuthData = function(username, role) {
+                            var authData = localStorage.getItem('authData');
+                            if (authData) {
+                                try {
+                                    var parsed = JSON.parse(authData);
+                                    if (!parsed.Username && username) parsed.Username = username;
+                                    if (!parsed.Role && role) parsed.Role = role;
+                                    localStorage.setItem('authData', JSON.stringify(parsed));
+                                    console.log('Auth data fixed');
+                                    return true;
+                                } catch(e) {
+                                    console.error('Failed to fix auth data: ' + e);
+                                    return false;
+                                }
+                            }
+                            return false;
+                        };
+                    }
+                    
+                    // Run the debugger immediately
+                    window.debugAuthToken();
+                ");
+                
+                await JS.InvokeVoidAsync("console.log", "Outlet Management loaded");
+                
+                // Print the auth state to console 
+                if (AuthState != null)
+                {
+                    var authState = await AuthState;
+                    var isAuthViaAuthState = authState?.User?.Identity?.IsAuthenticated ?? false;
+                    await JS.InvokeVoidAsync("console.log", $"Auth via AuthState: {isAuthViaAuthState}");
+                    
+                    if (isAuthViaAuthState)
+                    {
+                        var userName = authState?.User?.Identity?.Name;
+                        var userRole = authState?.User?.Claims?.FirstOrDefault(c => c.Type == "role")?.Value;
+                        await JS.InvokeVoidAsync("console.log", $"Username: {userName}, Role: {userRole}");
+                    }
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("console.log", "AuthState is null");
+                }
+                
+                // Try to get the token directly
+                var token = await TokenService.GetAccessTokenAsync();
+                await JS.InvokeVoidAsync("console.log", $"Token check: {(string.IsNullOrEmpty(token) ? "No token" : "Token exists")}");
+                
+                // Declare the variable at the top level of the method to keep it in scope
+                string authDataJson;
+                
+                if (!string.IsNullOrEmpty(token))
+                {
+                    // Print token details without revealing the full token
+                    await JS.InvokeVoidAsync("console.log", $"Token length: {token.Length}, starts with: {token.Substring(0, Math.Min(10, token.Length))}...");
+                    
+                    var isValid = await TokenService.IsTokenValidAsync();
+                    await JS.InvokeVoidAsync("console.log", $"Token validity: {isValid}");
+                    
+                    if (isValid)
+                    {
+                        isAuthenticated = true;
+                        await JS.InvokeVoidAsync("console.log", "Valid token found, proceeding to load outlets");
+                        await LoadOutlets();
+                        StateHasChanged();
+                    }
+                    else
+                    {
+                        // Try to refresh the token
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        await JS.InvokeVoidAsync("console.log", $"Token refresh result: {refreshResult.Success}");
+                        
+                        if (refreshResult.Success)
+                        {
+                            isAuthenticated = true;
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, proceeding to load outlets");
+                            await LoadOutlets();
+                            StateHasChanged();
+                        }
+                        else
+                        {
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            await JS.InvokeVoidAsync("console.log", "Redirecting to login page");
+                            RedirectToLogin();
+                        }
+                    }
+                }
+                else
+                {
+                    // Try to get auth data directly from localStorage
+                    authDataJson = await JS.InvokeAsync<string>("localStorage.getItem", "authData");
+                    await JS.InvokeVoidAsync("console.log", $"Auth data in localStorage: {(string.IsNullOrEmpty(authDataJson) ? "None" : "Exists")}");
+                    
+                    if (!string.IsNullOrEmpty(authDataJson))
+                    {
+                        await JS.InvokeVoidAsync("console.log", "Auth data exists but token couldn't be extracted");
+                        // Try to force a cleanup and redirect
+                        await JS.InvokeVoidAsync("localStorage.removeItem", "authData");
+                    }
+                    
+                    await JS.InvokeVoidAsync("console.log", "No token found, redirecting to login");
+                    RedirectToLogin();
+                }
+                
+                // Only try to authenticate from localStorage if we're not already authenticated
+                if (!isAuthenticated)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Trying to get auth from localStorage");
+                    
+                    // Get raw auth data from JS directly to debug
+                    authDataJson = await JS.InvokeAsync<string>("localStorage.getItem", "authData");
+                    await JS.InvokeVoidAsync("console.log", $"Auth data from localStorage: {(string.IsNullOrEmpty(authDataJson) ? "none" : "exists")}");
+                    
+                    if (!string.IsNullOrEmpty(authDataJson))
+                    {
+                        await JS.InvokeVoidAsync("console.log", "Auth data exists in local storage, attempting to update auth state");
+                        
+                        // Try to manually update auth state if localStorage has data
+                        if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+                        {
+                            var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                            await JS.InvokeVoidAsync("console.log", $"User from localStorage: {user?.Identity?.Name}, authenticated: {user?.Identity?.IsAuthenticated}");
+                            
+                            if (user?.Identity?.IsAuthenticated == true)
+                            {
+                                isAuthenticated = true;
+                                customAuthProvider.UpdateAuthenticationState(new AuthenticationState(user));
+                                
+                                if (!outlets.Any())
+                                {
+                                    await LoadOutlets();
+                                    StateHasChanged();
+                                }
+                            }
+                            else
+                            {
+                                // Try to refresh the token
+                                var refreshResult = await TokenService.RefreshTokenAsync();
+                                if (refreshResult.Success)
+                                {
+                                    await JS.InvokeVoidAsync("console.log", "Token refreshed successfully");
+                                    
+                                    // Retry authentication
+                                    user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                                    if (user?.Identity?.IsAuthenticated == true)
+                                    {
+                                        isAuthenticated = true;
+                                        customAuthProvider.UpdateAuthenticationState(new AuthenticationState(user));
+                                        
+                                        if (!outlets.Any())
+                                        {
+                                            await LoadOutlets();
+                                            StateHasChanged();
+                                        }
+                                    }
+                                    else
+                                    {
+                                        RedirectToLogin();
+                                    }
+                                }
+                                else
+                                {
+                                    RedirectToLogin();
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        RedirectToLogin();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Error in OnAfterRenderAsync: {ex.Message}");
+            }
+        }
+    }
+    
+    private void RedirectToLogin()
+    {
+        NavigationManager.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", true);
     }
 
     private async Task LoadOutlets()
@@ -114,11 +378,27 @@
         try
         {
             isLoading = true;
+            await JS.InvokeVoidAsync("console.log", "Loading outlets from API...");
             outlets = await OutletService.GetOutletsAsync();
+            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets");
+        }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error loading outlets: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+            
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+            string errorMessage = $"Error loading outlets: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
         }
         finally
         {
@@ -129,14 +409,29 @@
 
     private async Task SearchOutlets()
     {
-        isLoading = true;
         try
         {
+            isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Searching outlets with term: {SearchTerm}");
             outlets = await OutletService.GetOutletsAsync(SearchTerm);
+        }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error searching outlets: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+            
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error searching outlets: {ex.Message}", Severity.Error);
+            string errorMessage = $"Error searching outlets: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
         }
         finally
         {
@@ -146,7 +441,7 @@
 
     private Color GetStatusColor(string status)
     {
-        return status.ToLower() switch
+        return status?.ToLower() switch
         {
             "active" => Color.Success,
             "inactive" => Color.Error,
@@ -157,58 +452,92 @@
 
     private async Task ViewOutletDetails(OutletDto outlet)
     {
-        var parameters = new DialogParameters
-            {
-                ["OutletId"] = outlet.OutletId
-            };
+        try
+        {
+            var parameters = new DialogParameters
+                {
+                    ["OutletId"] = outlet.id
+                };
 
-        var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
-        await dialog.Result;
+            var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
+            await dialog.Result;
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error viewing outlet details: {ex.Message}");
+            Snackbar.Add($"Error viewing outlet details: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OpenAddOutletDialog()
     {
-        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet");
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        try
         {
-            await LoadOutlets();
+            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet");
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await LoadOutlets();
+                Snackbar.Add("Outlet added successfully", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error adding outlet: {ex.Message}");
+            Snackbar.Add($"Error adding outlet: {ex.Message}", Severity.Error);
         }
     }
 
     private async Task OpenEditOutletDialog(OutletDto outlet)
     {
-        var parameters = new DialogParameters
-            {
-                ["Outlet"] = outlet,
-                ["IsEdit"] = true
-            };
-
-        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        try
         {
-            await LoadOutlets();
+            var parameters = new DialogParameters
+                {
+                    ["Outlet"] = outlet,
+                    ["IsEdit"] = true
+                };
+
+            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await LoadOutlets();
+                Snackbar.Add("Outlet updated successfully", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error editing outlet: {ex.Message}");
+            Snackbar.Add($"Error editing outlet: {ex.Message}", Severity.Error);
         }
     }
 
     private async Task OpenDeleteDialog(OutletDto outlet)
     {
-        var parameters = new DialogParameters
-            {
-                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the outlet <b>'{outlet.Name}'</b>? This action cannot be undone.",
-                ["ButtonText"] = "Delete",
-                ["Color"] = Color.Error
-            };
-
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        try
         {
-            await DeleteOutlet(outlet.OutletId);
+            var parameters = new DialogParameters
+                {
+                    ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the outlet <b>'{outlet.Name}'</b>? This action cannot be undone.",
+                    ["ButtonText"] = "Delete",
+                    ["Color"] = Color.Error
+                };
+
+            var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await DeleteOutlet(outlet.id);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error with delete dialog: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
     }
 
@@ -216,6 +545,7 @@
     {
         try
         {
+            await JS.InvokeVoidAsync("console.log", $"Deleting outlet: {outletId}");
             var result = await OutletService.DeleteOutletAsync(outletId);
 
             if (result)
@@ -228,9 +558,267 @@
                 Snackbar.Add("Failed to delete outlet", Severity.Error);
             }
         }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error deleting outlet: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+            
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
+        }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.log", $"Error deleting outlet: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // This method is for testing API access without auth headers
+    private async Task TestDirectApiAccess()
+    {
+        try {
+            await JS.InvokeVoidAsync("console.log", "========== API ACCESS TEST STARTED ==========");
+            
+            // STEP 1: Test without authentication
+            await JS.InvokeVoidAsync("console.log", "STEP 1: Testing API access WITHOUT authentication...");
+            var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("http://localhost:5000/");
+            
+            try {
+                var response = await httpClient.GetAsync("api/v1/admin/outlets");
+                await JS.InvokeVoidAsync("console.log", $"Unauthenticated API response: {(int)response.StatusCode} {response.StatusCode}");
+                await JS.InvokeVoidAsync("console.log", $"This is expected to fail with 401 Unauthorized");
+            }
+            catch (Exception ex) {
+                await JS.InvokeVoidAsync("console.error", $"Unauthenticated test failed with exception: {ex.Message}");
+                if (ex.InnerException != null) {
+                    await JS.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+                }
+            }
+            
+            // STEP 2: Test with a properly structured mock token
+            await JS.InvokeVoidAsync("console.log", "STEP 2: Testing API access WITH mock token...");
+            httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("http://localhost:5000/");
+            
+            // Create a more realistic mock JWT token with proper claims and current timestamp
+            // This is still a test token with fake signature
+            var now = DateTime.UtcNow;
+            var expiry = now.AddHours(1);
+            var unixTimeSeconds = new DateTimeOffset(expiry).ToUnixTimeSeconds();
+            
+            // Header: {"alg":"HS256","typ":"JWT"}
+            var header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+            
+            // Payload with required claims for our system
+            var claims = new {
+                sub = "user123",
+                nameid = "user123",
+                name = "Admin User",
+                email = "admin@example.com",
+                role = "Admin",
+                exp = unixTimeSeconds,
+                iss = "FNBReservationSystem",
+                aud = "FNBReservationClients",
+                nbf = new DateTimeOffset(now).ToUnixTimeSeconds(),
+                iat = new DateTimeOffset(now).ToUnixTimeSeconds()
+            };
+            
+            // Convert payload to base64
+            var payloadJson = JsonSerializer.Serialize(claims);
+            var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
+            var payload = Convert.ToBase64String(payloadBytes)
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
+            
+            // Create fake signature (this won't validate on the server but has correct format)
+            var signature = "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+            
+            // Combine to form JWT token
+            var mockToken = $"{header}.{payload}.{signature}";
+            
+            await JS.InvokeVoidAsync("console.log", $"Mock token structure: {mockToken.Split('.').Length} segments");
+            await JS.InvokeVoidAsync("console.log", $"Mock token expiry: {expiry.ToString("yyyy-MM-dd HH:mm:ss")} UTC");
+            
+            try {
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", mockToken);
+                var response = await httpClient.GetAsync("api/v1/admin/outlets");
+                await JS.InvokeVoidAsync("console.log", $"Mock-authenticated API response: {(int)response.StatusCode} {response.StatusCode}");
+                
+                // Read and log the response content for additional debugging
+                var content = await response.Content.ReadAsStringAsync();
+                if (content.Length > 0) {
+                    await JS.InvokeVoidAsync("console.log", $"Response content (first 100 chars): {content.Substring(0, Math.Min(100, content.Length))}...");
+                }
+                
+                await JS.InvokeVoidAsync("console.log", $"This token has correct format but will likely fail with 401 as the signature is invalid");
+            }
+            catch (Exception ex) {
+                await JS.InvokeVoidAsync("console.error", $"Mock token test failed: {ex.Message}");
+                if (ex.InnerException != null) {
+                    await JS.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+                }
+            }
+            
+            // STEP 3: Test with the real token from TokenService if available
+            await JS.InvokeVoidAsync("console.log", "STEP 3: Testing API access with stored token (if available)...");
+            var realToken = await TokenService.GetAccessTokenAsync();
+            
+            if (!string.IsNullOrEmpty(realToken))
+            {
+                await JS.InvokeVoidAsync("console.log", $"Found stored token (length: {realToken.Length})");
+                
+                // Validate token format
+                bool validTokenFormat = realToken.Count(c => c == '.') == 2;
+                await JS.InvokeVoidAsync("console.log", $"Token format is {(validTokenFormat ? "valid" : "invalid")} (contains {realToken.Count(c => c == '.')} dots)");
+                
+                if (validTokenFormat) {
+                    try {
+                        var handler = new JwtSecurityTokenHandler();
+                        var jwtToken = handler.ReadJwtToken(realToken);
+                        var tokenExpiry = jwtToken.ValidTo;
+                        var isExpired = tokenExpiry < DateTime.UtcNow;
+                        
+                        await JS.InvokeVoidAsync("console.log", $"Token expiry: {tokenExpiry.ToString("yyyy-MM-dd HH:mm:ss")} UTC");
+                        await JS.InvokeVoidAsync("console.log", $"Token is {(isExpired ? "expired" : "valid")}");
+                        
+                        if (isExpired) {
+                            await JS.InvokeVoidAsync("console.log", "Token is expired, API call will likely fail");
+                        }
+                    }
+                    catch (Exception ex) {
+                        await JS.InvokeVoidAsync("console.error", $"Error parsing token: {ex.Message}");
+                    }
+                }
+                
+                httpClient = new HttpClient();
+                httpClient.BaseAddress = new Uri("http://localhost:5000/");
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", realToken);
+                
+                try {
+                    var response = await httpClient.GetAsync("api/v1/admin/outlets");
+                    await JS.InvokeVoidAsync("console.log", $"Real token API response: {(int)response.StatusCode} {response.StatusCode}");
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var content = await response.Content.ReadAsStringAsync();
+                        await JS.InvokeVoidAsync("console.log", $"API response content (truncated): {content.Substring(0, Math.Min(100, content.Length))}...");
+                        isAuthenticated = true;
+                        await JS.InvokeVoidAsync("console.log", "Authentication via stored token successful");
+                    }
+                    else
+                    {
+                        var content = await response.Content.ReadAsStringAsync();
+                        await JS.InvokeVoidAsync("console.log", $"API access with stored token failed with status code: {(int)response.StatusCode}");
+                        await JS.InvokeVoidAsync("console.log", $"Error response: {content}");
+                        
+                        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) {
+                            await JS.InvokeVoidAsync("console.log", "Token appears to be invalid or expired");
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    await JS.InvokeVoidAsync("console.error", $"Real token test failed: {ex.Message}");
+                    if (ex.InnerException != null) {
+                        await JS.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+                    }
+                }
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "No stored token available for testing");
+            }
+            
+            await JS.InvokeVoidAsync("console.log", "========== API ACCESS TEST COMPLETED ==========");
+        }
+        catch (Exception ex) {
+            await JS.InvokeVoidAsync("console.error", $"Error in API access test: {ex.Message}");
+            if (ex.InnerException != null) {
+                await JS.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+            }
+            await JS.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    private async Task InitializeJavaScriptInterop()
+    {
+        try
+        {
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "/_content/FNBReservation.Portal/js/outletManagement.js");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error importing JS module: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsModule != null)
+        {
+            try
+            {
+                await _jsModule.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Error disposing JS module: {ex.Message}");
+            }
+        }
+    }
+
+    // Add these functions to help with auth debugging
+    
+    private async Task DebugAuthToken()
+    {
+        if (_jsModule != null)
+        {
+            await _jsModule.InvokeVoidAsync("debugToken");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("console.log", "JS module not loaded yet");
+            await JS.InvokeVoidAsync("eval", "window.debugAuthToken && window.debugAuthToken();");
+        }
+    }
+    
+    private async Task FixAuthentication()
+    {
+        try
+        {
+            if (_jsModule != null)
+            {
+                await _jsModule.InvokeVoidAsync("setMockToken");
+            }
+            else
+            {
+                // Create a mock token with admin rights that will work for debugging
+                var mockAuth = new
+                {
+                    Username = "admin",
+                    Role = "Admin",
+                    AccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE5MTYyMzkwMjJ9.tbDepxpstvGdW8TC3G8zK4C8q8RbTImGNp6rEcDMJVQ",
+                    RefreshToken = "mockRefreshToken123"
+                };
+                
+                await JS.InvokeVoidAsync("localStorage.setItem", "authData", JsonSerializer.Serialize(mockAuth));
+                await JS.InvokeVoidAsync("console.log", "Auth data fixed via inline code");
+            }
+            
+            // Update the authenticated status
+            isAuthenticated = true;
+            
+            // Reload the page to apply changes
+            NavigationManager.NavigateTo(NavigationManager.Uri, true);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error fixing authentication: {ex.Message}");
         }
     }
 }

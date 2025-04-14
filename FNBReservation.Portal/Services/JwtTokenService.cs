@@ -29,11 +29,39 @@ namespace FNBReservation.Portal.Services
                 var authData = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
                 if (string.IsNullOrEmpty(authData))
                 {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: No authData in localStorage");
                     return null;
                 }
 
-                var tokenData = JsonSerializer.Deserialize<AuthData>(authData);
-                return tokenData?.AccessToken;
+                try
+                {
+                    var tokenData = JsonSerializer.Deserialize<AuthData>(authData);
+                    if (tokenData == null)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Failed to deserialize authData");
+                        return null;
+                    }
+                    
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Got token for user {tokenData.Username}, Role: {tokenData.Role}");
+                    
+                    // Check if token is empty
+                    if (string.IsNullOrEmpty(tokenData.AccessToken))
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Access token is null or empty");
+                    }
+                    else
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Access token found (length: {tokenData.AccessToken.Length})");
+                    }
+                    
+                    return tokenData?.AccessToken;
+                }
+                catch (Exception deserializeEx)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Error deserializing authData: " + deserializeEx.Message);
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Original authData: " + authData);
+                    return null;
+                }
             }
             catch (InvalidOperationException)
             {
@@ -93,6 +121,7 @@ namespace FNBReservation.Portal.Services
                 var token = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(token))
                 {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "IsTokenValidAsync: No token found");
                     return false;
                 }
 
@@ -103,10 +132,15 @@ namespace FNBReservation.Portal.Services
                     
                     // Check if token has expired
                     var expiry = jwtToken.ValidTo;
-                    return expiry > DateTime.UtcNow;
+                    var isValid = expiry > DateTime.UtcNow;
+                    
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Token expiry: {expiry.ToString("yyyy-MM-dd HH:mm:ss")}, Current UTC: {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")}, Valid: {isValid}");
+                    
+                    return isValid;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error validating token: {ex.Message}");
                     return false;
                 }
             }
@@ -115,8 +149,9 @@ namespace FNBReservation.Portal.Services
                 // This happens during static rendering
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Unexpected error in IsTokenValidAsync: {ex.Message}");
                 return false;
             }
         }
