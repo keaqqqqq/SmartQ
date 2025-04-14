@@ -155,7 +155,22 @@ builder.Services.AddScoped<ITableService>(sp =>
 });
 
 // Register other mock services
-builder.Services.AddScoped<IStaffService, MockStaffService>();
+builder.Services.AddScoped<IStaffService>(sp => {
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<HttpClientStaffService>>();
+    
+    // Use the API client that has the auth handler configured
+    return new HttpClientStaffService(
+        httpClientFactory.CreateClient("API"),
+        jwtTokenService,
+        jsRuntime,
+        configuration,
+        logger
+    );
+});
 builder.Services.AddScoped<ICustomerService, MockCustomerService>();
 builder.Services.AddScoped<IReservationService, MockReservationService>();
 builder.Services.AddMudServices();

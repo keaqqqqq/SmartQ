@@ -2,7 +2,9 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @inject IStaffService StaffService
+@inject IOutletService OutletService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudDialog>
@@ -25,6 +27,14 @@
                         }
                     </MudSelect>
                 </MudItem>
+                @if (IsEdit && !string.IsNullOrEmpty(staffModel.UserId))
+                {
+                    <MudItem xs="12">
+                        <MudTextField Value="@staffModel.UserId" Label="Staff ID"
+                                      Variant="Variant.Outlined" FullWidth="true" ReadOnly="true"
+                                      HelperText="System-generated ID for this staff member" />
+                    </MudItem>
+                }
                 <MudItem xs="12">
                     <MudTextField @bind-Value="staffModel.FullName" Label="Full Name"
                                   Required RequiredError="Name is required"
@@ -86,16 +96,17 @@
     private bool formIsValid = false;
     private List<OutletSummaryDto> outlets = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         // Load outlets for the dropdown
-        LoadOutlets();
+        await LoadOutlets();
 
         if (IsEdit && Staff != null)
         {
             staffModel = new StaffFormModel
                 {
                     StaffId = Staff.StaffId,
+                    UserId = Staff.UserId,
                     FullName = Staff.FullName,
                     Username = Staff.Username,
                     Email = Staff.Email,
@@ -113,15 +124,27 @@
         }
     }
 
-    private void LoadOutlets()
+    private async Task LoadOutlets()
     {
-        // Mock data for outlets
-        outlets = new List<OutletSummaryDto>
+        try
         {
-            new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
-            new OutletSummaryDto { OutletId = "A16", Name = "Ocean View Restaurant - Beachside", Location = "456 Beach Drive, Oceanfront" },
-            new OutletSummaryDto { OutletId = "A17", Name = "Ocean View Restaurant - Harborfront", Location = "789 Harbor Road, Marina District" }
-        };
+            await JS.InvokeVoidAsync("console.log", "Loading outlets for staff form...");
+            var apiOutlets = await OutletService.GetOutletsAsync();
+            
+            outlets = apiOutlets.Select(o => new OutletSummaryDto
+            {
+                OutletId = o.id,
+                Name = o.Name,
+                Location = o.Location
+            }).ToList();
+            
+            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets for staff form");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error loading outlets: {ex.Message}");
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task Submit()
@@ -195,5 +218,7 @@
 
         [Required(ErrorMessage = "Outlet is required")]
         public string OutletId { get; set; } = string.Empty;
+
+        public string UserId { get; set; } = string.Empty;
     }
 }
