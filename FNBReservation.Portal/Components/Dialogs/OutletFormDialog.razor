@@ -118,7 +118,7 @@
                         PeakHours="@OutletModel.PeakHours" 
                         PeakHoursChanged="OnPeakHoursChanged" 
                         OutletId="@(string.IsNullOrEmpty(OutletModel.id) ? OutletModel.OutletId : OutletModel.id)" 
-                        UseApiIntegration="true" />
+                        UseApiIntegration="@IsEdit" />
                 </MudTabPanel>
             </MudTabs>
         </MudForm>

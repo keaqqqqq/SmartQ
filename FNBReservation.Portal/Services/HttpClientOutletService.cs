@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.JSInterop;
+using Microsoft.Extensions.Configuration;
 
 namespace FNBReservation.Portal.Services
 {
@@ -13,14 +14,16 @@ namespace FNBReservation.Portal.Services
         private readonly IJSRuntime _jsRuntime;
         private readonly string _baseUrl;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly IPeakHourService _peakHourService;
 
         public HttpClientOutletService(HttpClient httpClient, JwtTokenService jwtTokenService, 
-            IJSRuntime jsRuntime, IConfiguration configuration)
+            IJSRuntime jsRuntime, IConfiguration configuration, IPeakHourService peakHourService)
         {
             _httpClient = httpClient;
             _jwtTokenService = jwtTokenService;
             _jsRuntime = jsRuntime;
             _baseUrl = configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/";
+            _peakHourService = peakHourService;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -161,6 +164,10 @@ namespace FNBReservation.Portal.Services
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"CreateOutletAsync: {endpoint}");
 
+                // Save peak hours for later creation
+                var peakHours = outlet.PeakHours?.ToList() ?? new List<PeakHour>();
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Saved {peakHours.Count} peak hours for later creation");
+
                 // Convert OutletDto to CreateOutletDto format which the API expects
                 var createOutletDto = new
                 {
@@ -177,8 +184,8 @@ namespace FNBReservation.Portal.Services
                     Longitude = outlet.Longitude,
                     ReservationAllocationPercent = outlet.ReservationAllocationPercent,
                     DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
-                    Tables = outlet.Tables,
-                    PeakHours = outlet.PeakHours
+                    Tables = outlet.Tables
+                    // We omit PeakHours since they need to be created separately
                 };
 
                 var jsonContent = JsonSerializer.Serialize(createOutletDto);
@@ -203,6 +210,28 @@ namespace FNBReservation.Portal.Services
                 {
                     outlet.id = createdOutlet.id;
                     outlet.OutletId = createdOutlet.OutletId;
+                    
+                    // Now create the peak hours
+                    if (peakHours.Count > 0 && createdOutlet != null)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {peakHours.Count} peak hours for outlet {createdOutlet.id}");
+                        
+                        try 
+                        {
+                            foreach (var peakHour in peakHours)
+                            {
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"Creating peak hour: {peakHour.Name}");
+                                await _peakHourService.CreatePeakHourAsync(createdOutlet.id, peakHour);
+                            }
+                            
+                            await _jsRuntime.InvokeVoidAsync("console.log", "Successfully created all peak hours");
+                        }
+                        catch (Exception ex)
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating peak hours: {ex.Message}");
+                            // We don't throw here to avoid failing the outlet creation if peak hour creation fails
+                        }
+                    }
                 }
                 
                 return true;

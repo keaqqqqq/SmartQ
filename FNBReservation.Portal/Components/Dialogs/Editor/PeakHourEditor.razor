@@ -87,7 +87,7 @@
         }
         else
         {
-            await JS.InvokeVoidAsync("console.log", $"Using local peak hours, count: {PeakHours?.Count ?? 0}");
+            await JS.InvokeVoidAsync("console.log", $"Using local peak hours (outlet creation mode), count: {PeakHours?.Count ?? 0}");
         }
     }
 
@@ -182,18 +182,16 @@
 
     private async Task OpenPeakHourDialog()
     {
-        // Initialize a new peak hour with default values
+        // Create a new peak hour with default values
         currentPeakHour = new PeakHour
-            {
-                Name = "Dinner Peak Hour",
-                StartTime = "18:00:00",
-                EndTime = "20:00:00",
-                DaysOfWeek = "1,2,3,4,5,6,7", // Monday to Sunday
-                ReservationAllocationPercent = 100,
-                IsActive = true,
-                StartDate = DateTime.Now,
-                EndDate = DateTime.Now.AddDays(30)
-            };
+        {
+            Name = UseApiIntegration ? "" : "Dinner Peak Hour", // Better default name when in outlet creation mode
+            DaysOfWeek = "1,2,3,4,5,6,7",
+            StartTime = "18:00:00",
+            EndTime = "20:00:00",
+            ReservationAllocationPercent = 100,
+            IsActive = true
+        };
 
         var parameters = new DialogParameters
             {
@@ -221,7 +219,8 @@
                 }
                 else
                 {
-                    // Just update local state
+                    // Just update local state (outlet creation mode)
+                    await JS.InvokeVoidAsync("console.log", $"Adding peak hour locally (outlet creation mode): {peakHour.Name}");
                     PeakHours.Add(peakHour);
                 }
                 
