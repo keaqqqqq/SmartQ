@@ -169,6 +169,11 @@
     private bool isAuthenticated = false;
     private IJSObjectReference _jsModule;
 
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -207,9 +212,41 @@
                 return;
             }
 
+            // Create a DotNetObjectReference
+            var objRef = DotNetObjectReference.Create(this);
+            
+            // Set up JavaScript function for direct refresh
+            await JS.InvokeVoidAsync("eval", @"
+                window.outletManagementRef = null;
+                
+                window.setOutletManagementRef = function(ref) {
+                    console.log('Setting outlet management reference');
+                    window.outletManagementRef = ref;
+                };
+                
+                window.refreshOutletManagement = function() {
+                    console.log('Direct refresh called');
+                    if (window.outletManagementRef) {
+                        window.outletManagementRef.invokeMethodAsync('RefreshDataFromEvent');
+                    } else {
+                        console.warn('No outlet management reference available');
+                    }
+                };
+            ");
+            
+            // Register the reference
+            await JS.InvokeVoidAsync("setOutletManagementRef", objRef);
+
             // Load data only if authenticated
             await LoadOutletsData();
         }
+    }
+
+    [JSInvokable]
+    public async Task RefreshDataFromEvent()
+    {
+        await JS.InvokeVoidAsync("console.log", "RefreshDataFromEvent called from JS");
+        await LoadOutletsData();
     }
 
     private void RedirectToLogin()
@@ -594,6 +631,21 @@
 
     public async ValueTask DisposeAsync()
     {
+        // Clean up the JS reference
+        try
+        {
+            await JS.InvokeVoidAsync("eval", @"
+                if (window.outletManagementRef) {
+                    window.outletManagementRef = null;
+                    console.log('Cleared outlet management reference');
+                }
+            ");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error cleaning up: {ex.Message}");
+        }
+        
         if (_jsModule != null)
         {
             try

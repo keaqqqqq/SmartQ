@@ -166,6 +166,18 @@
                 
                 await TablesChanged.InvokeAsync(Tables);
                 await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
                 Snackbar.Add("Table added successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -243,6 +255,18 @@
                 
                 await TablesChanged.InvokeAsync(Tables);
                 await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after update");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
                 Snackbar.Add("Table updated successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -286,6 +310,18 @@
                 Tables.Remove(table);
                 await TablesChanged.InvokeAsync(Tables);
                 await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after delete");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
                 Snackbar.Add("Table removed successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -374,6 +410,18 @@
             
             await TablesChanged.InvokeAsync(Tables);
             await OnTablesUpdated.InvokeAsync(Tables);
+            
+            // Force immediate refresh in parent components
+            if (UseApiIntegration)
+            {
+                await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after bulk add");
+                await JS.InvokeVoidAsync("eval", @"
+                    if (window.refreshOutletManagement) {
+                        window.refreshOutletManagement();
+                    }
+                ");
+            }
+            
             Snackbar.Add($"Added {bulkCount} tables successfully", Severity.Success);
         }
         catch (Exception ex)
