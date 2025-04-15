@@ -1,7 +1,11 @@
 ﻿@using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
+@using MudBlazor
 @inject IOutletService OutletService
+@inject IPeakHourService PeakHourService
+@inject ITableService TableService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudDialog Class="outlet-details" DisableSidePadding="true">
@@ -126,7 +130,7 @@
 
                 <MudTabPanel Text="Tables" Icon="@Icons.Material.Filled.TableBar">
                     <MudText Typo="Typo.subtitle1" Class="mb-4">Table Configuration</MudText>
-                    <MudTable Items="@outlet.Tables" Dense="true" Hover="true" Bordered="true">
+                    <MudTable Items="@(outlet.Tables ?? new List<TableInfo>())" Dense="true" Hover="true" Bordered="true">
                         <HeaderContent>
                             <MudTh>Table Number</MudTh>
                             <MudTh>Capacity</MudTh>
@@ -154,7 +158,7 @@
 
                 <MudTabPanel Text="Peak Hours" Icon="@Icons.Material.Filled.AccessTimeFilled">
                     <MudPaper Elevation="0" Class="pa-4">
-                        @if (!outlet.PeakHours.Any())
+                        @if (outlet.PeakHours == null || !outlet.PeakHours.Any())
                         {
                             <MudAlert Severity="Severity.Info" Class="mb-4">No peak hours have been configured for this outlet.</MudAlert>
                         }
@@ -205,7 +209,7 @@
                             <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                         </div>
                     }
-                    else if (!outletChanges.Any())
+                    else if (outletChanges == null || !outletChanges.Any())
                     {
                         <MudAlert Severity="Severity.Info" Class="my-4">No change history found.</MudAlert>
                     }
@@ -248,40 +252,73 @@
 
     @@media (max-width: 600px) {
         .outlet-details {
-            min-width: unset;
-            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
         }
     }
 </style>
 
 @code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public string OutletId { get; set; }
 
-    [Parameter] public string OutletId { get; set; } = string.Empty;
-
-    private OutletDto? outlet;
+    private OutletDto outlet;
     private List<OutletChangeDto> outletChanges = new();
     private bool isLoading = true;
     private bool isLoadingChanges = true;
+    private bool isLoadingPeakHours = true;
+    private bool isLoadingTables = true;
+    private string errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadOutletData();
+        await LoadOutlet();
     }
 
-    private async Task LoadOutletData()
+    private async Task LoadOutlet()
     {
         try
         {
             isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading outlet details for ID: {OutletId}");
+            
             outlet = await OutletService.GetOutletByIdAsync(OutletId);
-
+            
+            if (outlet == null)
+            {
+                errorMessage = "Failed to load outlet details.";
+                await JS.InvokeVoidAsync("console.log", errorMessage);
+                Snackbar.Add(errorMessage, Severity.Error);
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"Successfully loaded outlet: {outlet.Name}");
+            
+            // Load peak hours explicitly
+            await LoadPeakHours();
+            
+            // Load tables explicitly
+            await LoadTables();
+            
             // Load change history
-            await LoadChangeHistory();
+            await LoadOutletChanges();
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Error loading outlet details: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+            
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+            }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading outlet details: {ex.Message}", Severity.Error);
+            errorMessage = $"Error loading outlet details: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
         }
         finally
         {
@@ -289,16 +326,106 @@
         }
     }
 
-    private async Task LoadChangeHistory()
+    private async Task LoadPeakHours()
+    {
+        try
+        {
+            isLoadingPeakHours = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading peak hours for outlet ID: {OutletId}");
+            
+            var peakHours = await PeakHourService.GetPeakHoursAsync(OutletId);
+            if (peakHours != null && peakHours.Any())
+            {
+                outlet.PeakHours = peakHours;
+                await JS.InvokeVoidAsync("console.log", $"Successfully loaded {peakHours.Count} peak hours");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "No peak hours found or empty response");
+            }
+        }
+        catch (Exception ex)
+        {
+            string warningMessage = $"Error loading peak hours: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", warningMessage);
+            // Non-critical error, ensure we have at least an empty list
+            if (outlet.PeakHours == null)
+            {
+                outlet.PeakHours = new List<PeakHour>();
+            }
+        }
+        finally
+        {
+            isLoadingPeakHours = false;
+        }
+    }
+
+    private async Task LoadTables()
+    {
+        try
+        {
+            isLoadingTables = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading tables for outlet ID: {OutletId}");
+            
+            if (Guid.TryParse(OutletId, out Guid outletGuid))
+            {
+                var tables = await TableService.GetTablesByOutletIdAsync(outletGuid);
+                if (tables != null && tables.Any())
+                {
+                    outlet.Tables = tables;
+                    await JS.InvokeVoidAsync("console.log", $"Successfully loaded {tables.Count} tables");
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("console.log", "No tables found or empty response");
+                }
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", $"Failed to parse outlet ID: {OutletId} as GUID");
+            }
+        }
+        catch (Exception ex)
+        {
+            string warningMessage = $"Error loading tables: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", warningMessage);
+            // Non-critical error, ensure we have at least an empty list
+            if (outlet.Tables == null)
+            {
+                outlet.Tables = new List<TableInfo>();
+            }
+        }
+        finally
+        {
+            isLoadingTables = false;
+        }
+    }
+
+    private async Task LoadOutletChanges()
     {
         try
         {
             isLoadingChanges = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading outlet changes for ID: {OutletId}");
+            
             outletChanges = await OutletService.GetOutletChangesAsync(OutletId);
+            await JS.InvokeVoidAsync("console.log", $"Loaded {outletChanges?.Count ?? 0} changes");
+        }
+        catch (HttpRequestException ex)
+        {
+            string warningMessage = $"Error loading outlet change history: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", warningMessage);
+            
+            // Change history might not be implemented in the API yet, so just log it
+            outletChanges = new List<OutletChangeDto>();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading change history: {ex.Message}", Severity.Warning);
+            string warningMessage = $"Error loading outlet change history: {ex.Message}";
+            await JS.InvokeVoidAsync("console.log", warningMessage);
+            
+            // Non-critical error, so just initialize an empty list
+            outletChanges = new List<OutletChangeDto>();
         }
         finally
         {
@@ -306,71 +433,65 @@
         }
     }
 
+    private void Close() => MudDialog.Close();
+
     private Color GetStatusColor(string status)
     {
-        return status.ToLower() switch
+        return status?.ToLower() switch
         {
             "active" => Color.Success,
             "inactive" => Color.Error,
             "maintenance" => Color.Warning,
-            "available" => Color.Success,
-            "occupied" => Color.Error,
-            "reserved" => Color.Warning,
             _ => Color.Default
         };
     }
 
     private Color GetChangeColor(string changeType)
     {
-        return changeType.ToLower() switch
+        return changeType?.ToLower() switch
         {
             "create" => Color.Success,
-            "update" => Color.Info,
+            "update" => Color.Warning,
             "delete" => Color.Error,
-            "status_change" => Color.Warning,
             _ => Color.Default
         };
     }
 
     private string GetChangeTypeDisplay(string changeType)
     {
-        return changeType.ToLower() switch
+        return changeType?.ToLower() switch
         {
             "create" => "Created",
             "update" => "Updated",
             "delete" => "Deleted",
-            "status_change" => "Status Changed",
             _ => changeType
         };
     }
 
-    private string FormatDaysOfWeek(string daysOfWeek)
+    private string FormatDaysOfWeek(string daysString)
     {
-        var days = daysOfWeek.Split(',');
-        var dayNames = new List<string>();
-
-        foreach (var day in days)
+        if (string.IsNullOrEmpty(daysString))
         {
-            if (int.TryParse(day, out int dayNumber))
-            {
-                dayNames.Add(dayNumber switch
-                {
-                    1 => "Mon",
-                    2 => "Tue",
-                    3 => "Wed",
-                    4 => "Thu",
-                    5 => "Fri",
-                    6 => "Sat",
-                    7 => "Sun",
-                    _ => day
-                });
-            }
+            return "Every day";
         }
 
-        // Check if all days are selected
-        if (dayNames.Count == 7)
+        var days = daysString.Split(',').Select(int.Parse).ToList();
+        var dayNames = new List<string>();
+
+        // Map numeric day values to day names (1 = Monday, 7 = Sunday)
+        foreach (var day in days)
         {
-            return "All Days";
+            dayNames.Add(day switch
+            {
+                1 => "Mon",
+                2 => "Tue",
+                3 => "Wed",
+                4 => "Thu",
+                5 => "Fri",
+                6 => "Sat",
+                7 => "Sun",
+                _ => day.ToString()
+            });
         }
 
         return string.Join(", ", dayNames);
@@ -378,19 +499,17 @@
 
     private string FormatTimeRange(string startTime, string endTime)
     {
-        // Convert strings to TimeSpan and then format properly
-        if (TimeSpan.TryParse(startTime, out TimeSpan start) && TimeSpan.TryParse(endTime, out TimeSpan end))
+        if (string.IsNullOrEmpty(startTime) || string.IsNullOrEmpty(endTime))
         {
-            // Create DateTime objects to get AM/PM formatting
-            var startDateTime = DateTime.Today.Add(start);
-            var endDateTime = DateTime.Today.Add(end);
-
-            return $"{startDateTime.ToString("hh:mm tt").ToLower()} - {endDateTime.ToString("hh:mm tt").ToLower()}";
+            return "Not set";
         }
 
-        // Fallback if parsing fails
+        // Parse time strings (expected format HH:mm:ss)
+        if (TimeSpan.TryParse(startTime, out var start) && TimeSpan.TryParse(endTime, out var end))
+        {
+            return $"{start.ToString(@"hh\:mm")} - {end.ToString(@"hh\:mm")}";
+        }
+
         return $"{startTime} - {endTime}";
     }
-
-    private void Close() => MudDialog.Close();
 }

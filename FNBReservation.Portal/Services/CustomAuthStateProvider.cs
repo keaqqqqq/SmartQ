@@ -1,0 +1,249 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.JSInterop;
+using System.Text.Json;
+using System.IdentityModel.Tokens.Jwt;
+
+namespace FNBReservation.Portal.Services
+{
+    public class CustomAuthStateProvider : AuthenticationStateProvider
+    {
+        private ClaimsPrincipal _anonymous = new ClaimsPrincipal(new ClaimsIdentity());
+        private readonly IJSRuntime _jsRuntime;
+
+        public CustomAuthStateProvider(IJSRuntime jsRuntime)
+        {
+            _jsRuntime = jsRuntime;
+        }
+
+        public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            try
+            {
+                // Try to get auth data from localStorage through JS interop
+                try
+                {
+                    var storedPrincipal = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
+                    
+                    if (string.IsNullOrEmpty(storedPrincipal))
+                    {
+                        return new AuthenticationState(_anonymous);
+                    }
+
+                    var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
+                    
+                    if (authData == null)
+                    {
+                        return new AuthenticationState(_anonymous);
+                    }
+
+                    var claims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.Name, authData.Username),
+                        new Claim(ClaimTypes.Role, authData.Role)
+                    };
+                    
+                    // Add JWT claims if token is present
+                    if (!string.IsNullOrEmpty(authData.AccessToken))
+                    {
+                        try
+                        {
+                            var handler = new JwtSecurityTokenHandler();
+                            var jwtToken = handler.ReadJwtToken(authData.AccessToken);
+                            
+                            var userIdClaim = jwtToken.Claims.FirstOrDefault(c => 
+                                c.Type == "nameid" || c.Type == ClaimTypes.NameIdentifier);
+                                
+                            if (userIdClaim != null)
+                            {
+                                claims.Add(new Claim(ClaimTypes.NameIdentifier, userIdClaim.Value));
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore JWT parsing errors - use the basic claims
+                        }
+                    }
+
+                    var identity = new ClaimsIdentity(claims, "FNBReservation");
+                    var user = new ClaimsPrincipal(identity);
+                    
+                    return new AuthenticationState(user);
+                }
+                catch (InvalidOperationException)
+                {
+                    // This happens during static rendering when JS interop is not available
+                    return new AuthenticationState(_anonymous);
+                }
+            }
+            catch
+            {
+                // If there's any error, return anonymous principal
+                return new AuthenticationState(_anonymous);
+            }
+        }
+
+        public async Task<ClaimsPrincipal> GetAuthenticatedUserFromStorageAsync()
+        {
+            try
+            {
+                // This method is meant to be called after rendering, during OnAfterRenderAsync
+                var storedPrincipal = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
+                
+                await _jsRuntime.InvokeVoidAsync("console.log", "GetAuthState - Stored auth data: " + 
+                    (string.IsNullOrEmpty(storedPrincipal) ? "none" : "exists"));
+                
+                if (string.IsNullOrEmpty(storedPrincipal))
+                {
+                    return _anonymous;
+                }
+
+                var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
+                
+                if (authData == null)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Auth data exists but could not be deserialized");
+                    return _anonymous;
+                }
+
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Auth data for user: {authData.Username}, Role: {authData.Role}");
+                
+                // Create a new identity and user principal
+                var claims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.Name, authData.Username),
+                    new Claim(ClaimTypes.Role, authData.Role)
+                };
+                
+                // Add a unique ID claim if we have one
+                if (!string.IsNullOrEmpty(authData.AccessToken))
+                {
+                    try
+                    {
+                        var handler = new JwtSecurityTokenHandler();
+                        var jwtToken = handler.ReadJwtToken(authData.AccessToken);
+                        
+                        var userIdClaim = jwtToken.Claims.FirstOrDefault(c => 
+                            c.Type == "nameid" || c.Type == ClaimTypes.NameIdentifier);
+                            
+                        if (userIdClaim != null)
+                        {
+                            claims.Add(new Claim(ClaimTypes.NameIdentifier, userIdClaim.Value));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Error extracting claims from JWT: " + ex.Message);
+                    }
+                }
+
+                var identity = new ClaimsIdentity(claims, "FNBReservation");
+                var user = new ClaimsPrincipal(identity);
+                
+                // Update the authentication state and notify
+                UpdateAuthenticationState(new AuthenticationState(user));
+                
+                return user;
+            }
+            catch (Exception ex)
+            {
+                await _jsRuntime.InvokeVoidAsync("console.log", "Error in GetAuthenticatedUserFromStorage: " + ex.Message);
+                return _anonymous;
+            }
+        }
+
+        public void NotifyUserAuthentication(string username, string role, string accessToken = null, string refreshToken = null)
+        {
+            try
+            {
+                // Store the auth data in localStorage
+                var authData = new AuthData 
+                { 
+                    Username = username, 
+                    Role = role,
+                    AccessToken = accessToken,
+                    RefreshToken = refreshToken
+                };
+                var serializedData = JsonSerializer.Serialize(authData);
+                
+                try
+                {
+                    _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authData", serializedData);
+                    _jsRuntime.InvokeVoidAsync("console.log", "User authenticated: " + username);
+                }
+                catch (InvalidOperationException)
+                {
+                    // This happens during static rendering - we'll skip the JS interop
+                }
+                
+                // Create and update the claims identity
+                var identity = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.Name, username),
+                    new Claim(ClaimTypes.Role, role)
+                }, "FNBReservation");
+                
+                var user = new ClaimsPrincipal(identity);
+                
+                // Notify the auth state changed
+                UpdateAuthenticationState(new AuthenticationState(user));
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _jsRuntime.InvokeVoidAsync("console.log", "Error in NotifyUserAuthentication: " + ex.Message);
+                }
+                catch
+                {
+                    // Ignore JS interop errors during static rendering
+                }
+            }
+        }
+
+        public void NotifyUserLogout()
+        {
+            try
+            {
+                // Clear localStorage
+                try
+                {
+                    _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "authData");
+                    _jsRuntime.InvokeVoidAsync("console.log", "User logged out");
+                }
+                catch (InvalidOperationException)
+                {
+                    // This happens during static rendering - we'll skip the JS interop
+                }
+                
+                // Update auth state
+                UpdateAuthenticationState(new AuthenticationState(_anonymous));
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _jsRuntime.InvokeVoidAsync("console.log", "Error in NotifyUserLogout: " + ex.Message);
+                }
+                catch
+                {
+                    // Ignore JS interop errors during static rendering
+                }
+            }
+        }
+
+        // A public wrapper method to use the protected NotifyAuthenticationStateChanged method
+        public void UpdateAuthenticationState(AuthenticationState state)
+        {
+            NotifyAuthenticationStateChanged(Task.FromResult(state));
+        }
+    }
+
+    public class AuthData
+    {
+        public string Username { get; set; }
+        public string Role { get; set; }
+        public string AccessToken { get; set; }
+        public string RefreshToken { get; set; }
+    }
+}

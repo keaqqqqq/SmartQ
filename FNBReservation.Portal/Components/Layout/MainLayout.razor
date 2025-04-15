@@ -1,5 +1,9 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 
 <MudPopoverProvider @rendermode="InteractiveServer" />
 <MudThemeProvider @rendermode="InteractiveServer" />
@@ -16,7 +20,6 @@
             </MudStack>
         </MudDrawerHeader>
         <MudSpacer />
-       
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -29,11 +32,42 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
 @code {
     private bool _drawerOpen = true;
 
     private void DrawerToggle()
     {
         _drawerOpen = !_drawerOpen;
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check if we have the auth data in localStorage and update state if needed
+            if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+            {
+                try
+                {
+                    var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                    await JS.InvokeVoidAsync("console.log", $"MainLayout auth check: User authenticated: {user.Identity?.IsAuthenticated}");
+                    
+                    if (user.Identity?.IsAuthenticated == true)
+                    {
+                        // Force refresh of auth state to ensure NavMenu updates
+                        customAuthProvider.UpdateAuthenticationState(new AuthenticationState(user));
+                        
+                        await JS.InvokeVoidAsync("console.log", "Auth state refreshed from MainLayout");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Error checking auth in MainLayout: {ex.Message}");
+                }
+            }
+        }
+        
+        await base.OnAfterRenderAsync(firstRender);
     }
 }

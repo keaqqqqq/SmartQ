@@ -1,9 +1,11 @@
-﻿@page "/"
+﻿@page "/later"
 @using System.Linq
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JS
+@inject JwtTokenService TokenService
 @rendermode InteractiveServer
 
 <PageTitle>Outlet Dashboard - F&B Reservation System</PageTitle>
