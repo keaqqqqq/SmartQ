@@ -1,6 +1,4 @@
 ﻿@using FNBReservation.Portal.Models
-@using Microsoft.JSInterop
-@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudDialog Style="min-width: 550px; max-width: 700px;">
@@ -25,10 +23,7 @@
                               Variant="Variant.Outlined" FullWidth="true" />
             </MudItem>
             <MudItem xs="12">
-                <div class="d-flex align-center">
-                    <input type="checkbox" id="tableIsActive" checked="@Table.IsActive" @onchange="@((e) => Table.IsActive = (bool)e.Value)" />
-                    <label for="tableIsActive" class="ml-2">Active</label>
-                </div>
+                <MudSwitch @bind-Checked="Table.IsActive" Label="Active" Color="Color.Primary" T="bool" />
             </MudItem>
         </MudGrid>
     </DialogContent>
@@ -44,27 +39,6 @@
     [Parameter] public TableInfo Table { get; set; } = new();
     [Parameter] public bool EditMode { get; set; } = false;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await JS.InvokeVoidAsync("console.log", "TableDialog initialized:", Table, $"EditMode: {EditMode}");
-        
-        // Ensure Id is set for new tables if not already set
-        if (!EditMode && Table.Id == Guid.Empty)
-        {
-            Table.Id = Guid.NewGuid();
-            await JS.InvokeVoidAsync("console.log", "Generated new ID for table:", Table.Id);
-        }
-    }
-
-    private void Submit()
-    {
-        if (string.IsNullOrWhiteSpace(Table.TableNumber))
-        {
-            return;
-        }
-        
-        MudDialog.Close(DialogResult.Ok(Table));
-    }
-    
+    private void Submit() => MudDialog.Close(DialogResult.Ok(Table));
     private void Cancel() => MudDialog.Cancel();
 }

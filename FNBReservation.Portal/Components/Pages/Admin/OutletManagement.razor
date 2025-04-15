@@ -4,18 +4,9 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Components.Dialogs
 @using FNBReservation.Portal.Services
-@using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Components.Web
-@using System.IdentityModel.Tokens.Jwt
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject IJSRuntime JS
-@inject NavigationManager NavigationManager
-@inject AuthenticationStateProvider AuthStateProvider
-@inject JwtTokenService TokenService
-@implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <MudBreakpointProvider>
@@ -23,40 +14,8 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
             <MudText Typo="Typo.h4">Outlet Management</MudText>
             <MudSpacer />
-
-            <!-- Enhanced search with debounce and better styling -->
-            <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey);">
-                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, location, status..." 
-                          Immediate="true" OnDebounceIntervalElapsed="HandleSearch" DebounceInterval="300"
-                          DisableUnderLine="true" Variant="Variant.Text"
-                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
-                          Class="my-0 py-0"
-                          OnKeyDown="@SearchOnEnter" />
-                <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
-                            OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
-                            Class="ml-1" />
-            </MudPaper>
-            
-            @if (!string.IsNullOrWhiteSpace(SearchTerm))
-            {
-                <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                    @($"Search: {SearchTerm}")
-                </MudChip>
-            }
+            <MudTextField @bind-Value="SearchTerm" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" OnDebounceIntervalElapsed="SearchOutlets" />
         </MudStack>
-
-        @if (!isAuthenticated)
-        {
-            <MudAlert Severity="Severity.Warning" Class="mb-4">
-                <MudText>Authentication issue detected. Please try to fix using one of these options:</MudText>
-                <MudStack Row="true" Class="mt-2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="FixAuthentication">Fix Auth</MudButton>
-                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RedirectToLogin">Login Again</MudButton>
-                    <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="DebugAuthToken">Debug Token</MudButton>
-                </MudStack>
-            </MudAlert>
-        }
 
         @if (isLoading)
         {
@@ -64,82 +23,60 @@
         }
         else
         {
-            <!-- Show search filter chip if there's a search term -->
-            @if (!string.IsNullOrWhiteSpace(SearchTerm) && !isLoading)
-            {
-                <MudPaper Class="pa-3 mb-4" Elevation="0">
-                    <div class="d-flex align-center">
-                        <MudText Class="mr-3">Filtering by:</MudText>
-                        <MudChip Color="Color.Primary"
-                                 Size="Size.Small"
-                                 T="string"
-                                 OnClose="ClearSearch">
-                            @SearchTerm
-                        </MudChip>
-                        <MudSpacer />
-                        <MudText>Showing @outlets.Count outlet@(outlets.Count != 1 ? "s" : "")</MudText>
-                    </div>
-                </MudPaper>
-            }
-
-            @if (outlets.Count == 0)
-            {
-                <MudAlert Severity="Severity.Info" Class="mb-4">
-                    @if (string.IsNullOrWhiteSpace(SearchTerm))
-                    {
-                        <MudText>No outlets found. Add a new outlet to get started.</MudText>
-                    }
-                    else
-                    {
-                        <MudText>No outlets matching "<strong>@SearchTerm</strong>". Try a different search term.</MudText>
-                    }
-                </MudAlert>
-            }
-            else
-            {
-                <MudTable Items="@outlets" Hover="true" Breakpoint="Breakpoint.Sm" LoadingProgressColor="Color.Primary">
-                    <HeaderContent>
-                        <MudTh>ID</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Location</MudTh>
-                        <MudTh>Status</MudTh>
-                        <MudTh>Capacity</MudTh>
-                        <MudTh>Queue</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate Context="context">
-                        <MudTd DataLabel="ID">@context.OutletId</MudTd>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Location">@context.Location</MudTd>
-                        <MudTd DataLabel="Status">
-                            <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">@context.Status</MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Capacity">
-                            <div>@(context.Tables?.Sum(t => t.Capacity) ?? 0) seats</div>
-                            <MudText Typo="Typo.caption">@(context.Tables?.Count ?? 0) tables</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Queue">
-                            <MudChip Color="@(context.QueueEnabled ? Color.Success : Color.Error)"
-                                     Size="Size.Small"
-                                     T="string">
-                                @(context.QueueEnabled ? "Enabled" : "Disabled")
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true">
-                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" OnClick="@(() => ViewOutletDetails(context))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditOutletDialog(context))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteDialog(context))" />
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                    <PagerContent>
-                        <MudTablePager />
-                    </PagerContent>
-                </MudTable>
-            }
+            <MudTable Items="@outlets" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading" LoadingProgressColor="Color.Primary">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Location</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Capacity</MudTh>
+                    <MudTh>Queue</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="context">
+                    <MudTd DataLabel="ID">@context.OutletId</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Location">@context.Location</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@GetStatusColor(context.Status)" Size="Size.Small" T="string">@context.Status</MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Capacity">
+                        <div>@context.Tables.Sum(t => t.Capacity) seats</div>
+                        <MudText Typo="Typo.caption">@context.Tables.Count tables</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Queue">
+                        <MudBreakpointProvider>
+                            <ChildContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudChip Color="@(context.QueueEnabled ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                                        @(context.QueueEnabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </MudStack>
+                            </ChildContent>
+                        </MudBreakpointProvider>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" OnClick="@(() => ViewOutletDetails(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditOutletDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteDialog(context))" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No outlets found</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
         }
-
         <!-- Floating Action Button (FAB) -->
         <MudFab Color="Color.Primary"
                 StartIcon="@Icons.Material.Filled.Add"
@@ -157,145 +94,31 @@
             z-index: 10;
         }
     </style>
+
+
 </MudBreakpointProvider>
 
 @code {
-    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; }
-
+    // Your existing code here
     private List<OutletDto> outlets = new();
-    private List<OutletDto> allOutlets = new(); // Cache for all outlets
     private bool isLoading = true;
     private string SearchTerm = "";
-    private bool isAuthenticated = false;
-    private IJSObjectReference _jsModule;
-
-    protected override void OnInitialized()
-    {
-        base.OnInitialized();
-    }
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            // Check authentication status WITHOUT JavaScript calls
-            if (AuthState != null)
-            {
-                var authState = await AuthState;
-                isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
-
-                if (!isAuthenticated)
-                {
-                    // Don't use JS here, defer redirect to OnAfterRender if needed
-                }
-            }
-        }
-        catch
-        {
-            // Don't use JS logging here, just set the state
-            isAuthenticated = false;
-        }
+        await LoadOutlets();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            // NOW we can safely use JavaScript interop
-            await JS.InvokeVoidAsync("console.log", "Outlet Management component loaded");
-
-            // Check authentication and redirect if needed
-            if (!isAuthenticated)
-            {
-                await JS.InvokeVoidAsync("console.log", "User not authenticated, redirecting to login");
-                RedirectToLogin();
-                return;
-            }
-
-            // Create a DotNetObjectReference
-            var objRef = DotNetObjectReference.Create(this);
-            
-            // Set up JavaScript function for direct refresh
-            await JS.InvokeVoidAsync("eval", @"
-                window.outletManagementRef = null;
-                
-                window.setOutletManagementRef = function(ref) {
-                    console.log('Setting outlet management reference');
-                    window.outletManagementRef = ref;
-                };
-                
-                window.refreshOutletManagement = function() {
-                    console.log('Direct refresh called');
-                    if (window.outletManagementRef) {
-                        window.outletManagementRef.invokeMethodAsync('RefreshDataFromEvent');
-                    } else {
-                        console.warn('No outlet management reference available');
-                    }
-                };
-            ");
-            
-            // Register the reference
-            await JS.InvokeVoidAsync("setOutletManagementRef", objRef);
-
-            // Load data only if authenticated
-            await LoadOutletsData();
-        }
-    }
-
-    [JSInvokable]
-    public async Task RefreshDataFromEvent()
-    {
-        await JS.InvokeVoidAsync("console.log", "RefreshDataFromEvent called from JS");
-        await LoadOutletsData();
-    }
-
-    private void RedirectToLogin()
-    {
-        NavigationManager.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", true);
-    }
-
-    private async Task LoadOutletsData()
+    private async Task LoadOutlets()
     {
         try
         {
             isLoading = true;
-            StateHasChanged();
-
-            await JS.InvokeVoidAsync("console.log", "Loading outlets from API...");
-
-            // Clear existing data first
-            allOutlets.Clear();
-            outlets.Clear();
-
-            // Get all outlets from the service
-            allOutlets = await OutletService.GetOutletsAsync();
-            
-            // Ensure we have a new copy
-            outlets = new List<OutletDto>();
-            foreach (var outlet in allOutlets)
-            {
-                outlets.Add(outlet);
-            }
-
-            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets with a total of {outlets.Sum(o => o.Tables?.Count ?? 0)} tables");
-        }
-        catch (HttpRequestException ex)
-        {
-            string errorMessage = $"Error loading outlets: {ex.Message}";
-            await JS.InvokeVoidAsync("console.error", errorMessage);
-            Snackbar.Add(errorMessage, Severity.Error);
-
-            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
-            }
+            outlets = await OutletService.GetOutletsAsync();
         }
         catch (Exception ex)
         {
-            string errorMessage = $"Error loading outlets: {ex.Message}";
-            await JS.InvokeVoidAsync("console.error", errorMessage);
-            Snackbar.Add(errorMessage, Severity.Error);
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -304,93 +127,26 @@
         }
     }
 
-    private async Task HandleSearch()
+    private async Task SearchOutlets()
     {
+        isLoading = true;
         try
         {
-            await JS.InvokeVoidAsync("console.log", $"Searching for: '{SearchTerm}'");
-
-            isLoading = true;
-            StateHasChanged();
-
-            if (string.IsNullOrWhiteSpace(SearchTerm))
-            {
-                // If search is empty, show all outlets
-                outlets = new List<OutletDto>(allOutlets);
-                await JS.InvokeVoidAsync("console.log", $"Search term empty, showing all {outlets.Count} outlets");
-            }
-            else
-            {
-                string searchTermLower = SearchTerm.Trim().ToLower();
-
-                // Filter outlets based on search term
-                outlets = allOutlets.Where(o =>
-                    (o.Name?.ToLower().Contains(searchTermLower) == true) ||
-                    (o.Location?.ToLower().Contains(searchTermLower) == true) ||
-                    (o.OutletId?.ToLower().Contains(searchTermLower) == true) ||
-                    (o.Status?.ToLower().Contains(searchTermLower) == true)
-                ).ToList();
-
-                await JS.InvokeVoidAsync("console.log", $"Found {outlets.Count} outlets matching '{SearchTerm}'");
-
-                // If no results found with client-side filtering, try server-side search
-                if (outlets.Count == 0)
-                {
-                    await JS.InvokeVoidAsync("console.log", "No results with client-side filtering, trying API search");
-                    outlets = await OutletService.GetOutletsAsync(SearchTerm);
-                    await JS.InvokeVoidAsync("console.log", $"API search returned {outlets.Count} outlets");
-                }
-                
-                // Show a message about search results
-                if (outlets.Count == 0)
-                {
-                    Snackbar.Add($"No outlets found matching '{SearchTerm}'", Severity.Info);
-                }
-                else if (outlets.Count == 1) 
-                {
-                    Snackbar.Add($"Found 1 outlet matching '{SearchTerm}'", Severity.Success);
-                }
-                else
-                {
-                    Snackbar.Add($"Found {outlets.Count} outlets matching '{SearchTerm}'", Severity.Success);
-                }
-            }
+            outlets = await OutletService.GetOutletsAsync(SearchTerm);
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
-            Snackbar.Add($"Search error: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error searching outlets: {ex.Message}", Severity.Error);
         }
         finally
         {
             isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task ClearSearch()
-    {
-        SearchTerm = "";
-        await JS.InvokeVoidAsync("console.log", "Search cleared");
-
-        // Reset to show all outlets
-        outlets = new List<OutletDto>(allOutlets);
-        StateHasChanged();
-    }
-
-    // Handle Enter key for immediate search
-    private async Task SearchOnEnter(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await JS.InvokeVoidAsync("console.log", "Search triggered by Enter key");
-            await HandleSearch();
         }
     }
 
     private Color GetStatusColor(string status)
     {
-        return status?.ToLower() switch
+        return status.ToLower() switch
         {
             "active" => Color.Success,
             "inactive" => Color.Error,
@@ -401,119 +157,58 @@
 
     private async Task ViewOutletDetails(OutletDto outlet)
     {
-        try
-        {
-            if (outlet == null || string.IsNullOrEmpty(outlet.id))
+        var parameters = new DialogParameters
             {
-                Snackbar.Add("Invalid outlet data. Cannot view details.", Severity.Error);
-                return;
-            }
-
-            var parameters = new DialogParameters
-            {
-                ["OutletId"] = outlet.id
+                ["OutletId"] = outlet.OutletId
             };
 
-            await JS.InvokeVoidAsync("console.log", $"Opening outlet details dialog for ID: {outlet.id}, Name: {outlet.Name}");
-
-            var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
-            var result = await dialog.Result;
-            
-            // Always refresh data after viewing outlet details to get updated table counts
-            await LoadOutletsData();
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.error", $"Error viewing outlet details: {ex.Message}");
-            Snackbar.Add($"Error viewing outlet details: {ex.Message}", Severity.Error);
-        }
+        var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
+        await dialog.Result;
     }
 
     private async Task OpenAddOutletDialog()
     {
-        try
-        {
-            await JS.InvokeVoidAsync("console.log", "Opening dialog to add new outlet");
-            
-            var parameters = new DialogParameters
-            {
-                ["IsEdit"] = false
-            };
-            
-            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet", parameters,
-                        new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
-            var result = await dialog.Result;
+        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet");
+        var result = await dialog.Result;
 
-            if (!result.Canceled)
-            {
-                await LoadOutletsData();
-                Snackbar.Add("Outlet added successfully", Severity.Success);
-            }
-        }
-        catch (Exception ex)
+        if (!result.Canceled)
         {
-            await JS.InvokeVoidAsync("console.error", $"Error adding outlet: {ex.Message}");
-            Snackbar.Add($"Error adding outlet: {ex.Message}", Severity.Error);
+            await LoadOutlets();
         }
     }
 
     private async Task OpenEditOutletDialog(OutletDto outlet)
     {
-        try
-        {
-            if (outlet == null || string.IsNullOrEmpty(outlet.id))
+        var parameters = new DialogParameters
             {
-                Snackbar.Add("Invalid outlet data. Cannot edit outlet.", Severity.Error);
-                return;
-            }
-
-            await JS.InvokeVoidAsync("console.log", $"Opening edit dialog for outlet: {outlet.Name}, ID: {outlet.id}");
-
-            var parameters = new DialogParameters
-            {
-                ["OutletId"] = outlet.id
+                ["Outlet"] = outlet,
+                ["IsEdit"] = true
             };
 
-            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters, 
-                          new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
-            var result = await dialog.Result;
+        var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters);
+        var result = await dialog.Result;
 
-            if (!result.Canceled)
-            {
-                await LoadOutletsData(); // Reload to get updated table data
-                Snackbar.Add("Outlet updated successfully", Severity.Success);
-            }
-        }
-        catch (Exception ex)
+        if (!result.Canceled)
         {
-            await JS.InvokeVoidAsync("console.error", $"Error updating outlet: {ex.Message}");
-            Snackbar.Add($"Error updating outlet: {ex.Message}", Severity.Error);
+            await LoadOutlets();
         }
     }
 
     private async Task OpenDeleteDialog(OutletDto outlet)
     {
-        try
-        {
-            var parameters = new DialogParameters
-                {
-                    ["ContentText"] = $"Are you sure you want to delete the outlet '{outlet.Name}'? This action cannot be undone.",
-                    ["ButtonText"] = "Delete",
-                    ["Color"] = Color.Error
-                };
-
-            var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
-            var result = await dialog.Result;
-
-            if (!result.Canceled)
+        var parameters = new DialogParameters
             {
-                await DeleteOutlet(outlet.id);
-            }
-        }
-        catch (Exception ex)
+                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the outlet <b>'{outlet.Name}'</b>? This action cannot be undone.",
+                ["ButtonText"] = "Delete",
+                ["Color"] = Color.Error
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
         {
-            await JS.InvokeVoidAsync("console.error", $"Error with delete dialog: {ex.Message}");
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await DeleteOutlet(outlet.OutletId);
         }
     }
 
@@ -521,141 +216,21 @@
     {
         try
         {
-            isLoading = true;
-            StateHasChanged();
-            
-            await JS.InvokeVoidAsync("console.log", $"Deleting outlet: {outletId}");
             var result = await OutletService.DeleteOutletAsync(outletId);
 
             if (result)
             {
                 Snackbar.Add("Outlet deleted successfully", Severity.Success);
-                await LoadOutletsData();
+                await LoadOutlets();
             }
             else
             {
                 Snackbar.Add("Failed to delete outlet", Severity.Error);
-                await LoadOutletsData(); // Refresh data anyway to ensure UI is consistent
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            string errorMessage = $"Error deleting outlet: {ex.Message}";
-            await JS.InvokeVoidAsync("console.error", errorMessage);
-            Snackbar.Add(errorMessage, Severity.Error);
-
-            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
             }
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.error", $"Error deleting outlet: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task DebugAuthToken()
-    {
-        var authState = await AuthState;
-        var isAuth = authState?.User?.Identity?.IsAuthenticated ?? false;
-        var userName = authState?.User?.Identity?.Name;
-
-        await JS.InvokeVoidAsync("console.log", $"Debug Auth - IsAuthenticated: {isAuth}, User: {userName}");
-
-        var token = await TokenService.GetAccessTokenAsync();
-        await JS.InvokeVoidAsync("console.log", $"Token exists: {!string.IsNullOrEmpty(token)}");
-
-        if (!string.IsNullOrEmpty(token))
-        {
-            await JS.InvokeVoidAsync("console.log", $"Token length: {token.Length}");
-
-            try
-            {
-                var handler = new JwtSecurityTokenHandler();
-                var jwtToken = handler.ReadJwtToken(token);
-
-                await JS.InvokeVoidAsync("console.log", $"Token expiry: {jwtToken.ValidTo}");
-                await JS.InvokeVoidAsync("console.log", $"Token issuer: {jwtToken.Issuer}");
-                await JS.InvokeVoidAsync("console.log", $"Token claims: {jwtToken.Claims.Count()}");
-
-                foreach (var claim in jwtToken.Claims.Take(5))
-                {
-                    await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
-                }
-            }
-            catch (Exception ex)
-            {
-                await JS.InvokeVoidAsync("console.error", $"Error parsing token: {ex.Message}");
-            }
-        }
-
-        Snackbar.Add("Auth debug info logged to console", Severity.Info);
-    }
-
-    private async Task FixAuthentication()
-    {
-        try
-        {
-            // Create a mock token with admin rights that will work for debugging
-            var mockAuth = new
-            {
-                Username = "admin",
-                Role = "Admin",
-                AccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJyb2xlIjoiQWRtaW4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE5MTYyMzkwMjJ9.tbDepxpstvGdW8TC3G8zK4C8q8RbTImGNp6rEcDMJVQ",
-                RefreshToken = "mockRefreshToken123"
-            };
-
-            await JS.InvokeVoidAsync("localStorage.setItem", "authData", JsonSerializer.Serialize(mockAuth));
-            await JS.InvokeVoidAsync("console.log", "Auth data fixed");
-
-            // Update the authenticated status
-            isAuthenticated = true;
-
-            // Reload the page to apply changes
-            NavigationManager.NavigateTo(NavigationManager.Uri, true);
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.error", $"Error fixing authentication: {ex.Message}");
-            Snackbar.Add($"Error fixing authentication: {ex.Message}", Severity.Error);
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        // Clean up the JS reference
-        try
-        {
-            await JS.InvokeVoidAsync("eval", @"
-                if (window.outletManagementRef) {
-                    window.outletManagementRef = null;
-                    console.log('Cleared outlet management reference');
-                }
-            ");
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.error", $"Error cleaning up: {ex.Message}");
-        }
-        
-        if (_jsModule != null)
-        {
-            try
-            {
-                await _jsModule.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-                await JS.InvokeVoidAsync("console.error", $"Error disposing JS module: {ex.Message}");
-            }
         }
     }
 }

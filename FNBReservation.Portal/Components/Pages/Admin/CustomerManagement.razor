@@ -2,7 +2,6 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @using FNBReservation.Portal.Components.Dialogs
-@using Microsoft.AspNetCore.Components.Web
 @inject ICustomerService CustomerService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -19,26 +18,11 @@
             <MudTabPanel Icon="@Icons.Material.Filled.People" Text="ALL CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <!-- Enhanced search UI -->
-                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
-                                      DisableUnderLine="true" Variant="Variant.Text"
-                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
-                                      Class="my-0 py-0"
-                                      OnKeyDown="@SearchOnEnter" />
-                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
-                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
-                                       Class="ml-1" />
-                        </MudPaper>
-                        
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
-                        {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
-                            </MudChip>
-                        }
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
                     </div>
 
                     <MudTable Items="@GetAllCustomers()" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -108,26 +92,11 @@
             <MudTabPanel Icon="@Icons.Material.Filled.CheckCircle" Text="ACTIVE CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <!-- Enhanced search UI -->
-                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
-                                      DisableUnderLine="true" Variant="Variant.Text"
-                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
-                                      Class="my-0 py-0"
-                                      OnKeyDown="@SearchOnEnter" />
-                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
-                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
-                                       Class="ml-1" />
-                        </MudPaper>
-                        
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
-                        {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
-                            </MudChip>
-                        }
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
                     </div>
 
                     <MudTable Items="@GetFilteredCustomers(false)" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -187,26 +156,11 @@
             <MudTabPanel Icon="@Icons.Material.Filled.Block" Text="BANNED CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <!-- Enhanced search UI -->
-                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
-                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
-                                      DisableUnderLine="true" Variant="Variant.Text"
-                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
-                                      Class="my-0 py-0"
-                                      OnKeyDown="@SearchOnEnter" />
-                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
-                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
-                                       Class="ml-1" />
-                        </MudPaper>
-                        
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
-                        {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
-                            </MudChip>
-                        }
+                        <MudTextField T="string" @bind-Value="SearchTerm"
+                                      Placeholder="Search by name or phone number"
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Style="max-width: 400px;" />
                     </div>
 
                     <MudTable Items="@GetFilteredCustomers(true)" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -334,50 +288,7 @@
 
     private async Task SearchCustomers()
     {
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("console.log", $"Searching for customers with term: '{SearchTerm}'");
-            
-            if (string.IsNullOrWhiteSpace(SearchTerm))
-            {
-                return;
-            }
-            
-            var results = GetAllCustomers();
-            if (results.Count == 0)
-            {
-                Snackbar.Add($"No customers found matching '{SearchTerm}'", Severity.Info);
-            }
-            else
-            {
-                Snackbar.Add($"Found {results.Count} customers matching '{SearchTerm}'", Severity.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
-            Snackbar.Add($"Search error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            StateHasChanged();
-        }
-    }
-    
-    private async Task ClearSearch()
-    {
-        SearchTerm = "";
-        await JSRuntime.InvokeVoidAsync("console.log", "Customer search cleared");
         StateHasChanged();
-    }
-    
-    private async Task SearchOnEnter(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await JSRuntime.InvokeVoidAsync("console.log", "Customer search triggered by Enter key");
-            await SearchCustomers();
-        }
     }
 
     private async Task OpenBanCustomerDialog(CustomerDto customer)

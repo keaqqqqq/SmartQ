@@ -2,9 +2,7 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @inject IStaffService StaffService
-@inject IOutletService OutletService
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudDialog>
@@ -27,14 +25,6 @@
                         }
                     </MudSelect>
                 </MudItem>
-                @if (IsEdit && !string.IsNullOrEmpty(staffModel.UserId))
-                {
-                    <MudItem xs="12">
-                        <MudTextField Value="@staffModel.UserId" Label="Staff ID"
-                                      Variant="Variant.Outlined" FullWidth="true" ReadOnly="true"
-                                      HelperText="System-generated ID for this staff member" />
-                    </MudItem>
-                }
                 <MudItem xs="12">
                     <MudTextField @bind-Value="staffModel.FullName" Label="Full Name"
                                   Required RequiredError="Name is required"
@@ -48,12 +38,10 @@
                                   HelperText="@(IsEdit ? "Username cannot be changed" : "Choose a unique username")" />
                 </MudItem>
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="staffModel.Password" 
-                                  Label="@(IsEdit ? "New Password (leave blank to keep unchanged)" : "Password")"
+                    <MudTextField @bind-Value="staffModel.Password" Label="@(IsEdit ? "New Password (leave blank to keep unchanged)" : "Password")"
                                   Required="@(!IsEdit)" RequiredError="Password is required for new staff"
                                   Variant="Variant.Outlined" FullWidth="true"
-                                  InputType="InputType.Password"
-                                  HelperText="@(IsEdit ? "Must be at least 8 characters if provided (when left blank, a placeholder is sent to the API)" : "Must be at least 8 characters")" />
+                                  InputType="InputType.Password" />
                 </MudItem>
                 <MudItem xs="12">
                     <MudTextField @bind-Value="staffModel.Email" Label="Email"
@@ -69,8 +57,10 @@
                     <MudSelect @bind-Value="staffModel.Role" Label="Role"
                                Required RequiredError="Role is required"
                                Variant="Variant.Outlined" FullWidth="true">
+                        <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
+                        <MudSelectItem Value="@("Host")">Host</MudSelectItem>
+                        <MudSelectItem Value="@("Server")">Server</MudSelectItem>
                         <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
-                        <MudSelectItem Value="@("OutletStaff")">OutletStaff</MudSelectItem>
                     </MudSelect>
                 </MudItem>
             </MudGrid>
@@ -96,17 +86,16 @@
     private bool formIsValid = false;
     private List<OutletSummaryDto> outlets = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         // Load outlets for the dropdown
-        await LoadOutlets();
+        LoadOutlets();
 
         if (IsEdit && Staff != null)
         {
             staffModel = new StaffFormModel
                 {
                     StaffId = Staff.StaffId,
-                    UserId = Staff.UserId,
                     FullName = Staff.FullName,
                     Username = Staff.Username,
                     Email = Staff.Email,
@@ -124,52 +113,21 @@
         }
     }
 
-    private async Task LoadOutlets()
+    private void LoadOutlets()
     {
-        try
+        // Mock data for outlets
+        outlets = new List<OutletSummaryDto>
         {
-            await JS.InvokeVoidAsync("console.log", "Loading outlets for staff form...");
-            var apiOutlets = await OutletService.GetOutletsAsync();
-            
-            outlets = apiOutlets.Select(o => new OutletSummaryDto
-            {
-                OutletId = o.id,
-                Name = o.Name,
-                Location = o.Location
-            }).ToList();
-            
-            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets for staff form");
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.error", $"Error loading outlets: {ex.Message}");
-            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
-        }
+            new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
+            new OutletSummaryDto { OutletId = "A16", Name = "Ocean View Restaurant - Beachside", Location = "456 Beach Drive, Oceanfront" },
+            new OutletSummaryDto { OutletId = "A17", Name = "Ocean View Restaurant - Harborfront", Location = "789 Harbor Road, Marina District" }
+        };
     }
 
     private async Task Submit()
     {
         try
         {
-            // Validate password separately based on context
-            if (!IsEdit && string.IsNullOrEmpty(staffModel.Password))
-            {
-                Snackbar.Add("Password is required for new staff members", Severity.Error);
-                return;
-            }
-            
-            if (!string.IsNullOrEmpty(staffModel.Password) && staffModel.Password.Length < 8)
-            {
-                Snackbar.Add("Password must be at least 8 characters", Severity.Error);
-                return;
-            }
-            
-            // If we're editing and no password is provided, inform the user about what's happening
-            if (IsEdit && string.IsNullOrEmpty(staffModel.Password))
-            {
-                await JS.InvokeVoidAsync("console.log", "Update with no password change - using placeholder");
-            }
-            
             bool result;
 
             // Convert our form model to StaffDto
@@ -179,7 +137,6 @@
                     OutletId = staffModel.OutletId,
                     FullName = staffModel.FullName,
                     Username = staffModel.Username,
-                    Password = staffModel.Password,
                     Email = staffModel.Email,
                     Phone = staffModel.Phone,
                     Role = staffModel.Role,
@@ -208,16 +165,7 @@
         }
         catch (Exception ex)
         {
-            // Add more helpful error message for the password validation error
-            if (ex.Message.Contains("API requires a password"))
-            {
-                Snackbar.Add("The backend API requires a password field even when not changing it. A placeholder valid password will be used.", Severity.Warning);
-                // You could retry the operation here with a placeholder password if needed
-            }
-            else
-            {
-                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-            }
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
     }
 
@@ -233,7 +181,6 @@
         [Required(ErrorMessage = "Username is required")]
         public string Username { get; set; } = string.Empty;
 
-        [MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
         public string Password { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Email is required")]
@@ -244,11 +191,9 @@
         public string Phone { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Role is required")]
-        public string Role { get; set; } = "OutletStaff";
+        public string Role { get; set; } = "Server";
 
         [Required(ErrorMessage = "Outlet is required")]
         public string OutletId { get; set; } = string.Empty;
-
-        public string UserId { get; set; } = string.Empty;
     }
 }
