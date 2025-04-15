@@ -6,11 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Outlet.Core.DTOs;
 using FNBReservation.Modules.Outlet.Core.Interfaces;
+using Microsoft.AspNetCore.Cors;
 
 namespace FNBReservation.Modules.Outlet.API.Controllers
 {
     [ApiController]
     [Route("api/v1/public/outlets")]
+    [EnableCors("AllowFrontend")]
     public class PublicOutletController : ControllerBase
     {
         private readonly IOutletService _outletService;
