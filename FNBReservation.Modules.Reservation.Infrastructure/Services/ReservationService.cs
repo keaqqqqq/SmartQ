@@ -613,7 +613,7 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 await ScheduleRemindersAsync(createdReservation.Id, createdReservation.ReservationDate);
 
                 // Send confirmation notification
-                await _notificationService.SendConfirmationAsync(createdReservation.Id);
+                //await _notificationService.SendConfirmationAsync(createdReservation.Id);
 
                 // Return DTO
                 return await MapReservationToDto(createdReservation, outlet.Name, tablesToAssign);
