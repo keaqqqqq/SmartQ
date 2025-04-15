@@ -197,8 +197,7 @@ builder.Services.AddCors(options =>
             "https://localhost:5003",    // Frontend in local dev HTTPS (non-Docker)
             "http://localhost:5000",     // API in Docker (if testing from the same host)
             "http://host.docker.internal:5002",  // Frontend from Docker to API
-            "http://localhost:5500",     // Websocket testing
-            "http://localhost:3000"      // React app for customer portal
+            "http://localhost:5500"     // Websocket testing
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
