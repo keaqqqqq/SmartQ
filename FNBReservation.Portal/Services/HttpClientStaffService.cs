@@ -107,8 +107,6 @@ namespace FNBReservation.Portal.Services
                     return new List<StaffDto>();
                 }
                 
-                await SetAuthorizationHeaderAsync();
-                
                 // Ensure we have a valid UUID for the outletId
                 string guidOutletId = EnsureValidGuid(outletId);
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Original outletId: {outletId}, converted to UUID: {guidOutletId}");
@@ -127,7 +125,9 @@ namespace FNBReservation.Portal.Services
                 }
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Calling endpoint: {endpoint}");
-                var response = await _httpClient.GetAsync(endpoint);
+                
+                // Use the refresh method
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(endpoint));
                 
                 // Process response
                 if (response.IsSuccessStatusCode)
@@ -179,12 +179,52 @@ namespace FNBReservation.Portal.Services
             }
         }
 
+        private async Task<HttpResponseMessage> SendRequestWithRefreshAsync(Func<Task<HttpResponseMessage>> requestFunc)
+        {
+            try
+            {
+                // Set authorization header before making the request
+                await SetAuthorizationHeaderAsync();
+                
+                // Execute the original request
+                var response = await requestFunc();
+                
+                // If unauthorized, try to refresh the token and retry
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Received 401 Unauthorized, attempting to refresh token");
+                    
+                    var refreshResult = await _jwtTokenService.RefreshTokenAsync();
+                    if (refreshResult.Success)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying request");
+                        
+                        // Reset authorization header with the refreshed token
+                        await SetAuthorizationHeaderAsync();
+                        
+                        // Retry the request with the new token
+                        response = await requestFunc();
+                    }
+                    else
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                    }
+                }
+                
+                return response;
+            }
+            catch (Exception ex)
+            {
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Error in SendRequestWithRefreshAsync: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task<List<StaffDto>> GetAllStaffAsync(string? searchTerm = null)
         {
             try
             {
                 await _jsRuntime.InvokeVoidAsync("console.log", $"GetAllStaffAsync called, searchTerm: {searchTerm}");
-                await SetAuthorizationHeaderAsync();
                 
                 // Try to use the admin/staff endpoint first (which appears to be working from the screenshot)
                 string allStaffEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/staff";
@@ -196,115 +236,80 @@ namespace FNBReservation.Portal.Services
                 }
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Trying direct all staff endpoint: {allStaffEndpoint}");
-                var directResponse = await _httpClient.GetAsync(allStaffEndpoint);
+                
+                // Use the refresh method
+                var directResponse = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(allStaffEndpoint));
                 
                 if (directResponse.IsSuccessStatusCode)
                 {
                     var jsonResponse = await directResponse.Content.ReadAsStringAsync();
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"API Response from direct endpoint: {jsonResponse}");
-                    
-                    var result = JsonSerializer.Deserialize<List<StaffDto>>(jsonResponse, _jsonOptions);
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"Deserialized {result?.Count ?? 0} staff members from direct endpoint");
-                    return result ?? new List<StaffDto>();
+                    var staffList = JsonSerializer.Deserialize<List<StaffDto>>(jsonResponse, _jsonOptions);
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Direct endpoint succeeded, retrieved {staffList?.Count ?? 0} staff");
+                    return staffList ?? new List<StaffDto>();
                 }
                 
-                // If direct endpoint fails, fallback to our outlet-by-outlet approach
+                // If direct endpoint failed, log the error
+                var errorContent = await directResponse.Content.ReadAsStringAsync();
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Direct endpoint failed, status: {directResponse.StatusCode}, error: {errorContent}");
+                
+                // If direct endpoint failed, try fetching outlet by outlet
                 await _jsRuntime.InvokeVoidAsync("console.log", "Direct endpoint failed, falling back to outlet-by-outlet approach");
                 
-                // Since there may not be a dedicated endpoint for all staff,
-                // we'll use the outlets endpoint to get all outlets first
+                // Get all outlets
                 string outletsEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Fetching all outlets: {outletsEndpoint}");
                 
-                var outletsResponse = await _httpClient.GetAsync(outletsEndpoint);
+                // Use the refresh method
+                var outletsResponse = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(outletsEndpoint));
                 
                 if (!outletsResponse.IsSuccessStatusCode)
                 {
-                    var errorContent = await outletsResponse.Content.ReadAsStringAsync();
-                    await _jsRuntime.InvokeVoidAsync("console.error", 
-                        $"Error fetching outlets: {outletsResponse.StatusCode}, Details: {errorContent}");
-                    
-                    throw new HttpRequestException($"Error fetching outlets: {outletsResponse.StatusCode}, Details: {errorContent}");
+                    var outletsErrorContent = await outletsResponse.Content.ReadAsStringAsync();
+                    string errorMessage = $"Error fetching outlets: {outletsResponse.StatusCode}, Details: {outletsErrorContent}";
+                    await _jsRuntime.InvokeVoidAsync("console.log", errorMessage);
+                    throw new Exception(errorMessage);
                 }
                 
                 var outletsJson = await outletsResponse.Content.ReadAsStringAsync();
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Outlets API response: {outletsJson}");
                 var outlets = JsonSerializer.Deserialize<List<OutletDto>>(outletsJson, _jsonOptions);
                 
-                if (outlets == null || outlets.Count == 0)
+                if (outlets == null || !outlets.Any())
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "No outlets found, returning empty staff list");
+                    await _jsRuntime.InvokeVoidAsync("console.log", "No outlets found");
                     return new List<StaffDto>();
                 }
                 
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Found {outlets.Count} outlets, fetching staff for each outlet");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Retrieved {outlets.Count} outlets, fetching staff for each");
                 
-                // Now fetch staff for each outlet and combine
                 var allStaff = new List<StaffDto>();
-                
                 foreach (var outlet in outlets)
                 {
                     try
                     {
-                        // Get the outlet ID (prefer UUID id over string OutletId)
-                        string outletId = !string.IsNullOrEmpty(outlet.id) ? outlet.id : outlet.OutletId;
-                        
-                        if (string.IsNullOrEmpty(outletId))
-                        {
-                            await _jsRuntime.InvokeVoidAsync("console.log", $"Skipping outlet '{outlet.Name}' - No valid outlet ID found");
-                            continue;
-                        }
-                        
-                        // Always ensure we have a valid UUID format
-                        string guidOutletId = EnsureValidGuid(outletId);
-                        await _jsRuntime.InvokeVoidAsync("console.log", $"Using outlet ID: {outletId}, converted to UUID: {guidOutletId}");
-                        
-                        string staffEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{guidOutletId}/staff";
-                        
-                        if (!string.IsNullOrWhiteSpace(searchTerm))
-                        {
-                            staffEndpoint += $"?q={Uri.EscapeDataString(searchTerm)}";
-                        }
-                        
-                        await _jsRuntime.InvokeVoidAsync("console.log", $"Fetching staff for outlet {outlet.Name}: {staffEndpoint}");
-                        
-                        var staffResponse = await _httpClient.GetAsync(staffEndpoint);
-                        
-                        if (staffResponse.IsSuccessStatusCode)
-                        {
-                            var staffJson = await staffResponse.Content.ReadAsStringAsync();
-                            var staffList = JsonSerializer.Deserialize<List<StaffDto>>(staffJson, _jsonOptions);
-                            
-                            if (staffList != null && staffList.Count > 0)
-                            {
-                                await _jsRuntime.InvokeVoidAsync("console.log", $"Found {staffList.Count} staff for outlet {outlet.Name}");
-                                allStaff.AddRange(staffList);
-                            }
-                            else
-                            {
-                                await _jsRuntime.InvokeVoidAsync("console.log", $"No staff found for outlet {outlet.Name}");
-                            }
-                        }
-                        else if (staffResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
-                        {
-                            var errorContent = await staffResponse.Content.ReadAsStringAsync();
-                            await _jsRuntime.InvokeVoidAsync("console.error", 
-                                $"Error fetching staff for outlet {outlet.Name}: {staffResponse.StatusCode}, Details: {errorContent}");
-                        }
-                        else
-                        {
-                            await _jsRuntime.InvokeVoidAsync("console.log", $"No staff found for outlet {outlet.Name} (404 Not Found)");
-                        }
+                        var staffList = await GetStaffAsync(outlet.id, searchTerm);
+                        allStaff.AddRange(staffList);
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Added {staffList.Count} staff from outlet {outlet.Name}");
                     }
                     catch (Exception ex)
                     {
-                        await _jsRuntime.InvokeVoidAsync("console.error", 
-                            $"Error fetching staff for outlet {outlet.Name}: {ex.Message}");
-                        // Continue with other outlets even if one fails
+                        await _jsRuntime.InvokeVoidAsync("console.error", $"Error fetching staff for outlet {outlet.Name}: {ex.Message}");
+                        // Continue to the next outlet
                     }
                 }
                 
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Total staff members from all outlets: {allStaff.Count}");
+                // If search was provided and we're combining results from multiple outlets,
+                // do client-side filtering to ensure consistent results
+                if (!string.IsNullOrWhiteSpace(searchTerm) && allStaff.Any())
+                {
+                    string searchTermLower = searchTerm.ToLowerInvariant();
+                    allStaff = allStaff.Where(s => 
+                        (s.FullName?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+                        (s.Email?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+                        (s.Phone?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+                        (s.Username?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+                        (s.Role?.ToLowerInvariant().Contains(searchTermLower) == true)
+                    ).ToList();
+                }
+                
                 return allStaff;
             }
             catch (Exception ex)

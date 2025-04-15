@@ -26,26 +26,34 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                // Get access token from cookie instead of localStorage
-                var accessToken = await _jsRuntime.InvokeAsync<string>("getCookie", "accessToken");
+                // Check if the user is authenticated with cookies first
+                var isAuthenticated = await _jsRuntime.InvokeAsync<bool>("authHelpers.isAuthenticated");
                 
-                if (string.IsNullOrEmpty(accessToken))
+                if (isAuthenticated)
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: No accessToken in cookies");
-                    return null;
+                    // With HTTP-only cookies, we can't directly read the token value
+                    // but we can check if user is authenticated
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: User is authenticated via cookies");
+                    
+                    // Return a placeholder string to indicate authentication is valid
+                    // The actual token isn't needed as it will be sent automatically with requests
+                    return "http-only-token-present";
                 }
                 
-                // Check if token is empty
-                if (string.IsNullOrEmpty(accessToken))
+                // For backward compatibility, try to get from localStorage
+                var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
+                if (!string.IsNullOrEmpty(authData))
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Access token is null or empty");
-                }
-                else
-                {
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Access token found (length: {accessToken.Length})");
+                    var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                    if (tokenData != null && !string.IsNullOrEmpty(tokenData.AccessToken))
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Using token from localStorage");
+                        return tokenData.AccessToken;
+                    }
                 }
                 
-                return accessToken;
+                await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: No authentication found");
+                return null;
             }
             catch (InvalidOperationException)
             {
@@ -70,16 +78,33 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                // Get refresh token from cookie instead of localStorage
-                var refreshToken = await _jsRuntime.InvokeAsync<string>("getCookie", "refreshToken");
+                // Check if the user is authenticated with cookies first
+                var isAuthenticated = await _jsRuntime.InvokeAsync<bool>("authHelpers.isAuthenticated");
                 
-                if (string.IsNullOrEmpty(refreshToken))
+                if (isAuthenticated)
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: No refreshToken in cookies");
-                    return null;
+                    // With HTTP-only cookies, we can't directly read the token value
+                    // but we can check if user is authenticated
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: User is authenticated via cookies");
+                    
+                    // Return a placeholder string to indicate refresh token is present
+                    return "http-only-refresh-token-present";
                 }
                 
-                return refreshToken;
+                // For backward compatibility, try to get from localStorage
+                var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
+                if (!string.IsNullOrEmpty(authData))
+                {
+                    var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                    if (tokenData != null && !string.IsNullOrEmpty(tokenData.RefreshToken))
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: Using refresh token from localStorage");
+                        return tokenData.RefreshToken;
+                    }
+                }
+                
+                await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: No authentication found");
+                return null;
             }
             catch (InvalidOperationException)
             {
@@ -104,13 +129,31 @@ namespace FNBReservation.Portal.Services
         {
             try 
             {
+                // Check if authenticated with HTTP-only cookies
+                var isAuthenticated = await _jsRuntime.InvokeAsync<bool>("authHelpers.isAuthenticated");
+                
+                if (isAuthenticated)
+                {
+                    // If we detect cookies, assume it's valid and let the server validate
+                    // The server will return 401 if not valid and we'll handle it then
+                    await _jsRuntime.InvokeVoidAsync("console.log", "IsTokenValidAsync: User has authentication cookies");
+                    return true;
+                }
+                
                 var token = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(token))
                 {
                     await _jsRuntime.InvokeVoidAsync("console.log", "IsTokenValidAsync: No token found");
                     return false;
                 }
+                
+                // If it's our placeholder for HTTP-only cookies, consider it valid
+                if (token == "http-only-token-present")
+                {
+                    return true;
+                }
 
+                // Otherwise, validate the token from localStorage
                 try
                 {
                     var handler = new JwtSecurityTokenHandler();
@@ -196,7 +239,41 @@ namespace FNBReservation.Portal.Services
                 var token = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(token))
                     return null;
+            
+                // Handle the HTTP-only cookie placeholder case
+                if (token == "http-only-token-present")
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetUserInfoFromTokenAsync: Using HTTP-only cookies, can't read token content");
+                    
+                    // Try to get user info from localStorage as a fallback
+                    var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
+                    if (!string.IsNullOrEmpty(authData))
+                    {
+                        var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                        if (tokenData != null && !string.IsNullOrEmpty(tokenData.Username))
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"GetUserInfoFromTokenAsync: Found username {tokenData.Username} in localStorage");
+                            return new UserInfo
+                            {
+                                Username = tokenData.Username,
+                                Role = tokenData.Role,
+                                // UserId might not be available in localStorage
+                                UserId = null
+                            };
+                        }
+                    }
+                    
+                    // If we can't get from localStorage, return default values
+                    // The actual user info will be determined by the server based on cookies
+                    return new UserInfo
+                    {
+                        Username = "Authenticated User",
+                        Role = "User", // Default role
+                        UserId = null  // Will be determined by server
+                    };
+                }
 
+                // For regular tokens, parse them as before
                 var handler = new JwtSecurityTokenHandler();
                 var jwtToken = handler.ReadJwtToken(token);
 

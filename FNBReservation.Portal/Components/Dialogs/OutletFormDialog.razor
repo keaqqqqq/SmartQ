@@ -2,9 +2,13 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @using MudBlazor
+@using System.Net
 @inject IOutletService OutletService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject IPeakHourService PeakHourService
+@inject ITableService TableService
+@inject JwtTokenService TokenService
 @rendermode InteractiveServer
 
 <MudDialog MaxWidth="MaxWidth.ExtraLarge" Class="outlet-dialog">
@@ -172,6 +176,7 @@
     private MudForm form;
     private bool formIsValid = true; // Default to true to simplify form handling
     private bool isSubmitting = false;
+    private bool hasAttemptedTokenRefresh = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -428,7 +433,37 @@
 
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await Submit();
+                            return;
+                        }
+                        else
+                        {
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                }
             }
         }
         catch (Exception ex)

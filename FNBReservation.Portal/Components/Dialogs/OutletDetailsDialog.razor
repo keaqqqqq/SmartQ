@@ -6,6 +6,7 @@
 @inject ITableService TableService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject JwtTokenService TokenService
 @rendermode InteractiveServer
 
 <MudDialog Class="outlet-details" DisableSidePadding="true">
@@ -269,38 +270,38 @@
     private bool isLoadingPeakHours = true;
     private bool isLoadingTables = true;
     private string errorMessage;
+    private bool hasAttemptedTokenRefresh = false;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadOutlet();
+        await LoadOutletDetails();
     }
 
-    private async Task LoadOutlet()
+    private async Task LoadOutletDetails()
     {
         try
         {
+            hasAttemptedTokenRefresh = false;
+            
             isLoading = true;
+            errorMessage = null;
             await JS.InvokeVoidAsync("console.log", $"Loading outlet details for ID: {OutletId}");
             
             outlet = await OutletService.GetOutletByIdAsync(OutletId);
             
             if (outlet == null)
             {
-                errorMessage = "Failed to load outlet details.";
-                await JS.InvokeVoidAsync("console.log", errorMessage);
+                errorMessage = "Outlet not found";
                 Snackbar.Add(errorMessage, Severity.Error);
                 return;
             }
             
             await JS.InvokeVoidAsync("console.log", $"Successfully loaded outlet: {outlet.Name}");
             
-            // Load peak hours explicitly
             await LoadPeakHours();
             
-            // Load tables explicitly
             await LoadTables();
             
-            // Load change history
             await LoadOutletChanges();
         }
         catch (HttpRequestException ex)
@@ -311,7 +312,37 @@
             
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await LoadOutletDetails();
+                            return;
+                        }
+                        else
+                        {
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                }
             }
         }
         catch (Exception ex)
@@ -348,7 +379,6 @@
         {
             string warningMessage = $"Error loading peak hours: {ex.Message}";
             await JS.InvokeVoidAsync("console.log", warningMessage);
-            // Non-critical error, ensure we have at least an empty list
             if (outlet.PeakHours == null)
             {
                 outlet.PeakHours = new List<PeakHour>();
@@ -389,7 +419,6 @@
         {
             string warningMessage = $"Error loading tables: {ex.Message}";
             await JS.InvokeVoidAsync("console.log", warningMessage);
-            // Non-critical error, ensure we have at least an empty list
             if (outlet.Tables == null)
             {
                 outlet.Tables = new List<TableInfo>();
@@ -416,7 +445,6 @@
             string warningMessage = $"Error loading outlet change history: {ex.Message}";
             await JS.InvokeVoidAsync("console.log", warningMessage);
             
-            // Change history might not be implemented in the API yet, so just log it
             outletChanges = new List<OutletChangeDto>();
         }
         catch (Exception ex)
@@ -424,7 +452,6 @@
             string warningMessage = $"Error loading outlet change history: {ex.Message}";
             await JS.InvokeVoidAsync("console.log", warningMessage);
             
-            // Non-critical error, so just initialize an empty list
             outletChanges = new List<OutletChangeDto>();
         }
         finally
@@ -478,7 +505,6 @@
         var days = daysString.Split(',').Select(int.Parse).ToList();
         var dayNames = new List<string>();
 
-        // Map numeric day values to day names (1 = Monday, 7 = Sunday)
         foreach (var day in days)
         {
             dayNames.Add(day switch
@@ -504,7 +530,6 @@
             return "Not set";
         }
 
-        // Parse time strings (expected format HH:mm:ss)
         if (TimeSpan.TryParse(startTime, out var start) && TimeSpan.TryParse(endTime, out var end))
         {
             return $"{start.ToString(@"hh\:mm")} - {end.ToString(@"hh\:mm")}";

@@ -81,12 +81,51 @@ namespace FNBReservation.Portal.Services
             }
         }
 
+        private async Task<HttpResponseMessage> SendRequestWithRefreshAsync(Func<Task<HttpResponseMessage>> requestFunc)
+        {
+            try
+            {
+                // Set authorization header before making the request
+                await SetAuthorizationHeaderAsync();
+                
+                // Execute the original request
+                var response = await requestFunc();
+                
+                // If unauthorized, try to refresh the token and retry
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Received 401 Unauthorized, attempting to refresh token");
+                    
+                    var refreshResult = await _jwtTokenService.RefreshTokenAsync();
+                    if (refreshResult.Success)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying request");
+                        
+                        // Reset authorization header with the refreshed token
+                        await SetAuthorizationHeaderAsync();
+                        
+                        // Retry the request with the new token
+                        response = await requestFunc();
+                    }
+                    else
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                    }
+                }
+                
+                return response;
+            }
+            catch (Exception ex)
+            {
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Error in SendRequestWithRefreshAsync: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task<List<OutletDto>> GetOutletsAsync(string? searchTerm = null)
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
                 
                 if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -96,7 +135,10 @@ namespace FNBReservation.Portal.Services
 
                 await _jsRuntime.InvokeVoidAsync("console.log", $"GetOutletsAsync: {endpoint}");
                 
-                var response = await _httpClient.GetAsync(endpoint);
+                // Use the new method that handles token refresh
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(endpoint));
+                
+                // Now we can ensure success and continue as before
                 response.EnsureSuccessStatusCode();
 
                 var outlets = await response.Content.ReadFromJsonAsync<List<OutletDto>>(_jsonOptions);
@@ -112,7 +154,9 @@ namespace FNBReservation.Portal.Services
                             if (Guid.TryParse(outlets[i].id, out Guid outletId))
                             {
                                 string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlets[i].id}/tables";
-                                var tableResponse = await _httpClient.GetAsync(tableEndpoint);
+                                
+                                // Use the refresh method for this request too
+                                var tableResponse = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(tableEndpoint));
                                 
                                 if (tableResponse.IsSuccessStatusCode)
                                 {
@@ -143,12 +187,12 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"GetOutletByIdAsync: {endpoint}");
                 
-                var response = await _httpClient.GetAsync(endpoint);
+                // Use the new method that handles token refresh
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(endpoint));
+                
                 response.EnsureSuccessStatusCode();
 
                 var outlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
@@ -159,7 +203,9 @@ namespace FNBReservation.Portal.Services
                     try
                     {
                         string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}/tables";
-                        var tableResponse = await _httpClient.GetAsync(tableEndpoint);
+                        
+                        // Use the refresh method for this request too
+                        var tableResponse = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(tableEndpoint));
                         
                         if (tableResponse.IsSuccessStatusCode)
                         {
@@ -188,12 +234,12 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}/changes";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"GetOutletChangesAsync: {endpoint}");
                 
-                var response = await _httpClient.GetAsync(endpoint);
+                // Use the refresh method
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.GetAsync(endpoint));
+                
                 response.EnsureSuccessStatusCode();
 
                 var changes = await response.Content.ReadFromJsonAsync<List<OutletChangeDto>>(_jsonOptions);
@@ -202,9 +248,7 @@ namespace FNBReservation.Portal.Services
             catch (Exception ex)
             {
                 await _jsRuntime.InvokeVoidAsync("console.log", $"Error in GetOutletChangesAsync: {ex.Message}");
-                
-                // For now, return empty list as this might be a new feature not yet implemented in backend
-                return new List<OutletChangeDto>();
+                throw;
             }
         }
 
@@ -212,134 +256,53 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"CreateOutletAsync: {endpoint}");
-
-                // Save peak hours and tables for later creation
-                var peakHours = outlet.PeakHours?.ToList() ?? new List<PeakHour>();
-                var tables = outlet.Tables?.ToList() ?? new List<TableInfo>();
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Saved {peakHours.Count} peak hours and {tables.Count} tables for later creation");
-
-                // Convert OutletDto to CreateOutletDto format which the API expects
-                var createOutletDto = new
+                
+                var json = JsonSerializer.Serialize(outlet);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                
+                // Use the refresh method
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.PostAsync(endpoint, content));
+                
+                if (response.IsSuccessStatusCode)
                 {
-                    Name = outlet.Name,
-                    Location = outlet.Location,
-                    OperatingHours = outlet.OperatingHours,
-                    MaxAdvanceReservationTime = outlet.MaxAdvanceReservationTime,
-                    MinAdvanceReservationTime = outlet.MinAdvanceReservationTime,
-                    Contact = outlet.Contact,
-                    QueueEnabled = outlet.QueueEnabled,
-                    SpecialRequirements = outlet.SpecialRequirements,
-                    Status = outlet.Status,
-                    Latitude = outlet.Latitude,
-                    Longitude = outlet.Longitude,
-                    ReservationAllocationPercent = outlet.ReservationAllocationPercent,
-                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes
-                    // We omit Tables and PeakHours since they need to be created separately
-                };
-
-                var jsonContent = JsonSerializer.Serialize(createOutletDto);
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Request payload: {jsonContent}");
-                
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                
-                var response = await _httpClient.PostAsync(endpoint, content);
-                
-                // Log response details for debugging
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
-                }
-                
-                response.EnsureSuccessStatusCode();
-                
-                // Read the response to get the created outlet ID
-                var createdOutlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
-                if (createdOutlet != null)
-                {
-                    outlet.id = createdOutlet.id;
-                    outlet.OutletId = createdOutlet.OutletId;
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Outlet created successfully");
                     
-                    // Now create the tables
-                    if (tables.Count > 0)
+                    // If any peak hours were included, create them too
+                    if (outlet.PeakHours != null && outlet.PeakHours.Any())
                     {
-                        await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {tables.Count} tables for outlet {createdOutlet.id}");
-                        
-                        try 
+                        try
                         {
-                            foreach (var table in tables)
+                            // First get the newly created outlet ID from the response
+                            var createdOutlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
+                            if (createdOutlet != null && !string.IsNullOrEmpty(createdOutlet.id))
                             {
-                                // Set the correct outlet ID
-                                table.OutletId = Guid.Parse(createdOutlet.id);
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"New outlet ID: {createdOutlet.id}, creating {outlet.PeakHours.Count} peak hours");
                                 
-                                await _jsRuntime.InvokeVoidAsync("console.log", $"Creating table: {table.TableNumber}");
-                                
-                                // Create the table using the API
-                                string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{createdOutlet.id}/tables";
-                                var tableDto = new
+                                foreach (var peakHour in outlet.PeakHours)
                                 {
-                                    TableNumber = table.TableNumber,
-                                    Capacity = table.Capacity,
-                                    Section = table.Section,
-                                    IsActive = table.IsActive
-                                };
-                                
-                                var tableContent = new StringContent(
-                                    JsonSerializer.Serialize(tableDto), 
-                                    Encoding.UTF8, 
-                                    "application/json");
-                                    
-                                    var tableResponse = await _httpClient.PostAsync(tableEndpoint, tableContent);
-                                    
-                                    if (!tableResponse.IsSuccessStatusCode)
-                                    {
-                                        var errorContent = await tableResponse.Content.ReadAsStringAsync();
-                                        await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating table: {errorContent}");
-                                    }
-                                    else
-                                    {
-                                        var createdTable = await tableResponse.Content.ReadFromJsonAsync<TableInfo>(_jsonOptions);
-                                        await _jsRuntime.InvokeVoidAsync("console.log", $"Table created successfully with ID: {createdTable?.Id}");
-                                    }
+                                    // Ensure the peak hour is associated with the new outlet
+                                    //peakHour.OutletId = createdOutlet.id;
+                                    await _peakHourService.CreatePeakHourAsync(createdOutlet.id, peakHour);
+                                }
                             }
-                            
-                            await _jsRuntime.InvokeVoidAsync("console.log", "Successfully created all tables");
-                        }
-                        catch (Exception ex)
-                        {
-                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating tables: {ex.Message}");
-                            // We don't throw here to avoid failing the outlet creation if table creation fails
-                        }
-                    }
-                    
-                    // Now create the peak hours
-                    if (peakHours.Count > 0)
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {peakHours.Count} peak hours for outlet {createdOutlet.id}");
-                        
-                        try 
-                        {
-                            foreach (var peakHour in peakHours)
-                            {
-                                await _jsRuntime.InvokeVoidAsync("console.log", $"Creating peak hour: {peakHour.Name}");
-                                await _peakHourService.CreatePeakHourAsync(createdOutlet.id, peakHour);
-                            }
-                            
-                            await _jsRuntime.InvokeVoidAsync("console.log", "Successfully created all peak hours");
                         }
                         catch (Exception ex)
                         {
                             await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating peak hours: {ex.Message}");
-                            // We don't throw here to avoid failing the outlet creation if peak hour creation fails
+                            // Don't fail the whole operation if peak hours creation fails
                         }
                     }
+                    
+                    return true;
                 }
-                
-                return true;
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating outlet: {response.StatusCode}, {errorContent}");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -352,48 +315,74 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
-                string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlet.id}";
-                await _jsRuntime.InvokeVoidAsync("console.log", $"UpdateOutletAsync: {endpoint}");
-
-                // Convert OutletDto to UpdateOutletDto format which the API expects
-                var updateOutletDto = new
+                if (string.IsNullOrEmpty(outlet.id))
                 {
-                    Name = outlet.Name,
-                    Location = outlet.Location,
-                    OperatingHours = outlet.OperatingHours,
-                    MaxAdvanceReservationTime = outlet.MaxAdvanceReservationTime,
-                    MinAdvanceReservationTime = outlet.MinAdvanceReservationTime,
-                    Contact = outlet.Contact,
-                    QueueEnabled = outlet.QueueEnabled,
-                    SpecialRequirements = outlet.SpecialRequirements,
-                    Status = outlet.Status,
-                    Latitude = outlet.Latitude,
-                    Longitude = outlet.Longitude,
-                    ReservationAllocationPercent = outlet.ReservationAllocationPercent,
-                    DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
-                    Tables = outlet.Tables,
-                    PeakHours = outlet.PeakHours
-                };
-
-                var jsonContent = JsonSerializer.Serialize(updateOutletDto);
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Request payload: {jsonContent}");
-                
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                
-                var response = await _httpClient.PutAsync(endpoint, content);
-                
-                // Log response details for debugging
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Cannot update outlet: ID is missing");
+                    return false;
                 }
                 
-                response.EnsureSuccessStatusCode();
+                string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlet.id}";
+                await _jsRuntime.InvokeVoidAsync("console.log", $"UpdateOutletAsync: {endpoint}");
+                
+                var json = JsonSerializer.Serialize(outlet);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                
+                // Use the refresh method
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.PutAsync(endpoint, content));
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Outlet updated successfully");
+                    
+                    // Handle any peak hours that were updated/added/removed
+                    if (outlet.PeakHours != null)
+                    {
+                        try
+                        {
+                            // Get existing peak hours
+                            var existingPeakHours = await _peakHourService.GetPeakHoursAsync(outlet.id);
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Found {existingPeakHours.Count} existing peak hours, updating to {outlet.PeakHours.Count} peak hours");
 
-                return true;
+                            // Process each peak hour in the update
+                            foreach (var peakHour in outlet.PeakHours)
+                            {
+                                if (string.IsNullOrEmpty(peakHour.Id))
+                                {
+                                    // New peak hour to create
+                                    await _peakHourService.CreatePeakHourAsync(outlet.id, peakHour);
+                                }
+                                else
+                                {
+                                    // Existing peak hour to update
+                                    await _peakHourService.UpdatePeakHourAsync(outlet.id, peakHour.Id, peakHour);
+                                }
+                            }
+
+                            // Find peak hours to delete (ones that exist in DB but not in the update)
+                            var updatedIds = outlet.PeakHours.Where(p => !string.IsNullOrEmpty(p.Id)).Select(p => p.Id).ToList();
+                            var toDelete = existingPeakHours.Where(p => !updatedIds.Contains(p.Id)).ToList();
+
+                            // Delete peak hours that were removed
+                            foreach (var peakHour in toDelete)
+                            {
+                                await _peakHourService.DeletePeakHourAsync(outlet.id, peakHour.Id);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error updating peak hours: {ex.Message}");
+                            // Don't fail the whole operation if peak hours update fails
+                        }
+                    }
+                    
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error updating outlet: {response.StatusCode}, {errorContent}");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -406,24 +395,23 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                await SetAuthorizationHeaderAsync();
-
-                // The outletId parameter should be the UUID id, not the business ID
                 string endpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}";
                 await _jsRuntime.InvokeVoidAsync("console.log", $"DeleteOutletAsync: {endpoint}");
                 
-                var response = await _httpClient.DeleteAsync(endpoint);
+                // Use the refresh method
+                var response = await SendRequestWithRefreshAsync(() => _httpClient.DeleteAsync(endpoint));
                 
-                // Log response details for debugging
-                if (!response.IsSuccessStatusCode)
+                if (response.IsSuccessStatusCode)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Outlet deleted successfully");
+                    return true;
+                }
+                else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error response: {errorContent}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Error deleting outlet: {response.StatusCode}, {errorContent}");
+                    return false;
                 }
-                
-                response.EnsureSuccessStatusCode();
-
-                return true;
             }
             catch (Exception ex)
             {

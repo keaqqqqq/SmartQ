@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.IdentityModel.Tokens.Jwt
 @using System.Text.Json
+@using System.Net.Http.Json
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IStaffService StaffService
@@ -140,6 +141,7 @@
     private bool isLoading = true;
     private bool isAuthenticated = false;
     private IJSObjectReference _jsModule;
+    private bool hasAttemptedTokenRefresh = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,7 +189,7 @@
 
     private void RedirectToLogin()
     {
-        NavigationManager.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", true);
+        NavigationManager.NavigateTo($"/login", true);
     }
 
     private async Task LoadOutlets()
@@ -220,6 +222,9 @@
 
         try
         {
+            // Reset the token refresh flag on each new data load
+            hasAttemptedTokenRefresh = false;
+            
             isLoading = true;
             await JS.InvokeVoidAsync("console.log", $"Loading staff for outlet: {selectedOutletId}");
             staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
@@ -233,8 +238,44 @@
 
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
+                // Try to refresh the token first instead of immediately redirecting
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            // Token refreshed successfully, retry the operation
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await LoadStaff();
+                            return;
+                        }
+                        else
+                        {
+                            // Token refresh failed, redirect to login
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                            RedirectToLogin();
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        RedirectToLogin();
+                    }
+                }
+                else
+                {
+                    // Already tried refreshing, redirect to login
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    RedirectToLogin();
+                }
             }
         }
         catch (Exception ex)
@@ -254,6 +295,9 @@
     {
         try
         {
+            // Reset the token refresh flag on each new data load
+            hasAttemptedTokenRefresh = false;
+            
             isLoading = true;
             await JS.InvokeVoidAsync("console.log", "Loading all staff members...");
             staffList = await StaffService.GetAllStaffAsync(searchTerm);
@@ -267,8 +311,44 @@
 
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
+                // Try to refresh the token first instead of immediately redirecting
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            // Token refreshed successfully, retry the operation
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await LoadAllStaff();
+                            return;
+                        }
+                        else
+                        {
+                            // Token refresh failed, redirect to login
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                            RedirectToLogin();
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        RedirectToLogin();
+                    }
+                }
+                else
+                {
+                    // Already tried refreshing, redirect to login
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    RedirectToLogin();
+                }
             }
         }
         catch (Exception ex)
@@ -311,6 +391,9 @@
 
         try
         {
+            // Reset the token refresh flag on each operation
+            hasAttemptedTokenRefresh = false;
+            
             isLoading = true;
             await JS.InvokeVoidAsync("console.log", $"Searching for staff with term: '{searchTerm}'");
 
@@ -374,8 +457,44 @@
 
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
+                // Try to refresh the token first instead of immediately redirecting
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            // Token refreshed successfully, retry the operation
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await SearchStaff();
+                            return;
+                        }
+                        else
+                        {
+                            // Token refresh failed, redirect to login
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                            RedirectToLogin();
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        RedirectToLogin();
+                    }
+                }
+                else
+                {
+                    // Already tried refreshing, redirect to login
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    RedirectToLogin();
+                }
             }
         }
         catch (Exception ex)
@@ -520,6 +639,9 @@
     {
         try
         {
+            // Reset the token refresh flag on each operation
+            hasAttemptedTokenRefresh = false;
+            
             // Need to determine which outlet this staff belongs to if in "all" view
             string outletId = selectedOutletId;
             if (selectedOutletId == "all")
@@ -562,8 +684,44 @@
 
             if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
-                RedirectToLogin();
+                // Try to refresh the token first instead of immediately redirecting
+                if (!hasAttemptedTokenRefresh)
+                {
+                    hasAttemptedTokenRefresh = true;
+                    await JS.InvokeVoidAsync("console.log", "Attempting to refresh token after Unauthorized response");
+                    
+                    try
+                    {
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            // Token refreshed successfully, retry the operation
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully, retrying operation");
+                            Snackbar.Add("Token refreshed, retrying operation", Severity.Success);
+                            await DeleteStaff(staffId);
+                            return;
+                        }
+                        else
+                        {
+                            // Token refresh failed, redirect to login
+                            await JS.InvokeVoidAsync("console.log", $"Token refresh failed: {refreshResult.ErrorMessage}");
+                            Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                            RedirectToLogin();
+                        }
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Error refreshing token: {refreshEx.Message}");
+                        Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                        RedirectToLogin();
+                    }
+                }
+                else
+                {
+                    // Already tried refreshing, redirect to login
+                    Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                    RedirectToLogin();
+                }
             }
         }
         catch (Exception ex)
