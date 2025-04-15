@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.JSInterop;
+using System.Net.Http.Headers;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,11 +32,26 @@ builder.Services.AddHttpClient();
 // Register HttpContextAccessor
 builder.Services.AddHttpContextAccessor();
 
+// Add CORS policy for APIs
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowApiServer", policy =>
+    {
+        policy.WithOrigins(
+                builder.Configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000",
+                "https://localhost:5001")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials(); // Important for cookies
+    });
+});
+
 // Add cookie policy for authentication
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
+    // Allow cookies to be sent with cross-site requests (important for APIs)
     options.CheckConsentNeeded = context => false;
-    options.MinimumSameSitePolicy = SameSiteMode.None;
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
 });
 
 // Register authentication services
@@ -45,10 +62,24 @@ builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>
 builder.Services.AddTransient<ApiAuthorizationHandler>();
 
 // Configure HttpClient with Authorization Handler
-builder.Services.AddHttpClient("API", client =>
+builder.Services.AddHttpClient("API", (sp, client) =>
 {
     client.BaseAddress = new Uri(builder.Configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
+    
+    // Configure to send cookies with requests
+    client.DefaultRequestHeaders.Add("X-Include-Credentials", "true");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    UseCookies = true,
+    CookieContainer = new CookieContainer(),
+    // Allow redirects
+    AllowAutoRedirect = true,
+    // Use default credentials
+    UseDefaultCredentials = false,
+    // Set credentials to pass cookies
+    Credentials = CredentialCache.DefaultCredentials
 })
 .AddHttpMessageHandler<ApiAuthorizationHandler>();
 
@@ -112,13 +143,13 @@ builder.Services.AddAuthorization(options =>
 
 // Register the real HttpClientPeakHourService for peak hour management
 builder.Services.AddScoped<IPeakHourService>(sp => {
-    var httpClient = sp.GetRequiredService<HttpClient>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
     var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
     var jsRuntime = sp.GetRequiredService<IJSRuntime>();
     var configuration = sp.GetRequiredService<IConfiguration>();
     
     return new HttpClientPeakHourService(
-        httpClient,
+        httpClientFactory.CreateClient("API"),
         jwtTokenService,
         jsRuntime,
         configuration
@@ -127,14 +158,14 @@ builder.Services.AddScoped<IPeakHourService>(sp => {
 
 // Register the real HttpClientOutletService for outlet management
 builder.Services.AddScoped<IOutletService>(sp => {
-    var httpClient = sp.GetRequiredService<HttpClient>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
     var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
     var jsRuntime = sp.GetRequiredService<IJSRuntime>();
     var configuration = sp.GetRequiredService<IConfiguration>();
     var peakHourService = sp.GetRequiredService<IPeakHourService>();
     
     return new HttpClientOutletService(
-        httpClient,
+        httpClientFactory.CreateClient("API"),
         jwtTokenService,
         jsRuntime,
         configuration,
@@ -193,6 +224,9 @@ else
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+
+// Enable CORS
+app.UseCors("AllowApiServer");
 app.UseCookiePolicy();
 
 // Add authentication middleware

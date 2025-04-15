@@ -57,6 +57,13 @@ window.authHelpers = {
     
     isAuthenticated: function () {
         try {
+            // First try to check if we have HTTP-only cookie access token
+            // If we can't directly read it (because it's HTTP-only), fall back to checking localStorage
+            if (document.cookie.includes('accessToken=') || 
+                document.cookie.includes('refreshToken=')) {
+                return true;
+            }
+            
             return !!localStorage.getItem('authData');
         } catch (error) {
             console.error('Error checking authentication:', error);
@@ -70,7 +77,8 @@ window.authHelpers = {
             const authData = this.getAuthData();
             console.log('Auth data diagnosis:');
             console.log('- Is authenticated:', this.isAuthenticated());
-            console.log('- Auth data:', authData);
+            console.log('- Auth data in localStorage:', authData);
+            console.log('- Cookies present:', document.cookie);
             
             if (authData && authData.AccessToken) {
                 const tokenParts = authData.AccessToken.split('.');
@@ -98,4 +106,24 @@ window.authHelpers = {
             return false;
         }
     }
+}; 
+
+// Global cookie functions used by C# services
+window.getCookie = function(name) {
+    // Note: This function cannot access HTTP-only cookies directly
+    // It will just return regular cookies, not HTTP-only ones
+    // It's here for API consistency with JwtTokenService
+    
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith(name + '='))
+        ?.split('=')[1];
+    
+    if (cookieValue) {
+        console.log(`Found cookie ${name} with length ${cookieValue.length}`);
+        return cookieValue;
+    }
+    
+    console.log(`Cookie ${name} not found or is HTTP-only`);
+    return null;
 }; 

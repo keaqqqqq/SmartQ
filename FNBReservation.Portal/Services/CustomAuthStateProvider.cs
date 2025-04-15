@@ -10,17 +10,57 @@ namespace FNBReservation.Portal.Services
     {
         private ClaimsPrincipal _anonymous = new ClaimsPrincipal(new ClaimsIdentity());
         private readonly IJSRuntime _jsRuntime;
+        private readonly JwtTokenService _tokenService;
 
-        public CustomAuthStateProvider(IJSRuntime jsRuntime)
+        public CustomAuthStateProvider(IJSRuntime jsRuntime, JwtTokenService tokenService = null)
         {
             _jsRuntime = jsRuntime;
+            _tokenService = tokenService;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             try
             {
-                // Try to get auth data from localStorage through JS interop
+                // Try to get user info from token in HTTP-only cookie
+                if (_tokenService != null)
+                {
+                    try
+                    {
+                        // Check if we have valid tokens in cookies
+                        var isValid = await _tokenService.IsTokenValidAsync();
+                        if (isValid)
+                        {
+                            // Get user info from the token
+                            var userInfo = await _tokenService.GetUserInfoFromTokenAsync();
+                            if (userInfo != null)
+                            {
+                                var claims = new List<Claim>
+                                {
+                                    new Claim(ClaimTypes.Name, userInfo.Username),
+                                    new Claim(ClaimTypes.Role, userInfo.Role)
+                                };
+
+                                if (!string.IsNullOrEmpty(userInfo.UserId))
+                                {
+                                    claims.Add(new Claim(ClaimTypes.NameIdentifier, userInfo.UserId));
+                                }
+
+                                var identity = new ClaimsIdentity(claims, "FNBReservation");
+                                var user = new ClaimsPrincipal(identity);
+                                
+                                return new AuthenticationState(user);
+                            }
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // This happens during static rendering when JS interop is not available
+                        return new AuthenticationState(_anonymous);
+                    }
+                }
+                
+                // Fallback to check local storage (temporary during migration to HTTP-only cookies)
                 try
                 {
                     var storedPrincipal = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
@@ -43,28 +83,6 @@ namespace FNBReservation.Portal.Services
                         new Claim(ClaimTypes.Role, authData.Role)
                     };
                     
-                    // Add JWT claims if token is present
-                    if (!string.IsNullOrEmpty(authData.AccessToken))
-                    {
-                        try
-                        {
-                            var handler = new JwtSecurityTokenHandler();
-                            var jwtToken = handler.ReadJwtToken(authData.AccessToken);
-                            
-                            var userIdClaim = jwtToken.Claims.FirstOrDefault(c => 
-                                c.Type == "nameid" || c.Type == ClaimTypes.NameIdentifier);
-                                
-                            if (userIdClaim != null)
-                            {
-                                claims.Add(new Claim(ClaimTypes.NameIdentifier, userIdClaim.Value));
-                            }
-                        }
-                        catch
-                        {
-                            // Ignore JWT parsing errors - use the basic claims
-                        }
-                    }
-
                     var identity = new ClaimsIdentity(claims, "FNBReservation");
                     var user = new ClaimsPrincipal(identity);
                     
@@ -87,7 +105,47 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                // This method is meant to be called after rendering, during OnAfterRenderAsync
+                // First try to get user info from HTTP-only cookie token
+                if (_tokenService != null)
+                {
+                    try
+                    {
+                        // Check if we have valid tokens in cookies
+                        var isValid = await _tokenService.IsTokenValidAsync();
+                        if (isValid)
+                        {
+                            // Get user info from the token
+                            var userInfo = await _tokenService.GetUserInfoFromTokenAsync();
+                            if (userInfo != null)
+                            {
+                                var userClaims = new List<Claim>
+                                {
+                                    new Claim(ClaimTypes.Name, userInfo.Username),
+                                    new Claim(ClaimTypes.Role, userInfo.Role)
+                                };
+
+                                if (!string.IsNullOrEmpty(userInfo.UserId))
+                                {
+                                    userClaims.Add(new Claim(ClaimTypes.NameIdentifier, userInfo.UserId));
+                                }
+
+                                var userIdentity = new ClaimsIdentity(userClaims, "FNBReservation");
+                                var userPrincipal = new ClaimsPrincipal(userIdentity);
+                                
+                                // Update the authentication state and notify
+                                UpdateAuthenticationState(new AuthenticationState(userPrincipal));
+                                
+                                return userPrincipal;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Error getting user from token: " + ex.Message);
+                    }
+                }
+                
+                // Fallback to localStorage for backward compatibility
                 var storedPrincipal = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
                 
                 await _jsRuntime.InvokeVoidAsync("console.log", "GetAuthState - Stored auth data: " + 
@@ -114,28 +172,6 @@ namespace FNBReservation.Portal.Services
                     new Claim(ClaimTypes.Name, authData.Username),
                     new Claim(ClaimTypes.Role, authData.Role)
                 };
-                
-                // Add a unique ID claim if we have one
-                if (!string.IsNullOrEmpty(authData.AccessToken))
-                {
-                    try
-                    {
-                        var handler = new JwtSecurityTokenHandler();
-                        var jwtToken = handler.ReadJwtToken(authData.AccessToken);
-                        
-                        var userIdClaim = jwtToken.Claims.FirstOrDefault(c => 
-                            c.Type == "nameid" || c.Type == ClaimTypes.NameIdentifier);
-                            
-                        if (userIdClaim != null)
-                        {
-                            claims.Add(new Claim(ClaimTypes.NameIdentifier, userIdClaim.Value));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "Error extracting claims from JWT: " + ex.Message);
-                    }
-                }
 
                 var identity = new ClaimsIdentity(claims, "FNBReservation");
                 var user = new ClaimsPrincipal(identity);
@@ -156,13 +192,13 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                // Store the auth data in localStorage
+                // Store minimal user info in localStorage for UI 
+                // The actual tokens are stored as HTTP-only cookies by the backend
                 var authData = new AuthData 
                 { 
                     Username = username, 
-                    Role = role,
-                    AccessToken = accessToken,
-                    RefreshToken = refreshToken
+                    Role = role
+                    // No need to store tokens here anymore
                 };
                 var serializedData = JsonSerializer.Serialize(authData);
                 

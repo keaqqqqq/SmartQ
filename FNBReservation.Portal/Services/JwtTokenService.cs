@@ -26,42 +26,26 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                var authData = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
-                if (string.IsNullOrEmpty(authData))
+                // Get access token from cookie instead of localStorage
+                var accessToken = await _jsRuntime.InvokeAsync<string>("getCookie", "accessToken");
+                
+                if (string.IsNullOrEmpty(accessToken))
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: No authData in localStorage");
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: No accessToken in cookies");
                     return null;
                 }
-
-                try
+                
+                // Check if token is empty
+                if (string.IsNullOrEmpty(accessToken))
                 {
-                    var tokenData = JsonSerializer.Deserialize<AuthData>(authData);
-                    if (tokenData == null)
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Failed to deserialize authData");
-                        return null;
-                    }
-                    
-                    await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Got token for user {tokenData.Username}, Role: {tokenData.Role}");
-                    
-                    // Check if token is empty
-                    if (string.IsNullOrEmpty(tokenData.AccessToken))
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Access token is null or empty");
-                    }
-                    else
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Access token found (length: {tokenData.AccessToken.Length})");
-                    }
-                    
-                    return tokenData?.AccessToken;
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Access token is null or empty");
                 }
-                catch (Exception deserializeEx)
+                else
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Error deserializing authData: " + deserializeEx.Message);
-                    await _jsRuntime.InvokeVoidAsync("console.log", "Original authData: " + authData);
-                    return null;
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"GetAccessTokenAsync: Access token found (length: {accessToken.Length})");
                 }
+                
+                return accessToken;
             }
             catch (InvalidOperationException)
             {
@@ -86,14 +70,16 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                var authData = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
-                if (string.IsNullOrEmpty(authData))
+                // Get refresh token from cookie instead of localStorage
+                var refreshToken = await _jsRuntime.InvokeAsync<string>("getCookie", "refreshToken");
+                
+                if (string.IsNullOrEmpty(refreshToken))
                 {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: No refreshToken in cookies");
                     return null;
                 }
-
-                var tokenData = JsonSerializer.Deserialize<AuthData>(authData);
-                return tokenData?.RefreshToken;
+                
+                return refreshToken;
             }
             catch (InvalidOperationException)
             {
@@ -160,24 +146,20 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                var refreshToken = await GetRefreshTokenAsync();
-                if (string.IsNullOrEmpty(refreshToken))
-                {
-                    return new RefreshTokenResponse { Success = false, ErrorMessage = "No refresh token available" };
-                }
-
-                var refreshRequest = new
-                {
-                    RefreshToken = refreshToken
-                };
-
-                var content = new StringContent(
-                    JsonSerializer.Serialize(refreshRequest),
-                    System.Text.Encoding.UTF8,
-                    "application/json");
-
+                // For HTTP-only cookies, the backend will automatically get the refresh token from cookies
+                // We don't need to send it in the request body
+                
                 string fullUrl = $"{_baseUrl.TrimEnd('/')}/{_refreshTokenEndpoint}";
-                var response = await _httpClient.PostAsync(fullUrl, content);
+                // Send empty content as refresh token is in cookies
+                var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+                
+                // Make sure credentials are included (cookies)
+                var request = new HttpRequestMessage(HttpMethod.Post, fullUrl);
+                request.Content = content;
+                // Add header to indicate credentials should be included
+                request.Headers.Add("X-Include-Credentials", "true");
+                
+                var response = await _httpClient.SendAsync(request);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -185,16 +167,15 @@ namespace FNBReservation.Portal.Services
                     var refreshResponse = JsonSerializer.Deserialize<ApiRefreshResponse>(responseContent, 
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                    if (refreshResponse != null && !string.IsNullOrEmpty(refreshResponse.AccessToken))
+                    if (refreshResponse != null)
                     {
-                        // Update the stored tokens
-                        await UpdateTokensInStorageAsync(refreshResponse.AccessToken, refreshResponse.RefreshToken);
-
+                        // No need to update storage - the backend sets cookies
+                        
                         return new RefreshTokenResponse 
                         { 
                             Success = true, 
-                            AccessToken = refreshResponse.AccessToken,
-                            RefreshToken = refreshResponse.RefreshToken
+                            AccessToken = null, // Not needed as we use HTTP-only cookies
+                            RefreshToken = null  // Not needed as we use HTTP-only cookies
                         };
                     }
                 }
@@ -208,94 +189,32 @@ namespace FNBReservation.Portal.Services
             }
         }
 
-        public async Task UpdateTokensInStorageAsync(string accessToken, string refreshToken)
-        {
-            try
-            {
-                try
-                {
-                    var authData = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", "authData");
-                    if (string.IsNullOrEmpty(authData))
-                    {
-                        return;
-                    }
-
-                    var tokenData = JsonSerializer.Deserialize<AuthData>(authData);
-                    if (tokenData == null)
-                    {
-                        return;
-                    }
-
-                    tokenData.AccessToken = accessToken;
-                    tokenData.RefreshToken = refreshToken;
-
-                    var serializedData = JsonSerializer.Serialize(tokenData);
-                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authData", serializedData);
-                    
-                    await _jsRuntime.InvokeVoidAsync("console.log", "Tokens updated in storage");
-                }
-                catch (InvalidOperationException)
-                {
-                    // This happens during static rendering - we'll skip the JS interop
-                }
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "Error updating tokens in storage: " + ex.Message);
-                }
-                catch
-                {
-                    // Ignore JS interop errors during static rendering
-                }
-            }
-        }
-
         public async Task<UserInfo> GetUserInfoFromTokenAsync()
         {
             try
             {
                 var token = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(token))
-                {
                     return null;
-                }
 
-                try
+                var handler = new JwtSecurityTokenHandler();
+                var jwtToken = handler.ReadJwtToken(token);
+
+                var userInfo = new UserInfo
                 {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwtToken = handler.ReadJwtToken(token);
-                    
-                    var userInfo = new UserInfo
-                    {
-                        Username = jwtToken.Claims.FirstOrDefault(c => c.Type == "unique_name" || c.Type == ClaimTypes.Name)?.Value,
-                        Role = jwtToken.Claims.FirstOrDefault(c => c.Type == "role" || c.Type == ClaimTypes.Role)?.Value,
-                        UserId = jwtToken.Claims.FirstOrDefault(c => c.Type == "nameid" || c.Type == ClaimTypes.NameIdentifier)?.Value
-                    };
-                    
-                    return userInfo;
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "Error extracting user info from token: " + ex.Message);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // This happens during static rendering - ignore JS interop
-                    }
-                    return null;
-                }
+                    Username = jwtToken.Claims.FirstOrDefault(c => c.Type == "unique_name")?.Value 
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value,
+                    Role = jwtToken.Claims.FirstOrDefault(c => c.Type == "role")?.Value 
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value,
+                    UserId = jwtToken.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value 
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value
+                };
+
+                return userInfo;
             }
-            catch (InvalidOperationException)
+            catch (Exception ex)
             {
-                // This happens during static rendering
-                return null;
-            }
-            catch
-            {
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Error getting user info from token: {ex.Message}");
                 return null;
             }
         }

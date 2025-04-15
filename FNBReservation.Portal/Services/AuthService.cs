@@ -71,7 +71,18 @@ namespace FNBReservation.Portal.Services
                 string fullUrl = $"{_baseUrl.TrimEnd('/')}/{_loginEndpoint}";
                 await _jsRuntime.InvokeVoidAsync("console.log", "Login URL: " + fullUrl);
 
-                var response = await _httpClient.PostAsync(fullUrl, content);
+                // Create a request with credentials included (for cookies)
+                var requestMessage = new HttpRequestMessage
+                {
+                    Method = HttpMethod.Post,
+                    RequestUri = new Uri(fullUrl),
+                    Content = content
+                };
+                
+                // Add header to indicate credentials should be included
+                requestMessage.Headers.Add("X-Include-Credentials", "true");
+                
+                var response = await _httpClient.SendAsync(requestMessage);
 
                 await _jsRuntime.InvokeVoidAsync("console.log", "Login response status: " + response.StatusCode);
 
@@ -87,44 +98,24 @@ namespace FNBReservation.Portal.Services
                         var apiResponse = JsonSerializer.Deserialize<ApiLoginResponse>(responseContent,
                             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                        // If the response has a username and token, it's a successful login
-                        if (apiResponse != null && (!string.IsNullOrEmpty(apiResponse.Username) || !string.IsNullOrEmpty(apiResponse.AccessToken)))
+                        // If the response has a username and role, it's a successful login
+                        // The API doesn't send tokens in the response anymore since it's using HTTP-only cookies
+                        if (apiResponse != null && !string.IsNullOrEmpty(apiResponse.Username))
                         {
                             string userUsername = apiResponse.Username;
                             string userRole = apiResponse.Role ?? "User";
                             
-                            // Decode JWT token to extract claims if available
-                            if (!string.IsNullOrEmpty(apiResponse.AccessToken))
-                            {
-                                try
-                                {
-                                    var handler = new JwtSecurityTokenHandler();
-                                    var jwtToken = handler.ReadJwtToken(apiResponse.AccessToken);
-                                    
-                                    // Attempt to extract role from token
-                                    var roleClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "role" || c.Type == ClaimTypes.Role);
-                                    if (roleClaim != null)
-                                    {
-                                        userRole = roleClaim.Value;
-                                    }
-                                    
-                                    // Log token info for debugging
-                                    await _jsRuntime.InvokeVoidAsync("console.log", "JWT token decoded successfully");
-                                }
-                                catch (Exception ex)
-                                {
-                                    await _jsRuntime.InvokeVoidAsync("console.log", "Error decoding JWT: " + ex.Message);
-                                }
-                            }
-                            
-                            // Notify the auth state provider about successful authentication
+                            // For HTTP-only cookies, we don't need to store tokens in localStorage
+                            // Just notify the auth state provider about successful authentication
                             if (_authStateProvider is CustomAuthStateProvider customProvider)
                             {
+                                // Passing null for tokens since they're in HTTP-only cookies now
                                 customProvider.NotifyUserAuthentication(
                                     userUsername, 
-                                    userRole, 
-                                    apiResponse.AccessToken, 
-                                    apiResponse.RefreshToken);
+                                    userRole,
+                                    null,  // Access token is in HTTP-only cookie
+                                    null); // Refresh token is in HTTP-only cookie
+                                
                                 await _jsRuntime.InvokeVoidAsync("console.log", "Authentication state updated for: " + userUsername);
                             }
 
