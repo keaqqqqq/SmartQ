@@ -1,6 +1,77 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin ReturnUrl="@NavigationManager.ToBaseRelativePath(NavigationManager.Uri)" />
+                }
+                else
+                {
+                    <MudContainer MaxWidth="MaxWidth.Small" Class="py-8">
+                        <MudPaper Elevation="3" Class="pa-8 text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" Size="Size.Large" Class="mb-4" />
+                            <MudText Typo="Typo.h4" Class="mb-3">Access Denied</MudText>
+                            <MudText Typo="Typo.body1" Class="mb-4">
+                                You do not have permission to access this resource.
+                            </MudText>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/" Class="mt-2">
+                                Return to Dashboard
+                            </MudButton>
+                        </MudPaper>
+                    </MudContainer>
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <div class="d-flex justify-content-center mt-5">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                </div>
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <MudText Typo="Typo.h4" Class="mb-4">Sorry, there's nothing at this address.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Return Home</MudButton>
+        </LayoutView>
+    </NotFound>
 </Router>
+
+@code {
+    public class RedirectToLogin : ComponentBase
+    {
+        [Inject]
+        private NavigationManager NavigationManager { get; set; }
+        
+        [Inject]
+        private IJSRuntime JS { get; set; }
+
+        [Parameter]
+        public string ReturnUrl { get; set; }
+
+        protected override void OnInitialized()
+        {
+            var returnUrlEncoded = string.IsNullOrWhiteSpace(ReturnUrl) ? "" : $"?ReturnUrl={Uri.EscapeDataString(ReturnUrl)}";
+            var loginUrl = $"/login{returnUrlEncoded}";
+            
+            // Don't use JS interop here during static rendering
+            NavigationManager.NavigateTo(loginUrl);
+        }
+        
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            if (firstRender)
+            {
+                // It's safe to use JS interop here
+                await JS.InvokeVoidAsync("console.log", $"Redirected to login with return URL: {ReturnUrl}");
+            }
+            
+            await base.OnAfterRenderAsync(firstRender);
+        }
+    }
+}

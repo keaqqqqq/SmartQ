@@ -1,5 +1,10 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 
 <MudPopoverProvider @rendermode="InteractiveServer" />
 <MudThemeProvider @rendermode="InteractiveServer" />
@@ -16,7 +21,6 @@
             </MudStack>
         </MudDrawerHeader>
         <MudSpacer />
-       
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -29,11 +33,60 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
 @code {
     private bool _drawerOpen = true;
 
     private void DrawerToggle()
     {
         _drawerOpen = !_drawerOpen;
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check if we have the auth data in localStorage and update state if needed
+            if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+            {
+                try
+                {
+                    var userInfo = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                    var isAuthenticated = !string.IsNullOrEmpty(userInfo.Username);
+                    
+                    await JS.InvokeVoidAsync("console.log", $"MainLayout auth check: User authenticated: {isAuthenticated}");
+                    
+                    if (isAuthenticated)
+                    {
+                        // Create claims identity for the user
+                        var claims = new List<Claim>
+                        {
+                            new Claim(ClaimTypes.Name, userInfo.Username),
+                            new Claim(ClaimTypes.Email, userInfo.Email ?? string.Empty)
+                        };
+                        
+                        // Add roles
+                        foreach (var role in userInfo.Roles)
+                        {
+                            claims.Add(new Claim(ClaimTypes.Role, role));
+                        }
+                        
+                        var identity = new ClaimsIdentity(claims, "FNB Authentication");
+                        var user = new ClaimsPrincipal(identity);
+                        
+                        // Force refresh of auth state to ensure NavMenu updates
+                        customAuthProvider.UpdateAuthenticationState(new AuthenticationState(user));
+                        
+                        await JS.InvokeVoidAsync("console.log", "Auth state refreshed from MainLayout");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Error checking auth in MainLayout: {ex.Message}");
+                }
+            }
+        }
+        
+        await base.OnAfterRenderAsync(firstRender);
     }
 }

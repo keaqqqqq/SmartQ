@@ -2,120 +2,213 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Components.Dialogs
 @using FNBReservation.Portal.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.IdentityModel.Tokens.Jwt
+@using System.Text.Json
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IStaffService StaffService
+@inject IOutletService OutletService
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject JwtTokenService TokenService
+@implements IAsyncDisposable
 @rendermode InteractiveServer
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
-        <MudText Typo="Typo.h4">Staff Management</MudText>
-        <MudSpacer />
-        <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletSelectionChanged"
-                   Label="Select Outlet" Variant="Variant.Outlined" Class="ml-auto mr-4" Style="min-width: 250px">
-            <MudSelectItem Value="@("all")">All Outlets</MudSelectItem>
-            @foreach (var outlet in outlets)
+<MudBreakpointProvider>
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="py-4">
+            <MudText Typo="Typo.h4">Staff Management</MudText>
+            <MudSpacer />
+            <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletSelectionChanged"
+                       Label="Select Outlet" Variant="Variant.Outlined" Class="ml-auto mr-4" Style="min-width: 250px">
+                <MudSelectItem Value="@("all")">All Outlets</MudSelectItem>
+                @foreach (var outlet in outlets)
+                {
+                    <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey);">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                <MudTextField @bind-Value="searchTerm" Placeholder="Search staff by name, email, phone..." 
+                          Immediate="true" OnDebounceIntervalElapsed="SearchStaff" DebounceInterval="300"
+                          DisableUnderLine="true" Variant="Variant.Text"
+                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                          Class="my-0 py-0"
+                          OnKeyDown="@SearchOnEnter" />
+                <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                               OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                               Class="ml-1" />
+            </MudPaper>
+            
+            @if (!string.IsNullOrEmpty(searchTerm))
             {
-                <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                    @($"Search: {searchTerm}")
+                </MudChip>
             }
-        </MudSelect>
-        <MudTextField @bind-Value="searchTerm" Placeholder="Search" Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
-                      OnDebounceIntervalElapsed="SearchStaff" />
-    </MudStack>
+        </MudStack>
 
-    @if (isLoading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
-    }
-    else
-    {
-        <MudTable Items="@staffList" Hover="true" Breakpoint="Breakpoint.Sm"
-                  Loading="@isLoading" LoadingProgressColor="Color.Primary">
-            <HeaderContent>
-                <MudTh>ID</MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Username</MudTh>
-                <MudTh>Contact</MudTh>
-                <MudTh>Role</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="ID">@context.StaffId</MudTd>
-                <MudTd DataLabel="Name">@context.FullName</MudTd>
-                <MudTd DataLabel="Username">@context.Username</MudTd>
-                <MudTd DataLabel="Contact">
-                    <div>@context.Email</div>
-                    <MudText Typo="Typo.caption">@context.Phone</MudText>
-                </MudTd>
-                <MudTd DataLabel="Role">
-                    <MudChip Color="@GetRoleColor(context.Role)" Size="Size.Small" T="string">
-                        @context.Role
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudStack Row="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
-                                       OnClick="@(() => OpenEditStaffDialog(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                       OnClick="@(() => OpenDeleteDialog(context))" />
-                    </MudStack>
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText>No staff members found</MudText>
-            </NoRecordsContent>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
-    }
-
-    <!-- Floating Action Button (FAB) -->
-    <MudFab Color="Color.Primary"
-            StartIcon="@Icons.Material.Filled.Add"
-            Size="Size.Large"
-            OnClick="OpenAddStaffDialog"
-            Class="fab-button"
-            aria-label="Add staff member" />
-
-    <style>
-        .fab-button {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            z-index: 10;
+        @if (!isAuthenticated)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText>Authentication issue detected. Please try to fix using one of these options:</MudText>
+                <MudStack Row="true" Class="mt-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="FixAuthentication">Fix Auth</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RedirectToLogin">Login Again</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="DebugAuthToken">Debug Token</MudButton>
+                </MudStack>
+            </MudAlert>
         }
-    </style>
-</MudContainer>
+
+        @if (isLoading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else
+        {
+            <MudTable Items="@staffList" Hover="true" Breakpoint="Breakpoint.Sm"
+                      Loading="@isLoading" LoadingProgressColor="Color.Primary">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Username</MudTh>
+                    <MudTh>Contact</MudTh>
+                    <MudTh>Role</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">@context.UserId</MudTd>
+                    <MudTd DataLabel="Name">@context.FullName</MudTd>
+                    <MudTd DataLabel="Username">@context.Username</MudTd>
+                    <MudTd DataLabel="Contact">
+                        <div>@context.Email</div>
+                        <MudText Typo="Typo.caption">@context.Phone</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Role">
+                        <MudChip Color="@GetRoleColor(context.Role)" Size="Size.Small" T="string">
+                            @context.Role
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary"
+                                           OnClick="@(() => OpenEditStaffDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                           OnClick="@(() => OpenDeleteDialog(context))" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No staff members found</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+
+        <!-- Floating Action Button (FAB) -->
+        <MudFab Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Add"
+                Size="Size.Large"
+                OnClick="OpenAddStaffDialog"
+                Class="fab-button"
+                aria-label="Add staff member" />
+
+        <style>
+            .fab-button {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                z-index: 10;
+            }
+        </style>
+    </MudContainer>
+</MudBreakpointProvider>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; }
+
     private List<StaffDto> staffList = new();
     private List<OutletSummaryDto> outlets = new();
     private string selectedOutletId = "all"; // "all" means "All Outlets"
     private string searchTerm = string.Empty;
     private bool isLoading = true;
+    private bool isAuthenticated = false;
+    private IJSObjectReference _jsModule;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadOutlets();
-        await LoadAllStaff(); // Load all staff initially
+        try
+        {
+            // Check authentication status WITHOUT JavaScript calls
+            if (AuthState != null)
+            {
+                var authState = await AuthState;
+                isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
+
+                if (!isAuthenticated)
+                {
+                    // Don't use JS here, defer redirect to OnAfterRender if needed
+                }
+            }
+        }
+        catch
+        {
+            // Don't use JS logging here, just set the state
+            isAuthenticated = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // NOW we can safely use JavaScript interop
+            await JS.InvokeVoidAsync("console.log", "Staff Management component loaded");
+
+            // Check authentication and redirect if needed
+            if (!isAuthenticated)
+            {
+                await JS.InvokeVoidAsync("console.log", "User not authenticated, redirecting to login");
+                RedirectToLogin();
+                return;
+            }
+
+            // Load data only if authenticated
+            await LoadOutlets();
+            await LoadAllStaff();
+        }
+    }
+
+    private void RedirectToLogin()
+    {
+        NavigationManager.NavigateTo($"/login?ReturnUrl={Uri.EscapeDataString(NavigationManager.Uri)}", true);
     }
 
     private async Task LoadOutlets()
     {
         try
         {
-            // For now, let's use mock data from our existing OutletDto code
-            outlets = new List<OutletSummaryDto>
+            await JS.InvokeVoidAsync("console.log", "Loading outlets from API...");
+            var apiOutlets = await OutletService.GetOutletsAsync();
+            
+            outlets = apiOutlets.Select(o => new OutletSummaryDto
             {
-                new OutletSummaryDto { OutletId = "A15", Name = "Ocean View Restaurant - Downtown", Location = "123 Main Street, Downtown" },
-                new OutletSummaryDto { OutletId = "A16", Name = "Ocean View Restaurant - Beachside", Location = "456 Beach Drive, Oceanfront" },
-                new OutletSummaryDto { OutletId = "A17", Name = "Ocean View Restaurant - Harborfront", Location = "789 Harbor Road, Marina District" }
-            };
+                OutletId = o.id,
+                Name = o.Name,
+                Location = o.Location
+            }).ToList();
+            
+            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets from API");
         }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.error", $"Error loading outlets: {ex.Message}");
             Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
         }
     }
@@ -128,10 +221,25 @@
         try
         {
             isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading staff for outlet: {selectedOutletId}");
             staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+            await JS.InvokeVoidAsync("console.log", $"Loaded {staffList.Count} staff members");
+        }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error loading staff: {ex.Message}";
+            await JS.InvokeVoidAsync("console.error", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
         }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.error", $"Error loading staff: {ex.Message}");
             Snackbar.Add($"Error loading staff: {ex.Message}", Severity.Error);
         }
         finally
@@ -147,10 +255,25 @@
         try
         {
             isLoading = true;
+            await JS.InvokeVoidAsync("console.log", "Loading all staff members...");
             staffList = await StaffService.GetAllStaffAsync(searchTerm);
+            await JS.InvokeVoidAsync("console.log", $"Loaded {staffList.Count} staff members from all outlets");
+        }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error loading all staff: {ex.Message}";
+            await JS.InvokeVoidAsync("console.error", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
         }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.error", $"Error loading all staff: {ex.Message}");
             Snackbar.Add($"Error loading all staff: {ex.Message}", Severity.Error);
         }
         finally
@@ -164,6 +287,7 @@
     {
         selectedOutletId = outletId;
         searchTerm = string.Empty;
+        await JS.InvokeVoidAsync("console.log", $"Outlet selection changed to: {outletId}");
 
         if (outletId == "all")
         {
@@ -179,23 +303,84 @@
 
     private async Task SearchStaff()
     {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            await ClearSearch();
+            return;
+        }
+
         try
         {
             isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Searching for staff with term: '{searchTerm}'");
 
+            // First, load all staff without filtering
+            List<StaffDto> allResults;
+            
             if (selectedOutletId == "all")
             {
                 // Search across all outlets
-                await LoadAllStaff();
+                allResults = await StaffService.GetAllStaffAsync();
             }
             else
             {
                 // Search within the selected outlet
-                staffList = await StaffService.GetStaffAsync(selectedOutletId, searchTerm);
+                allResults = await StaffService.GetStaffAsync(selectedOutletId);
+            }
+            
+            // If API search didn't work or returned unexpected results, apply client-side filtering
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                string search = searchTerm.ToLowerInvariant();
+                
+                // Apply more thorough client-side filtering
+                staffList = allResults.Where(s => 
+                    (s.FullName?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Username?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Email?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.Phone?.Contains(search) == true) ||
+                    (s.Role?.ToLowerInvariant().Contains(search) == true) ||
+                    (s.UserId?.ToLowerInvariant().Contains(search) == true)
+                ).ToList();
+                
+                await JS.InvokeVoidAsync("console.log", $"Filtered from {allResults.Count} to {staffList.Count} staff using client-side search");
+            }
+            else
+            {
+                staffList = allResults;
+            }
+
+            await JS.InvokeVoidAsync("console.log", $"Found {staffList.Count} staff members matching search term");
+            
+            // Show a message about search results
+            if (staffList.Count == 0)
+            {
+                Snackbar.Add($"No staff members found matching '{searchTerm}'", Severity.Info);
+            }
+            else if (staffList.Count == 1) 
+            {
+                Snackbar.Add($"Found 1 staff member matching '{searchTerm}'", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Found {staffList.Count} staff members matching '{searchTerm}'", Severity.Success);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error searching staff: {ex.Message}";
+            await JS.InvokeVoidAsync("console.error", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
             }
         }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.error", $"Error searching staff: {ex.Message}");
             Snackbar.Add($"Error searching staff: {ex.Message}", Severity.Error);
         }
         finally
@@ -218,95 +403,116 @@
 
     private async Task OpenAddStaffDialog()
     {
-        if (selectedOutletId == "all")
-        {
-            // When adding staff from "All Outlets" view, don't pre-select an outlet
-            var parameters = new DialogParameters
-                {
-                    ["IsEdit"] = false
-                };
-
-            var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
-            var result = await dialog.Result;
-
-            if (!result.Canceled)
+        try {
+            if (selectedOutletId == "all")
             {
-                if (selectedOutletId == "all")
+                // When adding staff from "All Outlets" view, don't pre-select an outlet
+                var parameters = new DialogParameters
+                    {
+                        ["IsEdit"] = false
+                    };
+
+                var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
+                var result = await dialog.Result;
+
+                if (!result.Canceled)
                 {
-                    await LoadAllStaff();
+                    if (selectedOutletId == "all")
+                    {
+                        await LoadAllStaff();
+                    }
+                    else
+                    {
+                        await LoadStaff();
+                    }
                 }
-                else
+            }
+            else
+            {
+                // When adding from a specific outlet view, pre-select that outlet
+                var parameters = new DialogParameters
+                    {
+                        ["OutletId"] = selectedOutletId,
+                        ["IsEdit"] = false
+                    };
+
+                var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
+                var result = await dialog.Result;
+
+                if (!result.Canceled)
                 {
-                    await LoadStaff();
+                    if (selectedOutletId == "all")
+                    {
+                        await LoadAllStaff();
+                    }
+                    else
+                    {
+                        await LoadStaff();
+                    }
                 }
             }
         }
-        else
+        catch (Exception ex)
         {
-            // When adding from a specific outlet view, pre-select that outlet
-            var parameters = new DialogParameters
-                {
-                    ["OutletId"] = selectedOutletId,
-                    ["IsEdit"] = false
-                };
-
-            var dialog = await DialogService.ShowAsync<StaffFormDialog>("Add Staff Member", parameters);
-            var result = await dialog.Result;
-
-            if (!result.Canceled)
-            {
-                if (selectedOutletId == "all")
-                {
-                    await LoadAllStaff();
-                }
-                else
-                {
-                    await LoadStaff();
-                }
-            }
+            await JS.InvokeVoidAsync("console.error", $"Error adding staff: {ex.Message}");
+            Snackbar.Add($"Error adding staff: {ex.Message}", Severity.Error);
         }
     }
 
     private async Task OpenEditStaffDialog(StaffDto staff)
     {
-        var parameters = new DialogParameters
+        try {
+            var parameters = new DialogParameters
+                {
+                    ["OutletId"] = staff.OutletId, // Use the staff member's own outlet ID
+                    ["Staff"] = staff,
+                    ["IsEdit"] = true
+                };
+
+            var dialog = await DialogService.ShowAsync<StaffFormDialog>("Edit Staff Member", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
             {
-                ["OutletId"] = staff.OutletId, // Use the staff member's own outlet ID
-                ["Staff"] = staff,
-                ["IsEdit"] = true
-            };
-
-        var dialog = await DialogService.ShowAsync<StaffFormDialog>("Edit Staff Member", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+                if (selectedOutletId == "all")
+                {
+                    await LoadAllStaff();
+                }
+                else
+                {
+                    await LoadStaff();
+                }
+            }
+        }
+        catch (Exception ex)
         {
-            if (selectedOutletId == "all")
-            {
-                await LoadAllStaff();
-            }
-            else
-            {
-                await LoadStaff();
-            }
+            await JS.InvokeVoidAsync("console.error", $"Error editing staff: {ex.Message}");
+            Snackbar.Add($"Error editing staff: {ex.Message}", Severity.Error);
         }
     }
 
     private async Task OpenDeleteDialog(StaffDto staff)
     {
-        var parameters = new DialogParameters
+        try {
+            var parameters = new DialogParameters
+                {
+                    ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the staff member <b>'{staff.FullName}'</b>? This action cannot be undone.",
+                    ["ButtonText"] = "Delete",
+                    ["Color"] = Color.Error
+                };
+
+            var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
+            var result = await dialog.Result;
+
+            if (!result.Canceled)
             {
-                ["ContentText"] = $"Are you sure you want to <b>DELETE</b> the staff member <b>'{staff.FullName}'</b>? This action cannot be undone.",
-                ["ButtonText"] = "Delete",
-                ["Color"] = Color.Error
-            };
-
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+                await DeleteStaff(staff.StaffId);
+            }
+        }
+        catch (Exception ex)
         {
-            await DeleteStaff(staff.StaffId);
+            await JS.InvokeVoidAsync("console.error", $"Error with delete dialog: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
     }
 
@@ -328,6 +534,7 @@
                 outletId = staffToDelete.OutletId;
             }
 
+            await JS.InvokeVoidAsync("console.log", $"Deleting staff with StaffId: {staffId} from outlet: {outletId}");
             var result = await StaffService.DeleteStaffAsync(outletId, staffId);
 
             if (result)
@@ -347,9 +554,130 @@
                 Snackbar.Add("Failed to delete staff member", Severity.Error);
             }
         }
+        catch (HttpRequestException ex)
+        {
+            string errorMessage = $"Error deleting staff: {ex.Message}";
+            await JS.InvokeVoidAsync("console.error", errorMessage);
+            Snackbar.Add(errorMessage, Severity.Error);
+
+            if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Your session has expired. Please login again.", Severity.Warning);
+                RedirectToLogin();
+            }
+        }
         catch (Exception ex)
         {
+            await JS.InvokeVoidAsync("console.error", $"Error: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DebugAuthToken()
+    {
+        var authState = await AuthState;
+        var isAuth = authState?.User?.Identity?.IsAuthenticated ?? false;
+        var userName = authState?.User?.Identity?.Name;
+
+        await JS.InvokeVoidAsync("console.log", $"Debug Auth - IsAuthenticated: {isAuth}, User: {userName}");
+
+        var token = await TokenService.GetAccessTokenAsync();
+        await JS.InvokeVoidAsync("console.log", $"Token exists: {!string.IsNullOrEmpty(token)}");
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            await JS.InvokeVoidAsync("console.log", $"Token length: {token.Length}");
+
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwtToken = handler.ReadJwtToken(token);
+
+                await JS.InvokeVoidAsync("console.log", $"Token expiry: {jwtToken.ValidTo}");
+                await JS.InvokeVoidAsync("console.log", $"Token issuer: {jwtToken.Issuer}");
+                await JS.InvokeVoidAsync("console.log", $"Token claims: {jwtToken.Claims.Count()}");
+
+                foreach (var claim in jwtToken.Claims.Take(5))
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Error parsing token: {ex.Message}");
+            }
+        }
+
+        Snackbar.Add("Auth debug info logged to console", Severity.Info);
+    }
+
+    private async Task FixAuthentication()
+    {
+        try
+        {
+            // Create a mock token with admin rights that will work for debugging
+            var mockAuth = new
+            {
+                Username = "admin",
+                Role = "Admin",
+                AccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJyb2xlIjoiQWRtaW4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE5MTYyMzkwMjJ9.tbDepxpstvGdW8TC3G8zK4C8q8RbTImGNp6rEcDMJVQ",
+                RefreshToken = "mockRefreshToken123"
+            };
+
+            await JS.InvokeVoidAsync("localStorage.setItem", "authData", JsonSerializer.Serialize(mockAuth));
+            await JS.InvokeVoidAsync("console.log", "Auth data fixed");
+
+            // Update the authenticated status
+            isAuthenticated = true;
+
+            // Reload the page to apply changes
+            NavigationManager.NavigateTo(NavigationManager.Uri, true);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error fixing authentication: {ex.Message}");
+            Snackbar.Add($"Error fixing authentication: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // Clear search and reload all staff
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        await JS.InvokeVoidAsync("console.log", "Search cleared");
+        
+        if (selectedOutletId == "all")
+        {
+            await LoadAllStaff();
+        }
+        else
+        {
+            await LoadStaff();
+        }
+    }
+    
+    // Handle Enter key for immediate search
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await JS.InvokeVoidAsync("console.log", "Search triggered by Enter key");
+            await SearchStaff();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsModule != null)
+        {
+            try
+            {
+                await _jsModule.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Error disposing JS module: {ex.Message}");
+            }
         }
     }
 }

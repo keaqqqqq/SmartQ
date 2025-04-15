@@ -1,11 +1,17 @@
-﻿<!DOCTYPE html>
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject AuthService AuthService
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
-    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="FNBReservation.Portal.styles.css" />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
@@ -13,8 +19,61 @@
     <HeadOutlet />
 </head>
 <body>
-    <Routes />
+    <CascadingAuthenticationState>
+        <Routes />
+    </CascadingAuthenticationState>
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
 </body>
 </html>
+
+@code {
+    private bool _firstRender = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+            try
+            {
+                await LogAuthState();
+                
+                // Check if user is authenticated
+                var isAuthenticated = await AuthService.IsUserAuthenticated();
+                if (!isAuthenticated)
+                {
+                    await JS.InvokeVoidAsync("console.log", "User is not authenticated");
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("console.log", "User is authenticated");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", "Error in App initialization: " + ex.Message);
+            }
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+    
+    private async Task LogAuthState()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState?.User;
+        
+        await JS.InvokeVoidAsync("console.log", $"IsAuthenticated: {user?.Identity?.IsAuthenticated}");
+        
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Username: {user.Identity.Name}");
+            await JS.InvokeVoidAsync("console.log", $"Auth type: {user.Identity.AuthenticationType}");
+            
+            foreach (var claim in user.Claims)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+            }
+        }
+    }
+}
