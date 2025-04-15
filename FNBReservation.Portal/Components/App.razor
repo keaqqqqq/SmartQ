@@ -55,35 +55,49 @@
             {
                 await LogAuthState();
                 
-                // Check if token is valid and refresh if needed
-                var isTokenValid = await TokenService.IsTokenValidAsync();
-                if (!isTokenValid)
+                try
                 {
-                    await JS.InvokeVoidAsync("console.log", "Token is invalid or expired, attempting to refresh...");
-                    var refreshResult = await TokenService.RefreshTokenAsync();
-                    if (refreshResult.Success)
+                    // Check if token is valid and refresh if needed
+                    var isTokenValid = await TokenService.IsTokenValidAsync();
+                    if (!isTokenValid)
                     {
-                        await JS.InvokeVoidAsync("console.log", "Token refreshed successfully");
+                        await JS.InvokeVoidAsync("console.log", "Token is invalid or expired, attempting to refresh...");
+                        var refreshResult = await TokenService.RefreshTokenAsync();
+                        if (refreshResult.Success)
+                        {
+                            await JS.InvokeVoidAsync("console.log", "Token refreshed successfully");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Error validating/refreshing token: " + ex.Message);
                 }
                 
                 // Call the custom method to load authentication from localStorage
                 if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
                 {
-                    var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
-                    await JS.InvokeVoidAsync("console.log", $"User authenticated from local storage: {(user.Identity?.IsAuthenticated == true ? "Yes" : "No")}");
-                    
-                    if (user.Identity?.IsAuthenticated == true)
+                    try
                     {
-                        await JS.InvokeVoidAsync("console.log", $"Authenticated user: {user.Identity.Name}");
-                        foreach (var claim in user.Claims)
-                        {
-                            await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
-                        }
+                        var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                        await JS.InvokeVoidAsync("console.log", $"User authenticated from local storage: {(user.Identity?.IsAuthenticated == true ? "Yes" : "No")}");
                         
-                        // Force authentication state update using the wrapper method
-                        var authState = new AuthenticationState(user);
-                        customAuthProvider.UpdateAuthenticationState(authState);
+                        if (user.Identity?.IsAuthenticated == true)
+                        {
+                            await JS.InvokeVoidAsync("console.log", $"Authenticated user: {user.Identity.Name}");
+                            foreach (var claim in user.Claims)
+                            {
+                                await JS.InvokeVoidAsync("console.log", $"Claim: {claim.Type} = {claim.Value}");
+                            }
+                            
+                            // Force authentication state update using the wrapper method
+                            var authState = new AuthenticationState(user);
+                            customAuthProvider.UpdateAuthenticationState(authState);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await JS.InvokeVoidAsync("console.log", "Error loading auth from storage: " + ex.Message);
                     }
                 }
             }

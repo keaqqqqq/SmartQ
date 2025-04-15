@@ -28,16 +28,8 @@ window.authHelpers = {
     getAuthData: function () {
         try {
             const authData = localStorage.getItem('authData');
-            if (authData) {
-                try {
-                    const parsed = JSON.parse(authData);
-                    return parsed;
-                } catch (parseError) {
-                    console.error('Failed to parse auth data', parseError);
-                    return null;
-                }
-            }
-            return null;
+            // Return the raw string directly instead of parsing it
+            return authData;
         } catch (error) {
             console.error('Error getting auth data:', error);
             return null;

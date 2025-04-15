@@ -70,23 +70,31 @@ namespace FNBReservation.Portal.Services
                         return new AuthenticationState(_anonymous);
                     }
 
-                    var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
-                    
-                    if (authData == null)
+                    try
                     {
+                        var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
+                        
+                        if (authData == null)
+                        {
+                            return new AuthenticationState(_anonymous);
+                        }
+
+                        var claims = new List<Claim>
+                        {
+                            new Claim(ClaimTypes.Name, authData.Username),
+                            new Claim(ClaimTypes.Role, authData.Role)
+                        };
+                        
+                        var identity = new ClaimsIdentity(claims, "FNBReservation");
+                        var user = new ClaimsPrincipal(identity);
+                        
+                        return new AuthenticationState(user);
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Error deserializing auth data: " + ex.Message);
                         return new AuthenticationState(_anonymous);
                     }
-
-                    var claims = new List<Claim>
-                    {
-                        new Claim(ClaimTypes.Name, authData.Username),
-                        new Claim(ClaimTypes.Role, authData.Role)
-                    };
-                    
-                    var identity = new ClaimsIdentity(claims, "FNBReservation");
-                    var user = new ClaimsPrincipal(identity);
-                    
-                    return new AuthenticationState(user);
                 }
                 catch (InvalidOperationException)
                 {
@@ -156,30 +164,38 @@ namespace FNBReservation.Portal.Services
                     return _anonymous;
                 }
 
-                var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
-                
-                if (authData == null)
+                try
                 {
-                    await _jsRuntime.InvokeVoidAsync("console.log", "Auth data exists but could not be deserialized");
+                    var authData = JsonSerializer.Deserialize<AuthData>(storedPrincipal);
+                    
+                    if (authData == null)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Auth data exists but could not be deserialized");
+                        return _anonymous;
+                    }
+
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Auth data for user: {authData.Username}, Role: {authData.Role}");
+                    
+                    // Create a new identity and user principal
+                    var claims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.Name, authData.Username),
+                        new Claim(ClaimTypes.Role, authData.Role)
+                    };
+
+                    var identity = new ClaimsIdentity(claims, "FNBReservation");
+                    var user = new ClaimsPrincipal(identity);
+                    
+                    // Update the authentication state and notify
+                    UpdateAuthenticationState(new AuthenticationState(user));
+                    
+                    return user;
+                }
+                catch (Exception ex)
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.log", "Error deserializing auth data: " + ex.Message);
                     return _anonymous;
                 }
-
-                await _jsRuntime.InvokeVoidAsync("console.log", $"Auth data for user: {authData.Username}, Role: {authData.Role}");
-                
-                // Create a new identity and user principal
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Name, authData.Username),
-                    new Claim(ClaimTypes.Role, authData.Role)
-                };
-
-                var identity = new ClaimsIdentity(claims, "FNBReservation");
-                var user = new ClaimsPrincipal(identity);
-                
-                // Update the authentication state and notify
-                UpdateAuthenticationState(new AuthenticationState(user));
-                
-                return user;
             }
             catch (Exception ex)
             {

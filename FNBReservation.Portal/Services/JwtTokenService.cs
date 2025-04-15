@@ -44,11 +44,18 @@ namespace FNBReservation.Portal.Services
                 var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
                 if (!string.IsNullOrEmpty(authData))
                 {
-                    var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
-                    if (tokenData != null && !string.IsNullOrEmpty(tokenData.AccessToken))
+                    try 
                     {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Using token from localStorage");
-                        return tokenData.AccessToken;
+                        var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                        if (tokenData != null && !string.IsNullOrEmpty(tokenData.AccessToken))
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", "GetAccessTokenAsync: Using token from localStorage");
+                            return tokenData.AccessToken;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Error parsing auth data: " + ex.Message);
                     }
                 }
                 
@@ -95,11 +102,18 @@ namespace FNBReservation.Portal.Services
                 var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
                 if (!string.IsNullOrEmpty(authData))
                 {
-                    var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
-                    if (tokenData != null && !string.IsNullOrEmpty(tokenData.RefreshToken))
+                    try 
                     {
-                        await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: Using refresh token from localStorage");
-                        return tokenData.RefreshToken;
+                        var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                        if (tokenData != null && !string.IsNullOrEmpty(tokenData.RefreshToken))
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", "GetRefreshTokenAsync: Using refresh token from localStorage");
+                            return tokenData.RefreshToken;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Error parsing auth data: " + ex.Message);
                     }
                 }
                 
@@ -249,31 +263,34 @@ namespace FNBReservation.Portal.Services
                     var authData = await _jsRuntime.InvokeAsync<string>("authHelpers.getAuthData");
                     if (!string.IsNullOrEmpty(authData))
                     {
-                        var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
-                        if (tokenData != null && !string.IsNullOrEmpty(tokenData.Username))
+                        // Parse the authData string - it's now coming as a string directly from JS
+                        try 
                         {
-                            await _jsRuntime.InvokeVoidAsync("console.log", $"GetUserInfoFromTokenAsync: Found username {tokenData.Username} in localStorage");
-                            return new UserInfo
+                            var tokenData = JsonSerializer.Deserialize<TokenData>(authData);
+                            if (tokenData != null && !string.IsNullOrEmpty(tokenData.Username))
                             {
-                                Username = tokenData.Username,
-                                Role = tokenData.Role,
-                                // UserId might not be available in localStorage
-                                UserId = null
-                            };
+                                return new UserInfo
+                                {
+                                    Username = tokenData.Username,
+                                    Role = tokenData.Role,
+                                    // Other properties if available
+                                };
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", "Error parsing token data from localStorage: " + ex.Message);
+                            return null;
                         }
                     }
                     
-                    // If we can't get from localStorage, return default values
-                    // The actual user info will be determined by the server based on cookies
-                    return new UserInfo
-                    {
-                        Username = "Authenticated User",
-                        Role = "User", // Default role
-                        UserId = null  // Will be determined by server
-                    };
+                    // If we can't get user info from localStorage, try to make an API call to get user info
+                    // This would require implementing an endpoint on the backend
+                    
+                    return null;
                 }
-
-                // For regular tokens, parse them as before
+                
+                // Continue with regular JWT token parsing for localStorage tokens
                 var handler = new JwtSecurityTokenHandler();
                 var jwtToken = handler.ReadJwtToken(token);
 
