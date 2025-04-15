@@ -57,6 +57,7 @@
 @code {
     [Parameter] public List<TableInfo> Tables { get; set; } = new List<TableInfo>();
     [Parameter] public EventCallback<List<TableInfo>> TablesChanged { get; set; }
+    [Parameter] public EventCallback<List<TableInfo>> OnTablesUpdated { get; set; }
     [Parameter] public Guid OutletId { get; set; }
     [Parameter] public bool UseApiIntegration { get; set; } = true;
 
@@ -92,6 +93,7 @@
             {
                 Tables = await TableService.GetTablesByOutletIdAsync(OutletId);
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
             }
         }
         catch (Exception ex)
@@ -163,6 +165,7 @@
                 }
                 
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
                 Snackbar.Add("Table added successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -239,6 +242,7 @@
                 }
                 
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
                 Snackbar.Add("Table updated successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -281,6 +285,7 @@
                 // Remove from local list in both cases
                 Tables.Remove(table);
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
                 Snackbar.Add("Table removed successfully", Severity.Success);
             }
             catch (Exception ex)
@@ -368,6 +373,7 @@
             }
             
             await TablesChanged.InvokeAsync(Tables);
+            await OnTablesUpdated.InvokeAsync(Tables);
             Snackbar.Add($"Added {bulkCount} tables successfully", Severity.Success);
         }
         catch (Exception ex)
@@ -413,6 +419,7 @@
                 // Add the test table to the local collection
                 Tables.Add(result);
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
             }
             catch (Exception ex)
             {

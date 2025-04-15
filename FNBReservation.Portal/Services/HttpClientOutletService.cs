@@ -100,6 +100,36 @@ namespace FNBReservation.Portal.Services
                 response.EnsureSuccessStatusCode();
 
                 var outlets = await response.Content.ReadFromJsonAsync<List<OutletDto>>(_jsonOptions);
+                
+                // Load tables for each outlet
+                if (outlets != null)
+                {
+                    for (int i = 0; i < outlets.Count; i++)
+                    {
+                        try
+                        {
+                            // Get tables for the outlet
+                            if (Guid.TryParse(outlets[i].id, out Guid outletId))
+                            {
+                                string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outlets[i].id}/tables";
+                                var tableResponse = await _httpClient.GetAsync(tableEndpoint);
+                                
+                                if (tableResponse.IsSuccessStatusCode)
+                                {
+                                    var tables = await tableResponse.Content.ReadFromJsonAsync<List<TableInfo>>(_jsonOptions);
+                                    outlets[i].Tables = tables ?? new List<TableInfo>();
+                                    await _jsRuntime.InvokeVoidAsync("console.log", $"Loaded {tables?.Count ?? 0} tables for outlet {outlets[i].Name}");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error loading tables for outlet {outlets[i].Name}: {ex.Message}");
+                            // Continue with the next outlet even if this one fails
+                        }
+                    }
+                }
+                
                 return outlets ?? new List<OutletDto>();
             }
             catch (Exception ex)
@@ -122,6 +152,29 @@ namespace FNBReservation.Portal.Services
                 response.EnsureSuccessStatusCode();
 
                 var outlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
+                
+                // Explicitly load tables for this outlet
+                if (outlet != null && Guid.TryParse(outlet.id, out Guid guid))
+                {
+                    try
+                    {
+                        string tableEndpoint = $"{_baseUrl.TrimEnd('/')}/api/v1/admin/outlets/{outletId}/tables";
+                        var tableResponse = await _httpClient.GetAsync(tableEndpoint);
+                        
+                        if (tableResponse.IsSuccessStatusCode)
+                        {
+                            var tables = await tableResponse.Content.ReadFromJsonAsync<List<TableInfo>>(_jsonOptions);
+                            outlet.Tables = tables ?? new List<TableInfo>();
+                            await _jsRuntime.InvokeVoidAsync("console.log", $"Loaded {tables?.Count ?? 0} tables for outlet {outlet.Name}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"Error loading tables for outlet {outlet.Name}: {ex.Message}");
+                        // Continue since we still have the outlet data
+                    }
+                }
+                
                 return outlet;
             }
             catch (Exception ex)

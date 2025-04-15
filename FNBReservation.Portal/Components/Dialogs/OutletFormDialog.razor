@@ -165,6 +165,7 @@
 
     [Parameter] public OutletDto Outlet { get; set; }
     [Parameter] public bool IsEdit { get; set; } = false;
+    [Parameter] public string OutletId { get; set; }
 
     private OutletDto OutletModel { get; set; } = new OutletDto();
     private OutletDto OriginalOutletModel { get; set; } = new OutletDto(); // For change tracking
@@ -175,6 +176,33 @@
     protected override async Task OnInitializedAsync()
     {
         await JS.InvokeVoidAsync("console.log", IsEdit ? "Editing outlet" : "Creating new outlet");
+        
+        // Load outlet by ID if provided
+        if (!string.IsNullOrEmpty(OutletId) && (Outlet == null))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("console.log", $"Loading outlet with ID: {OutletId}");
+                Outlet = await OutletService.GetOutletByIdAsync(OutletId);
+                IsEdit = true;
+                
+                if (Outlet == null)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"No outlet found with ID: {OutletId}");
+                    Snackbar.Add($"Outlet not found with ID: {OutletId}", Severity.Error);
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Successfully loaded outlet: {Outlet.Name}");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error loading outlet: {ex.Message}");
+                Snackbar.Add($"Error loading outlet: {ex.Message}", Severity.Error);
+            }
+        }
+        
         if (IsEdit && Outlet != null)
         {
             await JS.InvokeVoidAsync("console.log", $"Editing outlet: {Outlet.Name}");

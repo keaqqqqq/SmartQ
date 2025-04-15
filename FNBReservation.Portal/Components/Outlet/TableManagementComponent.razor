@@ -1,6 +1,7 @@
 @using FNBReservation.Portal.Models
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
+@inject ITableService TableService
 @rendermode InteractiveServer
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
@@ -12,7 +13,7 @@
     }
     else
     {
-        <TablesEditor OutletId="Guid.Parse(OutletId)" @bind-Tables="Tables" />
+        <TablesEditor OutletId="Guid.Parse(OutletId)" @bind-Tables="Tables" OnTablesUpdated="UpdateTables" />
     }
 </MudPaper>
 
@@ -21,11 +22,39 @@
     [Parameter] public List<TableInfo> Tables { get; set; } = new List<TableInfo>();
     [Parameter] public EventCallback<List<TableInfo>> TablesChanged { get; set; }
 
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(OutletId))
+        {
+            await LoadTables();
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        if (TablesChanged.HasDelegate && Tables != null)
+        if (!string.IsNullOrEmpty(OutletId) && Tables.Count == 0)
         {
+            await LoadTables();
+        }
+    }
+
+    private async Task LoadTables()
+    {
+        try
+        {
+            var outletGuid = Guid.Parse(OutletId);
+            Tables = await TableService.GetTablesByOutletIdAsync(outletGuid);
             await TablesChanged.InvokeAsync(Tables);
         }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Error loading tables: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateTables(List<TableInfo> updatedTables)
+    {
+        Tables = updatedTables;
+        await TablesChanged.InvokeAsync(Tables);
     }
 } 

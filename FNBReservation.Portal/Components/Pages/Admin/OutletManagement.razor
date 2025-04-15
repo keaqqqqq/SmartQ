@@ -226,11 +226,21 @@
 
             await JS.InvokeVoidAsync("console.log", "Loading outlets from API...");
 
+            // Clear existing data first
+            allOutlets.Clear();
+            outlets.Clear();
+
             // Get all outlets from the service
             allOutlets = await OutletService.GetOutletsAsync();
-            outlets = new List<OutletDto>(allOutlets); // Make a copy
+            
+            // Ensure we have a new copy
+            outlets = new List<OutletDto>();
+            foreach (var outlet in allOutlets)
+            {
+                outlets.Add(outlet);
+            }
 
-            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets");
+            await JS.InvokeVoidAsync("console.log", $"Loaded {outlets.Count} outlets with a total of {outlets.Sum(o => o.Tables?.Count ?? 0)} tables");
         }
         catch (HttpRequestException ex)
         {
@@ -356,13 +366,24 @@
     {
         try
         {
+            if (outlet == null || string.IsNullOrEmpty(outlet.id))
+            {
+                Snackbar.Add("Invalid outlet data. Cannot view details.", Severity.Error);
+                return;
+            }
+
             var parameters = new DialogParameters
-                {
-                    ["OutletId"] = outlet.id
-                };
+            {
+                ["OutletId"] = outlet.id
+            };
+
+            await JS.InvokeVoidAsync("console.log", $"Opening outlet details dialog for ID: {outlet.id}, Name: {outlet.Name}");
 
             var dialog = await DialogService.ShowAsync<OutletDetailsDialog>("Outlet Details", parameters);
-            await dialog.Result;
+            var result = await dialog.Result;
+            
+            // Always refresh data after viewing outlet details to get updated table counts
+            await LoadOutletsData();
         }
         catch (Exception ex)
         {
@@ -375,7 +396,15 @@
     {
         try
         {
-            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet");
+            await JS.InvokeVoidAsync("console.log", "Opening dialog to add new outlet");
+            
+            var parameters = new DialogParameters
+            {
+                ["IsEdit"] = false
+            };
+            
+            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Add New Outlet", parameters,
+                        new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
             var result = await dialog.Result;
 
             if (!result.Canceled)
@@ -395,25 +424,33 @@
     {
         try
         {
-            var parameters = new DialogParameters
-                {
-                    ["Outlet"] = outlet,
-                    ["IsEdit"] = true
-                };
+            if (outlet == null || string.IsNullOrEmpty(outlet.id))
+            {
+                Snackbar.Add("Invalid outlet data. Cannot edit outlet.", Severity.Error);
+                return;
+            }
 
-            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters);
+            await JS.InvokeVoidAsync("console.log", $"Opening edit dialog for outlet: {outlet.Name}, ID: {outlet.id}");
+
+            var parameters = new DialogParameters
+            {
+                ["OutletId"] = outlet.id
+            };
+
+            var dialog = await DialogService.ShowAsync<OutletFormDialog>("Edit Outlet", parameters, 
+                          new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true });
             var result = await dialog.Result;
 
             if (!result.Canceled)
             {
-                await LoadOutletsData();
+                await LoadOutletsData(); // Reload to get updated table data
                 Snackbar.Add("Outlet updated successfully", Severity.Success);
             }
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.error", $"Error editing outlet: {ex.Message}");
-            Snackbar.Add($"Error editing outlet: {ex.Message}", Severity.Error);
+            await JS.InvokeVoidAsync("console.error", $"Error updating outlet: {ex.Message}");
+            Snackbar.Add($"Error updating outlet: {ex.Message}", Severity.Error);
         }
     }
 
@@ -447,6 +484,9 @@
     {
         try
         {
+            isLoading = true;
+            StateHasChanged();
+            
             await JS.InvokeVoidAsync("console.log", $"Deleting outlet: {outletId}");
             var result = await OutletService.DeleteOutletAsync(outletId);
 
@@ -458,6 +498,7 @@
             else
             {
                 Snackbar.Add("Failed to delete outlet", Severity.Error);
+                await LoadOutletsData(); // Refresh data anyway to ensure UI is consistent
             }
         }
         catch (HttpRequestException ex)
@@ -476,6 +517,11 @@
         {
             await JS.InvokeVoidAsync("console.error", $"Error deleting outlet: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
         }
     }
 
