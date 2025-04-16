@@ -1,41 +1,56 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueue } from "../../contexts/QueueContext";
+import QueueService from "../../services/QueueService";
 
 const QueueStatus = () => {
-    const { id } = useParams();
+    const { id } = useParams(); // This will be the queue code now
     const navigate = useNavigate();
-    const {
-        queueDetails,
-        getQueueStatus,
-        cancelQueue,
-        confirmArrival,
-        clearQueueDetails,
-        loading,
-        error
+    const { 
+        loading, 
+        error, 
+        setError 
     } = useQueue();
 
+    const [queueDetails, setQueueDetails] = useState(null);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [timeLeft, setTimeLeft] = useState(60); // Countdown timer for confirmation (60 seconds)
     const [showTableReadyNotification, setShowTableReadyNotification] = useState(false);
     const [isConfirmingArrival, setIsConfirmingArrival] = useState(false);
+    const [loadingStatus, setLoadingStatus] = useState(true);
+
+    // Fetch queue status
+    const fetchQueueStatus = useCallback(async () => {
+        if (!id) return;
+        
+        setLoadingStatus(true);
+        try {
+            const data = await QueueService.getQueueStatusByCode(id);
+            setQueueDetails(data);
+            setError(null);
+        } catch (error) {
+            console.error("Error fetching queue status:", error);
+            setError("Failed to load queue status. Please try again.");
+        } finally {
+            setLoadingStatus(false);
+        }
+    }, [id, setError]);
 
     // Check queue status on mount and set up polling
     useEffect(() => {
-        const fetchStatus = async () => {
-            if (id) {
-                await getQueueStatus(id);
-            }
-        };
+        fetchQueueStatus();
+        
+        // Set up polling (check every 30 seconds)
+        const intervalId = setInterval(() => {
+            fetchQueueStatus();
+        }, 30000);
 
-        fetchStatus();
-
-        // Cleanup function will handle unsubscribing from WebSocket or stopping polling
+        // Cleanup function will handle stopping polling
         return () => {
-            clearQueueDetails();
+            clearInterval(intervalId);
         };
-    }, [id, getQueueStatus, clearQueueDetails]);
+    }, [fetchQueueStatus]);
 
     // Listen for changes in queueDetails to show table ready notification
     useEffect(() => {
@@ -84,15 +99,18 @@ const QueueStatus = () => {
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
-    // Handle cancel queue
+    // Handle cancel queue (exit queue)
     const handleCancelQueue = async () => {
         try {
-            await cancelQueue(id);
+            await QueueService.exitQueue(id);
             setShowCancelModal(false);
-            // After successful cancellation, show a success message or navigate elsewhere
-            navigate("/");
+            // After successful cancellation, update queue details
+            fetchQueueStatus();
+            // Show success message or navigate elsewhere
+            navigate("/", { state: { message: "Successfully exited the queue" } });
         } catch (error) {
-            console.error("Error cancelling queue:", error);
+            console.error("Error exiting queue:", error);
+            setError("Failed to exit queue. Please try again.");
         }
     };
 
@@ -100,20 +118,26 @@ const QueueStatus = () => {
     const handleConfirmArrival = async () => {
         setIsConfirmingArrival(true);
         try {
-            await confirmArrival(id);
+            // Since we're using a different API structure, update the approach
+            const updatedData = {
+                status: "Seated"
+            };
+            await QueueService.updateQueueEntry(id, updatedData);
             setShowConfirmModal(false);
             setShowTableReadyNotification(false);
-            // After confirmation, navigate to the confirmation page
+            // After confirmation, update the queue details
+            fetchQueueStatus();
             navigate(`/queue/confirm/${id}`);
         } catch (error) {
             console.error("Error confirming arrival:", error);
+            setError("Failed to confirm arrival. Please try again.");
         } finally {
             setIsConfirmingArrival(false);
         }
     };
 
     // Render loading state
-    if (loading && !queueDetails) {
+    if (loadingStatus && !queueDetails) {
         return (
             <div className="flex justify-center items-center min-h-screen">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
@@ -200,147 +224,116 @@ const QueueStatus = () => {
                     </div>
                 </div>
 
-                {/* Queue Position and Wait Time */}
-                {queueDetails.status === 'Waiting' && (
-                    <div className="mb-6">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                                <h3 className="text-gray-500 text-sm mb-1">Position</h3>
-                                <p className="text-4xl font-bold text-green-600">{queueDetails.position}</p>
+                {/* Queue Position Card */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6 text-center">
+                    {queueDetails.status === 'Waiting' ? (
+                        <>
+                            <h2 className="text-xl font-bold mb-2">Your Position in Queue</h2>
+                            <div className="text-5xl font-bold text-blue-700 mb-2">{queueDetails.position}</div>
+                            <p className="text-gray-700 mb-2">Estimated Wait Time</p>
+                            <div className="text-3xl font-bold text-blue-600">
+                                {queueDetails.estimatedWaitTime ? `${queueDetails.estimatedWaitTime} mins` : 'Calculating...'}
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                                <h3 className="text-gray-500 text-sm mb-1">Estimated Wait</h3>
-                                <p className="text-4xl font-bold text-green-600">{queueDetails.estimatedWaitTime}</p>
-                                <p className="text-xs text-gray-500">minutes</p>
-                            </div>
-                        </div>
+                        </>
+                    ) : queueDetails.status === 'Ready' ? (
+                        <>
+                            <h2 className="text-xl font-bold mb-4 text-green-700">Your Table is Ready!</h2>
+                            <p className="text-gray-700 mb-2">Please proceed to the restaurant.</p>
+                            <p className="font-medium">Time remaining to confirm: {formatTime(timeLeft)}</p>
+                        </>
+                    ) : queueDetails.status === 'Seated' ? (
+                        <>
+                            <h2 className="text-xl font-bold mb-4 text-purple-700">You're Seated!</h2>
+                            <p className="text-gray-700">Enjoy your meal!</p>
+                        </>
+                    ) : queueDetails.status === 'Cancelled' ? (
+                        <>
+                            <h2 className="text-xl font-bold mb-4 text-red-700">Queue Entry Cancelled</h2>
+                            <p className="text-gray-700">Your queue entry has been cancelled.</p>
+                        </>
+                    ) : (
+                        <p className="text-xl">Queue status: {queueDetails.status}</p>
+                    )}
+                </div>
 
-                        <div className="mt-4 bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded text-sm">
-                            <p>
-                                <span className="font-medium">Keep this page open</span> to receive real-time updates.
-                                You'll also receive WhatsApp notifications when your queue status changes.
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Table Ready Status */}
-                {queueDetails.status === 'Ready' && (
-                    <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-lg">
-                        <h3 className="font-bold text-lg text-green-800 mb-2">Your Table is Ready!</h3>
-                        <p className="text-green-700 mb-4">
-                            Please confirm your arrival within {formatTime(timeLeft)} or your spot may be given to the next person in line.
-                        </p>
-                        <button
-                            onClick={() => setShowConfirmModal(true)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded"
-                        >
-                            Confirm Arrival
-                        </button>
-                    </div>
-                )}
-
-                {/* Seated Status */}
-                {queueDetails.status === 'Seated' && (
-                    <div className="mb-6 bg-purple-50 border border-purple-200 p-4 rounded-lg">
-                        <h3 className="font-bold text-lg text-purple-800 mb-2">You've Been Seated</h3>
-                        <p className="text-purple-700">
-                            Enjoy your meal! Your table number is {queueDetails.tableNumber || 'being prepared'}.
-                        </p>
-                    </div>
-                )}
-
-                {/* Cancelled Status */}
-                {queueDetails.status === 'Cancelled' && (
-                    <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-lg">
-                        <h3 className="font-bold text-lg text-red-800 mb-2">Queue Cancelled</h3>
-                        <p className="text-red-700 mb-4">
-                            This queue entry has been cancelled.
-                        </p>
-                        <button
-                            onClick={() => navigate('/queue/join')}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded"
-                        >
-                            Join a New Queue
-                        </button>
-                    </div>
-                )}
-
-                {/* Customer Details */}
-                <div className="bg-gray-50 p-5 rounded-lg mb-6">
-                    <h3 className="font-medium mb-3">Details</h3>
+                {/* Queue Details */}
+                <div className="mb-6">
+                    <h2 className="text-lg font-semibold mb-3">Booking Details</h2>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <p className="text-gray-500 text-sm">Name</p>
+                            <p className="text-sm text-gray-600">Name</p>
                             <p className="font-medium">{queueDetails.customerName}</p>
                         </div>
                         <div>
-                            <p className="text-gray-500 text-sm">Phone</p>
-                            <p className="font-medium">{queueDetails.customerPhone}</p>
-                        </div>
-                        <div>
-                            <p className="text-gray-500 text-sm">Email</p>
-                            <p className="font-medium">{queueDetails.customerEmail || "Not provided"}</p>
-                        </div>
-                        <div>
-                            <p className="text-gray-500 text-sm">Party Size</p>
+                            <p className="text-sm text-gray-600">Party Size</p>
                             <p className="font-medium">{queueDetails.partySize} {queueDetails.partySize === 1 ? 'person' : 'people'}</p>
                         </div>
                         <div>
-                            <p className="text-gray-500 text-sm">Joined At</p>
-                            <p className="font-medium">
-                                {new Date(queueDetails.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
+                            <p className="text-sm text-gray-600">Phone</p>
+                            <p className="font-medium">{queueDetails.customerPhone}</p>
                         </div>
-                        {queueDetails.specialRequests && (
-                            <div className="col-span-2">
-                                <p className="text-gray-500 text-sm">Special Requests</p>
-                                <p className="font-medium">{queueDetails.specialRequests}</p>
-                            </div>
-                        )}
+                        <div>
+                            <p className="text-sm text-gray-600">Joined At</p>
+                            <p className="font-medium">{new Date(queueDetails.joinedAt).toLocaleTimeString()}</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-3">
-                    <button
-                        onClick={() => navigate("/")}
-                        className="md:flex-1 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50"
-                    >
-                        Back to Home
-                    </button>
+                {/* Special Requests */}
+                {queueDetails.specialRequests && (
+                    <div className="mb-6">
+                        <h2 className="text-lg font-semibold mb-2">Special Requests</h2>
+                        <p className="bg-gray-50 p-3 rounded">{queueDetails.specialRequests}</p>
+                    </div>
+                )}
 
+                {/* Action Buttons */}
+                <div className="mt-8 flex flex-col space-y-3">
                     {queueDetails.status === 'Waiting' && (
                         <button
                             onClick={() => setShowCancelModal(true)}
-                            className="md:flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded"
+                            className="w-full py-3 px-4 border border-red-500 text-red-500 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
                         >
-                            Cancel Queue
+                            Exit Queue
                         </button>
                     )}
+
+                    {queueDetails.status === 'Ready' && (
+                        <button
+                            onClick={() => setShowConfirmModal(true)}
+                            className="w-full py-3 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                            Confirm Arrival
+                        </button>
+                    )}
+
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="w-full py-3 px-4 border border-blue-500 text-blue-500 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        Refresh Status
+                    </button>
                 </div>
             </div>
 
-            {/* Cancel Confirmation Modal */}
+            {/* Cancel Modal */}
             {showCancelModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-                        <h3 className="text-xl font-bold mb-4">Cancel Queue</h3>
-                        <p className="mb-6">Are you sure you want to cancel your position in the queue? You'll lose your current spot.</p>
-
-                        <div className="flex justify-end gap-3">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                        <h3 className="text-xl font-bold mb-4">Exit Queue?</h3>
+                        <p className="mb-6">Are you sure you want to exit the queue? This action cannot be undone.</p>
+                        <div className="flex space-x-3">
                             <button
                                 onClick={() => setShowCancelModal(false)}
-                                className="bg-white border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50"
+                                className="flex-1 py-2 px-4 border border-gray-300 rounded-md hover:bg-gray-50"
                             >
-                                Keep My Spot
+                                No, Stay in Queue
                             </button>
-
                             <button
                                 onClick={handleCancelQueue}
-                                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded"
+                                className="flex-1 py-2 px-4 bg-red-600 text-white rounded-md hover:bg-red-700"
                             >
-                                Cancel Queue
+                                Yes, Exit Queue
                             </button>
                         </div>
                     </div>
@@ -349,34 +342,24 @@ const QueueStatus = () => {
 
             {/* Confirm Arrival Modal */}
             {showConfirmModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-                        <h3 className="text-xl font-bold mb-4">Confirm Arrival</h3>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                        <h3 className="text-xl font-bold mb-4">Confirm Your Arrival</h3>
                         <p className="mb-6">Please confirm that you have arrived at the restaurant and are ready to be seated.</p>
-
-                        <div className="flex justify-end gap-3">
+                        <div className="flex space-x-3">
                             <button
                                 onClick={() => setShowConfirmModal(false)}
-                                className="bg-white border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded hover:bg-gray-50"
+                                className="flex-1 py-2 px-4 border border-gray-300 rounded-md hover:bg-gray-50"
                                 disabled={isConfirmingArrival}
                             >
-                                Not Yet
+                                Cancel
                             </button>
-
                             <button
                                 onClick={handleConfirmArrival}
+                                className="flex-1 py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700"
                                 disabled={isConfirmingArrival}
-                                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded"
                             >
-                                {isConfirmingArrival ? (
-                                    <span className="flex items-center">
-                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Confirming...
-                                    </span>
-                                ) : "I'm Here"}
+                                {isConfirmingArrival ? 'Confirming...' : 'Confirm Arrival'}
                             </button>
                         </div>
                     </div>

@@ -1,6 +1,7 @@
-import axios from 'axios';
+import api from './api';
 
-const API_BASE_URL = '/api/CustomerQueue';
+// Use API path that will be proxied through Vite's proxy
+const API_BASE_URL = '/api/v1/queue';
 
 class QueueService {
     // Join the queue with customer details
@@ -10,12 +11,12 @@ class QueueService {
                 outletId: queueData.outletId,
                 customerName: queueData.customerName,
                 customerPhone: queueData.customerPhone,
-                customerEmail: queueData.customerEmail, // Added email field
+                customerEmail: queueData.customerEmail,
                 partySize: parseInt(queueData.partySize),
                 specialRequests: queueData.specialRequests || ''
             };
 
-            const response = await axios.post(`${API_BASE_URL}/JoinQueue`, payload);
+            const response = await api.post(`${API_BASE_URL}`, payload);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -26,7 +27,7 @@ class QueueService {
     // Get queue status by ID
     async getQueueStatus(queueId) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetQueueStatus?id=${queueId}`);
+            const response = await api.get(`${API_BASE_URL}/${queueId}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -37,42 +38,7 @@ class QueueService {
     // Get queue status by code
     async getQueueStatusByCode(code) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetQueueStatusByCode?code=${code}`);
-            return response.data;
-        } catch (error) {
-            this.handleError(error);
-            throw error;
-        }
-    }
-
-    // Get all queue entries for a phone number
-    async getQueueByPhone(phone) {
-        try {
-            const response = await axios.get(
-                `${API_BASE_URL}/GetQueueByPhone?phone=${encodeURIComponent(phone)}`
-            );
-            return response.data;
-        } catch (error) {
-            this.handleError(error);
-            throw error;
-        }
-    }
-
-    // Cancel a queue entry
-    async cancelQueue(queueId) {
-        try {
-            const response = await axios.put(`${API_BASE_URL}/CancelQueue?id=${queueId}`);
-            return response.data;
-        } catch (error) {
-            this.handleError(error);
-            throw error;
-        }
-    }
-
-    // Confirm arrival when table is ready
-    async confirmArrival(queueId) {
-        try {
-            const response = await axios.put(`${API_BASE_URL}/ConfirmArrival?id=${queueId}`);
+            const response = await api.get(`${API_BASE_URL}/code/${code}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -83,9 +49,31 @@ class QueueService {
     // Get queue wait time estimation
     async getQueueEstimation(outletId, partySize) {
         try {
-            const response = await axios.get(
-                `${API_BASE_URL}/GetQueueEstimation?outletId=${outletId}&partySize=${partySize}`
+            const response = await api.get(
+                `${API_BASE_URL}/wait-time/${outletId}/${partySize}`
             );
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Exit the queue (cancel queue entry)
+    async exitQueue(queueCode) {
+        try {
+            const response = await api.post(`${API_BASE_URL}/exit/${queueCode}`);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Update queue entry
+    async updateQueueEntry(queueCode, updateData) {
+        try {
+            const response = await api.put(`${API_BASE_URL}/${queueCode}`, updateData);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -116,7 +104,7 @@ class QueueService {
 
     // ----------------------
     // Mock methods for development without backend
-    // Remove or comment these out when connecting to real API
+    // These can be used as fallbacks if the API is not available
     // ----------------------
 
     mockJoinQueue(queueData) {
@@ -129,10 +117,10 @@ class QueueService {
                     outletName: this.getOutletName(queueData.outletId),
                     customerName: queueData.customerName,
                     customerPhone: queueData.customerPhone,
-                    customerEmail: queueData.customerEmail, // Added email field
+                    customerEmail: queueData.customerEmail, 
                     partySize: parseInt(queueData.partySize),
-                    position: Math.floor(1 + Math.random() * 10), // Random position between 1-10
-                    estimatedWaitTime: Math.floor(10 + Math.random() * 50), // Random wait time 10-60 mins
+                    position: Math.floor(1 + Math.random() * 10), 
+                    estimatedWaitTime: Math.floor(10 + Math.random() * 50), 
                     status: "Waiting",
                     joinedAt: new Date().toISOString(),
                     specialRequests: queueData.specialRequests || ''
@@ -153,7 +141,7 @@ class QueueService {
                     outletName: "Main Branch",
                     customerName: "John Doe",
                     customerPhone: "+60 12-345 6789",
-                    customerEmail: "john.doe@example.com", // Added email field
+                    customerEmail: "john.doe@example.com", 
                     partySize: 4,
                     position: position,
                     estimatedWaitTime: position * 8, // Each position is about 8 mins
@@ -169,49 +157,12 @@ class QueueService {
         return this.mockGetQueueStatus("q-" + code.substr(-4));
     }
 
-    mockGetQueueByPhone(phone) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    queueEntries: [
-                        {
-                            id: "q-" + Math.random().toString(36).substr(2, 9),
-                            queueCode: "Q1234",
-                            outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
-                            outletName: "Main Branch",
-                            customerName: "John Doe",
-                            customerPhone: phone,
-                            customerEmail: "john.doe@example.com", // Added email field
-                            partySize: 4,
-                            position: 3,
-                            estimatedWaitTime: 24,
-                            status: "Waiting",
-                            joinedAt: new Date(Date.now() - 15 * 60000).toISOString()
-                        }
-                    ]
-                });
-            }, 1000);
-        });
-    }
-
-    mockCancelQueue(queueId) {
+    mockExitQueue(queueCode) {
         return new Promise((resolve) => {
             setTimeout(() => {
                 resolve({
                     success: true,
                     message: "Queue entry cancelled successfully"
-                });
-            }, 800);
-        });
-    }
-
-    mockConfirmArrival(queueId) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    success: true,
-                    message: "Arrival confirmed successfully",
-                    tableNumber: "T" + Math.floor(10 + Math.random() * 20)
                 });
             }, 800);
         });
