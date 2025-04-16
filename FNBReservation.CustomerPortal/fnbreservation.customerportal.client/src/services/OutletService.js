@@ -1,12 +1,13 @@
-import axios from 'axios';
+import api from './api';
 
-const API_BASE_URL = '/api/Outlet';
+// Update API base URL to use proxy
+const API_BASE_URL = '/api/v1/public/outlets';
 
 class OutletService {
     // Get all outlets
     async getAllOutlets() {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetAllOutlets`);
+            const response = await api.get(`${API_BASE_URL}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -17,7 +18,7 @@ class OutletService {
     // Get outlet by ID
     async getOutletById(id) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetOutletById?id=${id}`);
+            const response = await api.get(`${API_BASE_URL}/${id}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -28,9 +29,9 @@ class OutletService {
     // Get outlets near a specific location
     async getNearbyOutlets(latitude, longitude, radius = 10) {
         try {
-            const response = await axios.get(
-                `${API_BASE_URL}/GetNearbyOutlets?latitude=${latitude}&longitude=${longitude}&radius=${radius}`
-            );
+            // For now, we'll just get all outlets since the endpoint doesn't support location filtering
+            // We'll manually filter them by distance in the frontend
+            const response = await api.get(`${API_BASE_URL}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -41,7 +42,7 @@ class OutletService {
     // Get outlet operating hours
     async getOutletOperatingHours(outletId) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetOperatingHours?outletId=${outletId}`);
+            const response = await api.get(`${API_BASE_URL}/GetOperatingHours?outletId=${outletId}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -51,23 +52,8 @@ class OutletService {
 
     // Error handling helper method
     handleError(error) {
-        // Log the error
-        console.error('Outlet API Error:', error);
-
-        // Additional error handling logic can be added here
-        // E.g., Tracking errors, showing notifications, etc.
-
-        if (error.response) {
-            // Server responded with a status code outside of 2xx range
-            console.error('Error response:', error.response.data);
-            console.error('Status:', error.response.status);
-        } else if (error.request) {
-            // Request was made but no response was received
-            console.error('No response received:', error.request);
-        } else {
-            // Error in setting up the request
-            console.error('Request setup error:', error.message);
-        }
+        // Additional custom error handling if needed
+        console.error('OutletService: Error encountered', error);
     }
 
     // This is a mock method for development that returns sample data
