@@ -27,6 +27,35 @@ const QueueStatus = () => {
         setLoadingStatus(true);
         try {
             const data = await QueueService.getQueueStatusByCode(id);
+            console.log('Queue data received:', data); // Add debug logging
+            
+            // Ensure all required properties exist
+            if (data) {
+                // Ensure wait time is available
+                if (data.estimatedWaitMinutes === undefined && data.estimatedWaitTime === undefined) {
+                    // Try to get estimated wait time from API
+                    try {
+                        if (data.outletId && data.partySize) {
+                            const waitTimeResponse = await QueueService.getQueueEstimation(data.outletId, data.partySize);
+                            console.log('Wait time response:', waitTimeResponse);
+                            if (waitTimeResponse && waitTimeResponse.estimatedWaitMinutes !== undefined) {
+                                data.estimatedWaitMinutes = waitTimeResponse.estimatedWaitMinutes;
+                            } else if (waitTimeResponse && waitTimeResponse.estimatedWaitTime !== undefined) {
+                                data.estimatedWaitTime = waitTimeResponse.estimatedWaitTime;
+                            }
+                        }
+                    } catch (waitTimeError) {
+                        console.error('Error fetching wait time:', waitTimeError);
+                    }
+                }
+                
+                // Ensure position is available
+                if (data.position === undefined && data.queuePosition === undefined) {
+                    // Default to 0 if not provided
+                    data.position = "N/A";
+                }
+            }
+            
             setQueueDetails(data);
             setError(null);
         } catch (error) {
@@ -136,6 +165,46 @@ const QueueStatus = () => {
         }
     };
 
+    // Function to manually refresh data
+    const refreshData = async () => {
+        setLoadingStatus(true);
+        try {
+            // Get queue details
+            const queueData = await QueueService.getQueueStatusByCode(id);
+            console.log('Refreshed queue data:', queueData);
+            
+            // If we have queue data, also fetch wait time estimation
+            if (queueData && queueData.outletId && queueData.partySize) {
+                try {
+                    const waitTimeData = await QueueService.getQueueEstimation(
+                        queueData.outletId, 
+                        queueData.partySize
+                    );
+                    console.log('Refreshed wait time data:', waitTimeData);
+                    
+                    // Update queue data with wait time info
+                    if (waitTimeData) {
+                        if (waitTimeData.estimatedWaitMinutes !== undefined) {
+                            queueData.estimatedWaitMinutes = waitTimeData.estimatedWaitMinutes;
+                        } else if (waitTimeData.estimatedWaitTime !== undefined) {
+                            queueData.estimatedWaitTime = waitTimeData.estimatedWaitTime;
+                        }
+                    }
+                } catch (waitTimeError) {
+                    console.error('Error refreshing wait time:', waitTimeError);
+                }
+            }
+            
+            setQueueDetails(queueData);
+            setError(null);
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+            setError('Failed to refresh data. Please try again.');
+        } finally {
+            setLoadingStatus(false);
+        }
+    };
+
     // Render loading state
     if (loadingStatus && !queueDetails) {
         return (
@@ -229,10 +298,18 @@ const QueueStatus = () => {
                     {queueDetails.status === 'Waiting' ? (
                         <>
                             <h2 className="text-xl font-bold mb-2">Your Position in Queue</h2>
-                            <div className="text-5xl font-bold text-blue-700 mb-2">{queueDetails.position}</div>
+                            <div className="text-5xl font-bold text-blue-700 mb-2">
+                                {queueDetails.position !== undefined ? queueDetails.position : 
+                                 queueDetails.queuePosition !== undefined ? queueDetails.queuePosition : 
+                                 'N/A'}
+                            </div>
                             <p className="text-gray-700 mb-2">Estimated Wait Time</p>
                             <div className="text-3xl font-bold text-blue-600">
-                                {queueDetails.estimatedWaitTime ? `${queueDetails.estimatedWaitTime} mins` : 'Calculating...'}
+                                {queueDetails.estimatedWaitMinutes 
+                                  ? `${queueDetails.estimatedWaitMinutes} mins` 
+                                  : queueDetails.estimatedWaitTime 
+                                    ? `${queueDetails.estimatedWaitTime} mins` 
+                                    : 'Calculating...'}
                             </div>
                         </>
                     ) : queueDetails.status === 'Ready' ? (
@@ -308,10 +385,10 @@ const QueueStatus = () => {
                     )}
 
                     <button
-                        onClick={() => window.location.reload()}
+                        onClick={refreshData}
                         className="w-full py-3 px-4 border border-blue-500 text-blue-500 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                        Refresh Status
+                        {loadingStatus ? 'Refreshing...' : 'Refresh Status'}
                     </button>
                 </div>
             </div>
