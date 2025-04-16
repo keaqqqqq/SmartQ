@@ -250,12 +250,26 @@ const ModifyReservation = () => {
         try {
             // In a real system, this would call the actual updateReservation API
             const updatedReservation = {
-                ...reservationDetails,
+                // Ensure the ID is properly formatted as a string
+                id: reservationDetails.id,
+                // Keep the original reservation code
+                reservationCode: reservationDetails.reservationCode,
+                // Keep the original outlet information
+                outletId: reservationDetails.outletId,
+                outletName: reservationDetails.outletName,
+                // Keep customer information
+                customerName: reservationDetails.customerName,
+                customerPhone: reservationDetails.customerPhone,
+                customerEmail: reservationDetails.customerEmail,
+                // Updated fields
                 partySize: Number(formData.partySize),
                 reservationDate: `${formData.date}T${formData.time}+08:00`,
-                specialRequests: formData.specialRequests
+                specialRequests: formData.specialRequests,
+                // Keep original status
+                status: reservationDetails.status
             };
 
+            console.log("Sending update with data:", updatedReservation);
             await updateReservation(updatedReservation);
             setShowSuccessModal(true);
         } catch (err) {

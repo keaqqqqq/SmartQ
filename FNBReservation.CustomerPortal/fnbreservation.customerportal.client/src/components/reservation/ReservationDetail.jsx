@@ -46,7 +46,7 @@ const ReservationDetail = () => {
     // Handle reservation cancellation
     const handleCancelReservation = async () => {
         try {
-            await cancelReservation(reservationDetails.id);
+            await cancelReservation(reservationDetails.id, "Cancelled by customer through web portal");
             setIsModalOpen(false);
             // Show temporary success message
             alert('Your reservation has been successfully cancelled.');

@@ -235,7 +235,30 @@ class ReservationService {
     // Update an existing reservation
     async updateReservation(reservationData) {
         try {
-            const response = await api.put(`${API_BASE_URL}/UpdateReservation`, reservationData);
+            // Log the data being sent to help debugging
+            console.log("Update reservation payload:", JSON.stringify(reservationData, null, 2));
+            
+            // Make sure all required fields are present
+            if (!reservationData.id) {
+                throw new Error("Reservation ID is required for updates");
+            }
+            
+            // Ensure the payload matches the API expectations
+            const payload = {
+                id: reservationData.id,
+                reservationCode: reservationData.reservationCode,
+                outletId: reservationData.outletId,
+                outletName: reservationData.outletName,
+                customerName: reservationData.customerName,
+                customerPhone: reservationData.customerPhone,
+                customerEmail: reservationData.customerEmail || "",
+                partySize: Number(reservationData.partySize),
+                reservationDate: reservationData.reservationDate,
+                specialRequests: reservationData.specialRequests || "",
+                status: reservationData.status || "Confirmed"
+            };
+            
+            const response = await api.put(`${API_BASE_URL}/UpdateReservation`, payload);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -244,9 +267,14 @@ class ReservationService {
     }
 
     // Cancel a reservation
-    async cancelReservation(reservationId) {
+    async cancelReservation(reservationId, reason = "Cancelled by customer") {
         try {
-            const response = await api.post(`${API_BASE_URL}/${reservationId}/cancel`);
+            // Create a proper cancelReservationDto object
+            const cancelReservationDto = {
+                reason: reason
+            };
+            
+            const response = await api.put(`${API_BASE_URL}/${reservationId}/cancel`, cancelReservationDto);
             return response.data;
         } catch (error) {
             this.handleError(error);

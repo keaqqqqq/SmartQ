@@ -235,11 +235,33 @@ export const ReservationProvider = ({ children }) => {
         setError(null);
 
         try {
-            const response = await ReservationService.updateReservation(data);
+            if (!data.id) {
+                throw new Error("Cannot update reservation: Missing ID");
+            }
+
+            // Log the data we're sending to the service
+            console.log("Updating reservation with data:", data);
+            
+            // Ensure we're passing a properly structured object
+            const response = await ReservationService.updateReservation({
+                id: data.id,
+                reservationCode: data.reservationCode,
+                outletId: data.outletId,
+                outletName: data.outletName,
+                customerName: data.customerName,
+                customerPhone: data.customerPhone,
+                customerEmail: data.customerEmail || "",
+                partySize: Number(data.partySize),
+                reservationDate: data.reservationDate,
+                specialRequests: data.specialRequests || "",
+                status: data.status || "Confirmed"
+            });
+            
             setReservationDetails(response);
             return response;
         } catch (err) {
-            setError('Failed to update reservation. Please try again.');
+            const errorMessage = err.response?.data?.title || 'Failed to update reservation. Please try again.';
+            setError(errorMessage);
             console.error('Error updating reservation:', err);
             throw err;
         } finally {
@@ -247,8 +269,8 @@ export const ReservationProvider = ({ children }) => {
         }
     }, []);
 
-    // Cancel reservation with dummy support
-    const cancelReservation = useCallback(async (id) => {
+    // Cancel reservation
+    const cancelReservation = useCallback(async (id, reason = "Cancelled by customer") => {
         setLoading(true);
         setError(null);
 
@@ -281,7 +303,7 @@ export const ReservationProvider = ({ children }) => {
             }
 
             // For any other ID, proceed with the regular API call
-            const response = await ReservationService.cancelReservation(id);
+            const response = await ReservationService.cancelReservation(id, reason);
 
             // Update user reservations if they exist
             if (userReservations.length > 0) {
