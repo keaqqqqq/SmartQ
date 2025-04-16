@@ -36,6 +36,24 @@ class ReservationService {
             console.log("Checking availability with payload:", payload);
 
             const response = await api.post(`${API_BASE_URL}/check-availability`, payload);
+            console.log("API Response from /api/v1/reservations/check-availability:", response.data);
+            
+            // Ensure we're getting the expected response format
+            // Sometimes the response might be nested differently
+            if (response.data) {
+                // Log entire response for debugging
+                console.log("Full check availability response data:", JSON.stringify(response.data, null, 2));
+                
+                // If the response doesn't have alternativeTimeSlots but has a data property
+                // that contains the alternativeTimeSlots, restructure it
+                if (!response.data.alternativeTimeSlots && 
+                    response.data.data && 
+                    response.data.data.alternativeTimeSlots) {
+                    console.log("Restructuring nested alternativeTimeSlots");
+                    response.data.alternativeTimeSlots = response.data.data.alternativeTimeSlots;
+                }
+            }
+            
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -264,24 +282,56 @@ class ReservationService {
                 throw new Error("Reservation ID is required for updates");
             }
             
-            // Ensure the payload matches the API expectations
-            const payload = {
-                customerName: reservationData.customerName,
-                customerPhone: reservationData.customerPhone,
-                customerEmail: reservationData.customerEmail || "",
-                partySize: Number(reservationData.partySize),
-                reservationDate: reservationData.reservationDate,
-                specialRequests: reservationData.specialRequests || "",
-                // Add hold and session ID if provided
-                holdId: reservationData.holdId || null,
-                sessionId: reservationData.sessionId || null
-            };
+            // Create a minimal payload with only necessary fields to reduce server processing
+            let payload = {};
+            
+            // If changing date/time or party size, include holdId and sessionId
+            const isChangingCriticalFields = reservationData.holdId && reservationData.sessionId;
+            
+            if (isChangingCriticalFields) {
+                console.log("Critical fields are changing - including holdId and sessionId");
+                payload = {
+                    partySize: Number(reservationData.partySize),
+                    reservationDate: reservationData.reservationDate,
+                    specialRequests: reservationData.specialRequests || "",
+                    holdId: reservationData.holdId,
+                    sessionId: reservationData.sessionId
+                };
+            } else {
+                // For non-critical updates, only include the fields that can be updated without a hold
+                console.log("Only updating non-critical fields");
+                payload = {
+                    specialRequests: reservationData.specialRequests || ""
+                };
+            }
+            
+            console.log("Sending minimal payload:", JSON.stringify(payload, null, 2));
             
             // Use the correct endpoint format: PUT /api/v1/reservations/{id}
             const response = await api.put(`${API_BASE_URL}/${reservationData.id}`, payload);
             return response.data;
         } catch (error) {
+            console.error("-------------------------");
+            console.error("ERROR UPDATING RESERVATION");
+            console.error("-------------------------");
             this.handleError(error);
+            
+            // Log more detailed error info
+            if (error.response) {
+                console.error("Server responded with status:", error.response.status);
+                console.error("Error data:", JSON.stringify(error.response.data, null, 2));
+                console.error("Headers:", JSON.stringify(error.response.headers, null, 2));
+                
+                // Check if there's more detailed error info
+                if (error.response.data && error.response.data.details) {
+                    console.error("Error details:", error.response.data.details);
+                }
+                
+                if (error.response.data && error.response.data.stackTrace) {
+                    console.error("Stack trace:", error.response.data.stackTrace);
+                }
+            }
+            
             throw error;
         }
     }
