@@ -297,7 +297,7 @@ const ReservationForm = () => {
                 
                 // Validate that the outlet has an ID before setting it
                 if (!outletData.id) {
-                    console.error("Error: Outlet data missing ID property", outletData);
+                    console.log("Error: Outlet data missing ID property", outletData);
                     // If no ID, try to find an ID or use a fallback
                     if (outletData._id) {
                         outletData.id = outletData._id; // Use _id if available

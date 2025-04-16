@@ -73,12 +73,28 @@ class ReservationService {
             // Generate a session ID if none is provided
             const actualSessionId = sessionId || this.generateSessionId();
             
+            // Format the date and time into a proper reservationDateTime
+            let reservationDateTime;
+            try {
+                // Try to combine date and time into a full ISO datetime string
+                const dateStr = holdParams.date;
+                const timeStr = holdParams.time;
+                
+                // Create proper ISO string format
+                reservationDateTime = `${dateStr}T${timeStr}`;
+                console.log("Created reservationDateTime:", reservationDateTime);
+            } catch (error) {
+                console.error("Error formatting reservationDateTime:", error);
+                // Fallback to separate date and time if formatting fails
+            }
+            
             // Ensure all parameters are in the correct format
             const payload = {
                 outletId: holdParams.outletId,
                 partySize: parseInt(holdParams.partySize),
-                date: holdParams.date,
-                time: holdParams.time,
+                reservationDateTime: reservationDateTime,
+                date: holdParams.date, // Keep for backward compatibility
+                time: holdParams.time, // Keep for backward compatibility
                 sessionId: actualSessionId
             };
 
