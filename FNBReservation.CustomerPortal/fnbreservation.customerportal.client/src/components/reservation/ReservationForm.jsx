@@ -593,12 +593,15 @@ const ReservationForm = () => {
             
             // Add location if available
             if (locationStatus === 'granted' && userCoordinates) {
+                console.log("Using location coordinates for availability check:", userCoordinates);
                 availabilityParams.latitude = userCoordinates.latitude;
                 availabilityParams.longitude = userCoordinates.longitude;
                 
                 // Check availability with nearby option if location is available
                 try {
+                    console.log("Calling checkAvailabilityWithNearby with params:", availabilityParams);
                     response = await ReservationService.checkAvailabilityWithNearby(availabilityParams);
+                    console.log("API response from /api/v1/reservations/check-availability-with-nearby:", response);
                     console.log("API response with nearby:", response);
                 } catch (error) {
                     console.error("API error, using mock data:", error);
@@ -677,10 +680,38 @@ const ReservationForm = () => {
             
             // Process the response based on the actual API format
             if (response) {
-                const originalOutlet = response.originalOutletAvailability;
-                const nearbyOutlets = response.nearbyOutletsAvailability;
+                // Handle the different response formats depending on which API endpoint was called
+                let originalOutlet;
+                let nearbyOutlets = [];
+                
+                // When "check-availability" is called (no location)
+                if (!response.originalOutletAvailability) {
+                    // Direct response from the check-availability endpoint
+                    console.log("Processing direct availability response format", response);
+                    originalOutlet = response;
+                } 
+                // When "check-availability-with-nearby" is called (with location)
+                else {
+                    console.log("Processing availability with nearby response format", response);
+                    originalOutlet = response.originalOutletAvailability;
+                    
+                    // Process nearby outlets if available
+                    if (response.nearbyOutletsAvailability) {
+                        if (Array.isArray(response.nearbyOutletsAvailability.nearbyOutlets)) {
+                            nearbyOutlets = response.nearbyOutletsAvailability.nearbyOutlets;
+                            console.log("Found nearby outlets:", nearbyOutlets.length);
+                        } else if (Array.isArray(response.nearbyOutletsAvailability)) {
+                            // Handle the case where it might be an array directly
+                            nearbyOutlets = response.nearbyOutletsAvailability;
+                            console.log("Found nearby outlets (array format):", nearbyOutlets.length);
+                        }
+                    } else {
+                        console.log("No nearby outlets in API response");
+                    }
+                }
                 
                 if (originalOutlet) {
+                    console.log("Processing original outlet data:", originalOutlet);
                     // Check if the preferred time is available
                     const hasPreferredTime = originalOutlet.availableTimeSlots?.some(slot => {
                         // Check if any slots match the user's preferred time or have isPreferred flag
@@ -734,11 +765,12 @@ const ReservationForm = () => {
                     } else {
                         // No availability for the requested time
                         setNoAvailability(true);
+                        console.log("No availability for requested time, checking for alternatives");
                         
                         // Check if there are alternative times
                         if (originalOutlet.alternativeTimeSlots && originalOutlet.alternativeTimeSlots.length > 0) {
                             // Set alternative times for the current outlet
-                            setAvailableSlots(originalOutlet.alternativeTimeSlots.map(slot => {
+                            const alternativeTimes = originalOutlet.alternativeTimeSlots.map(slot => {
                                 const dateTimeStr = slot.dateTime;
                                 const timeStr = dateTimeStr.split('T')[1].substring(0, 8); // Extract HH:MM:SS
                                 return {
@@ -746,10 +778,12 @@ const ReservationForm = () => {
                                     availableCapacity: slot.availableCapacity,
                                     isPreferred: slot.isPreferred
                                 };
-                            }));
+                            });
+                            console.log("Found alternative time slots:", alternativeTimes.length, alternativeTimes);
+                            setAvailableSlots(alternativeTimes);
                         } else if (originalOutlet.availableTimeSlots && originalOutlet.availableTimeSlots.length > 0) {
                             // If no alternativeTimeSlots, but availableTimeSlots exist, show those as alternatives
-                            setAvailableSlots(originalOutlet.availableTimeSlots.map(slot => {
+                            const availableTimes = originalOutlet.availableTimeSlots.map(slot => {
                                 const dateTimeStr = slot.dateTime;
                                 const timeStr = dateTimeStr.split('T')[1].substring(0, 8); // Extract HH:MM:SS
                                 return {
@@ -757,16 +791,22 @@ const ReservationForm = () => {
                                     availableCapacity: slot.availableCapacity,
                                     isPreferred: slot.isPreferred
                                 };
-                            }));
+                            });
+                            console.log("Using available time slots as alternatives:", availableTimes.length, availableTimes);
+                            setAvailableSlots(availableTimes);
+                        } else {
+                            console.log("No alternative time slots available");
+                            setAvailableSlots([]);
                         }
                     }
                 }
                 
-                // Process nearby outlets if available
+                // Process nearby outlets after processing original outlet data
                 if (nearbyOutlets && nearbyOutlets.length > 0) {
+                    console.log("Processing nearby outlets data:", nearbyOutlets);
                     const formattedNearbyOutlets = nearbyOutlets.map(outlet => {
                         // Format available times for each nearby outlet
-                        const availableTimes = outlet.availableTimeSlots.map(slot => {
+                        const availableTimes = outlet.availableTimeSlots?.map(slot => {
                             const dateTimeStr = slot.dateTime;
                             const timeStr = dateTimeStr.split('T')[1].substring(0, 8); // Extract HH:MM:SS
                             return {
@@ -774,7 +814,7 @@ const ReservationForm = () => {
                                 availableCapacity: slot.availableCapacity,
                                 isPreferred: slot.isPreferred
                             };
-                        });
+                        }) || [];
                         
                         // Find outlet details from our outlets list
                         const outletDetails = outlets.find(o => o.id === outlet.outletId) || {};
@@ -784,12 +824,19 @@ const ReservationForm = () => {
                             id: outlet.outletId,
                             name: outlet.outletName || outletDetails.name,
                             address: outletDetails.address || outletDetails.location || "Address not available",
+                            distanceKm: outlet.distanceKm, // Add distance information
                             availableTimes: availableTimes
                         };
                     });
                     
                     setAlternativeOutlets(formattedNearbyOutlets);
+                    console.log("Set alternative outlets:", formattedNearbyOutlets);
+                } else {
+                    console.log("No alternative outlets to display");
+                    setAlternativeOutlets([]);
                 }
+            } else {
+                console.log("No outlet data in response");
             }
         } catch (error) {
             console.error("Error checking availability:", error);
@@ -968,7 +1015,9 @@ const ReservationForm = () => {
                         outletId: formData.outletId,
                         partySize: parseInt(formData.partySize),
                         date: formattedDate,
-                        time: formattedTime
+                        time: formattedTime,
+                        // Add the reservationDateTime
+                        reservationDateTime: `${formattedDate}T${formattedTime}`
                     };
                     
                     console.log("Holding tables with params:", holdParams, "with sessionId:", currentSessionId);
@@ -997,8 +1046,8 @@ const ReservationForm = () => {
             try {
                 console.log("Creating reservation with sessionId:", currentSessionId, "and holdId:", finalHoldId);
                 
-                // Simple concatenation of date and time with 'T' and 'Z'
-                const formattedReservationDate = `${formattedDate}T${formattedTime}Z`;
+                // Create the full ISO date with timezone
+                const formattedReservationDate = `${formattedDate}T${formattedTime}`;
                 
                 console.log("Formatted reservation date:", formattedReservationDate);
                 
@@ -1008,7 +1057,7 @@ const ReservationForm = () => {
                     customerPhone: formData.customerPhone,
                     customerEmail: formData.customerEmail,
                     partySize: parseInt(formData.partySize),
-                    reservationDate: formattedReservationDate,
+                    reservationDate: formattedReservationDate, // Use properly formatted ISO date
                     specialRequests: formData.specialRequests || "",
                     holdId: finalHoldId,
                     sessionId: currentSessionId

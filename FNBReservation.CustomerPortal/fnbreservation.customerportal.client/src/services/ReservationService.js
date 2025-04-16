@@ -53,13 +53,28 @@ class ReservationService {
                 preferredTime: availabilityParams.preferredTime,
                 earliestTime: availabilityParams.earliestTime || null,
                 latestTime: availabilityParams.latestTime || null,
-                userLatitude: availabilityParams.latitude,
-                userLongitude: availabilityParams.longitude
+                
+                // Add the flag to check nearby outlets - this is critical
+                checkNearbyOutlets: true,
+                
+                // Add location permission flag
+                hasLocationPermission: true,
+                
+                // Include coordinates if available
+                latitude: availabilityParams.latitude,
+                longitude: availabilityParams.longitude,
+                
+                // Additional parameters to control nearby search
+                maxNearbyOutlets: 5 // Request up to 5 nearby outlets
             };
 
             console.log("Checking availability with nearby with payload:", payload);
 
             const response = await api.post(`${API_BASE_URL}/check-availability-with-nearby`, payload);
+            
+            // Log the response for debugging
+            console.log("Check availability with nearby response:", response.data);
+            
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -150,13 +165,20 @@ class ReservationService {
     // Create a reservation with customer details
     async createReservation(reservationData) {
         try {
+            // Make sure reservationDate is properly formatted
+            let reservationDate = reservationData.reservationDate;
+            
+            // Log the original value for debugging
+            console.log("Original reservationDate:", reservationDate);
+            
+            // Format the payload
             const payload = {
                 outletId: reservationData.outletId,
                 customerName: reservationData.customerName,
                 customerPhone: reservationData.customerPhone,
                 customerEmail: reservationData.customerEmail,
                 partySize: parseInt(reservationData.partySize),
-                reservationDate: reservationData.reservationDate,
+                reservationDate: reservationDate, // Already formatted by the calling component
                 specialRequests: reservationData.specialRequests || "",
                 holdId: reservationData.holdId || null,
                 sessionId: reservationData.sessionId || null
@@ -165,6 +187,10 @@ class ReservationService {
             console.log("Sending create reservation request with payload:", payload);
 
             const response = await api.post(`${API_BASE_URL}`, payload);
+            
+            // Log the response for debugging
+            console.log("Create reservation API response:", response.data);
+            
             return response;
         } catch (error) {
             this.handleError(error);
