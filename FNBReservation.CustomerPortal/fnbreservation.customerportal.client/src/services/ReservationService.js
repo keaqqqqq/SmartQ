@@ -223,11 +223,32 @@ class ReservationService {
     // Get all reservations for a phone number
     async getReservationsByPhone(phone) {
         try {
+            // Remove spaces to format the phone for the API
             const phoneWithoutFormatting = phone.replace(/\s+/g, '');
+            
+            console.log(`Searching for reservations with phone number: ${phoneWithoutFormatting}`);
+            
+            // Make the API call
             const response = await api.get(`${API_BASE_URL}/phone/${encodeURIComponent(phoneWithoutFormatting)}`);
-            return response.data;
+            
+            // Log response for debugging
+            console.log("API Response from phone search:", response.data);
+            
+            // For compatibility, ensure we maintain a consistent response format
+            // Response could be an array or an object with reservations property
+            if (Array.isArray(response.data)) {
+                console.log(`Found ${response.data.length} reservations from array response`);
+                return response.data;
+            } else if (response.data && response.data.reservations) {
+                console.log(`Found ${response.data.reservations.length} reservations from object response`);
+                return response.data;
+            } else {
+                console.log("No reservations found or unexpected response format");
+                return []; // Return empty array for consistency
+            }
         } catch (error) {
             this.handleError(error);
+            console.error("Error searching reservations by phone:", error);
             throw error;
         }
     }
@@ -245,20 +266,19 @@ class ReservationService {
             
             // Ensure the payload matches the API expectations
             const payload = {
-                id: reservationData.id,
-                reservationCode: reservationData.reservationCode,
-                outletId: reservationData.outletId,
-                outletName: reservationData.outletName,
                 customerName: reservationData.customerName,
                 customerPhone: reservationData.customerPhone,
                 customerEmail: reservationData.customerEmail || "",
                 partySize: Number(reservationData.partySize),
                 reservationDate: reservationData.reservationDate,
                 specialRequests: reservationData.specialRequests || "",
-                status: reservationData.status || "Confirmed"
+                // Add hold and session ID if provided
+                holdId: reservationData.holdId || null,
+                sessionId: reservationData.sessionId || null
             };
             
-            const response = await api.put(`${API_BASE_URL}/UpdateReservation`, payload);
+            // Use the correct endpoint format: PUT /api/v1/reservations/{id}
+            const response = await api.put(`${API_BASE_URL}/${reservationData.id}`, payload);
             return response.data;
         } catch (error) {
             this.handleError(error);

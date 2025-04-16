@@ -26,6 +26,7 @@ const AppRoutes = () => {
             <Route path="/reservation/:id" element={<ReservationDetail />} />
             <Route path="/reservation/code/:code" element={<ReservationDetail />} />
             <Route path="/reservations" element={<ReservationList />} />
+            <Route path="/reservations/:phone" element={<ReservationList />} />
             <Route path="/reservation/lookup" element={<ReservationLookup />} />
             <Route path="/update-reservation/:id" element={<ModifyReservation />} />
 

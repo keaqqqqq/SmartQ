@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useReservation } from "../../contexts/ReservationContext";
 import { format, parseISO, addDays } from "date-fns";
+import ReservationService from "../../services/ReservationService";
 
 const ModifyReservation = () => {
     const { id } = useParams();
@@ -33,6 +34,10 @@ const ModifyReservation = () => {
         time: "19:00:00",
         specialRequests: ""
     });
+
+    // Add state for table hold
+    const [holdId, setHoldId] = useState(null);
+    const [sessionId, setSessionId] = useState(null);
 
     // Hardcoded available times for all hours of operation
     const [availableTimes] = useState([
@@ -87,46 +92,48 @@ const ModifyReservation = () => {
                         time: timeString,
                         specialRequests: reservationDataFromNav.specialRequests || ""
                     };
-
+                    
+                    // Set both form data and original data for comparison
+                    setFormData(initialFormData);
+                    setOriginalFormData(initialFormData);
+                    
+                    return;
+                }
+                
+                // Otherwise fetch from API
+                console.log("Fetching reservation with ID:", id);
+                
+                const reservation = await getReservationById(id);
+                if (reservation) {
+                    let timeString = "19:00:00"; // Default time
+                    let dateString = format(new Date(), 'yyyy-MM-dd'); // Default date
+                    
+                    try {
+                        // Parse the reservation date from the API response
+                        const reservationDate = parseISO(reservation.reservationDate);
+                        timeString = format(reservationDate, 'HH:mm:ss');
+                        dateString = format(reservationDate, 'yyyy-MM-dd');
+                    } catch (err) {
+                        console.error("Error parsing reservation date:", err);
+                    }
+                    
+                    const initialFormData = {
+                        partySize: reservation.partySize || 2,
+                        date: dateString,
+                        time: timeString,
+                        specialRequests: reservation.specialRequests || ""
+                    };
+                    
                     console.log("Setting form data to:", initialFormData);
                     setFormData(initialFormData);
                     setOriginalFormData(initialFormData);
-                } else {
-                    // Use the id from params, or default to "12345" for demo/testing
-                    const reservationId = id || "12345";
-                    console.log("Fetching reservation with ID:", reservationId);
-
-                    const reservationData = await getReservationById(reservationId);
-
-                    if (reservationData) {
-                        let timeString = "19:00:00"; // Default time
-                        let dateString = format(new Date(), 'yyyy-MM-dd'); // Default date
-
-                        try {
-                            const reservationDate = parseISO(reservationData.reservationDate);
-                            timeString = format(reservationDate, 'HH:mm:ss');
-                            dateString = format(reservationDate, 'yyyy-MM-dd');
-                        } catch (err) {
-                            console.error("Error parsing reservation date:", err);
-                        }
-
-                        const initialFormData = {
-                            partySize: reservationData.partySize || 2,
-                            date: dateString,
-                            time: timeString,
-                            specialRequests: reservationData.specialRequests || ""
-                        };
-
-                        console.log("Setting form data to:", initialFormData);
-                        setFormData(initialFormData);
-                        setOriginalFormData(initialFormData);
-                    }
+                    
+                    // Generate a consistent session ID for this reservation
+                    const generatedSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+                    setSessionId(generatedSessionId);
                 }
-
-                // For demo purposes - show the demo controls
-                setShowDemoButtons(true);
             } catch (err) {
-                console.error('Failed to fetch reservation', err);
+                console.error("Error fetching reservation:", err);
             }
         };
 
@@ -135,6 +142,11 @@ const ModifyReservation = () => {
         // Cleanup
         return () => {
             clearError();
+            // Release hold if it exists on component unmount
+            if (holdId) {
+                ReservationService.releaseHold(holdId)
+                    .catch(error => console.error("Error releasing hold on unmount:", error));
+            }
         };
     }, [id, getReservationById, clearError, reservationDataFromNav]);
 
@@ -187,6 +199,67 @@ const ModifyReservation = () => {
         }
     };
 
+    // Hold tables before updating critical fields
+    const holdTablesForUpdate = async () => {
+        // Create a properly formatted date
+        const formattedDate = formData.date.includes('T') 
+            ? formData.date.split('T')[0] 
+            : formData.date;
+
+        // Format time properly
+        let formattedTime = formData.time;
+        if (!formattedTime.includes(':')) {
+            formattedTime = `${formattedTime}:00:00`;
+        } else if (formattedTime.split(':').length === 2) {
+            formattedTime = `${formattedTime}:00`;
+        }
+
+        // Format full reservation datetime
+        const reservationDateTime = `${formattedDate}T${formattedTime}`;
+
+        console.log("Holding tables with params:", {
+            outletId: reservationDetails.outletId,
+            partySize: parseInt(formData.partySize),
+            date: formattedDate,
+            time: formattedTime,
+            reservationDateTime: reservationDateTime,
+            sessionId: sessionId
+        });
+
+        try {
+            // Create hold params
+            const holdParams = {
+                outletId: reservationDetails.outletId,
+                partySize: parseInt(formData.partySize),
+                date: formattedDate,
+                time: formattedTime,
+                reservationDateTime: reservationDateTime
+            };
+
+            // Call the hold tables API
+            const response = await ReservationService.holdTables(holdParams, sessionId);
+            
+            if (response.data) {
+                // Extract hold ID
+                const responseData = response.data.data || response.data;
+                const newHoldId = responseData.holdId || responseData.id;
+                
+                console.log("Hold tables response:", responseData);
+                console.log("Extracted holdId:", newHoldId);
+                
+                if (newHoldId) {
+                    setHoldId(newHoldId);
+                    return newHoldId;
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.error("Error holding tables:", error);
+            return null;
+        }
+    };
+
     // Check availability
     const checkAvailability = async () => {
         if (!hasChangedImportantFields()) {
@@ -198,17 +271,13 @@ const ModifyReservation = () => {
         setShowCheckingAvailabilityDialog(true);
 
         try {
-            // In a real system, this would call the actual availability API
-            // For this demo, we'll simulate an API call with random results
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Simulate availability check with 50% chance of availability
-            const isAvailable = Math.random() > 0.5;
-
-            if (isAvailable) {
-                // If available, continue with submission
+            // In a real system, we need to hold tables before updating critical fields
+            const newHoldId = await holdTablesForUpdate();
+            
+            if (newHoldId) {
+                // Tables successfully held - continue with update
                 setShowCheckingAvailabilityDialog(false);
-                await handleSubmitForm();
+                await handleSubmitForm(newHoldId);
             } else {
                 // Generate alternative times
                 const [hours, minutes] = formData.time.split(':').map(Number);
@@ -244,10 +313,26 @@ const ModifyReservation = () => {
     };
 
     // Submit form after availability check
-    const handleSubmitForm = async () => {
+    const handleSubmitForm = async (tableHoldId = null) => {
         setUpdating(true);
 
         try {
+            // Get the current holdId or use the one passed in
+            const finalHoldId = tableHoldId || holdId;
+            
+            // Format date and time properly
+            const formattedDate = formData.date.includes('T') 
+                ? formData.date.split('T')[0] 
+                : formData.date;
+
+            // Format time properly
+            let formattedTime = formData.time;
+            if (!formattedTime.includes(':')) {
+                formattedTime = `${formattedTime}:00:00`;
+            } else if (formattedTime.split(':').length === 2) {
+                formattedTime = `${formattedTime}:00`;
+            }
+            
             // In a real system, this would call the actual updateReservation API
             const updatedReservation = {
                 // Ensure the ID is properly formatted as a string
@@ -263,10 +348,13 @@ const ModifyReservation = () => {
                 customerEmail: reservationDetails.customerEmail,
                 // Updated fields
                 partySize: Number(formData.partySize),
-                reservationDate: `${formData.date}T${formData.time}+08:00`,
+                reservationDate: `${formattedDate}T${formattedTime}`,
                 specialRequests: formData.specialRequests,
                 // Keep original status
-                status: reservationDetails.status
+                status: reservationDetails.status,
+                // Add the holdId and sessionId if available
+                holdId: finalHoldId,
+                sessionId: sessionId
             };
 
             console.log("Sending update with data:", updatedReservation);
@@ -289,7 +377,12 @@ const ModifyReservation = () => {
         });
 
         setShowNotAvailableDialog(false);
-        await handleSubmitForm();
+        
+        // Try to hold tables with the alternative time
+        const newHoldId = await holdTablesForUpdate();
+        
+        // Proceed with the update
+        await handleSubmitForm(newHoldId);
     };
 
     // Handle form submission
