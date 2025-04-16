@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, addDays, parseISO } from "date-fns";
 import { useLocation } from "../../contexts/LocationContext"; // Import the LocationContext
@@ -99,7 +99,7 @@ const ReservationForm = () => {
     const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes in seconds
     const [timerActive, setTimerActive] = useState(false);
     const timerRef = useRef(null);
-
+    
     // New state for nearest outlet
     const [nearestOutlet, setNearestOutlet] = useState(null);
     const [showNearestOutletDialog, setShowNearestOutletDialog] = useState(false);
@@ -121,10 +121,37 @@ const ReservationForm = () => {
         specialRequests: ""
     });
 
-    // Fetch outlets on component mount
+    // Fetch outlets on component mount and handle location
     useEffect(() => {
+        // Fetch outlets first
         fetchOutlets();
-    }, []);
+        console.log("Component mounted - fetching outlets");
+        
+        // Add a direct call to find nearest outlet if location permission is granted
+        const timer = setTimeout(() => {
+            if (locationStatus === 'granted' && userCoordinates) {
+                console.log("Component mounted with location permission - ALWAYS showing nearest outlet");
+                // This will ALWAYS run when the component mounts and location is available
+                setShowNearestOutletDialog(false); // Reset first to ensure it shows properly
+                findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+            } 
+            else if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
+                console.log("Showing location permission dialog");
+                setShowLocationDialog(true);
+            }
+        }, 300);
+        
+        return () => clearTimeout(timer);
+    }, [locationStatus, userCoordinates]); // This will run on mount AND when location/coords change
+
+    // Replace the navigate function to reset state when navigating
+    const originalNavigate = navigate;
+    const customNavigate = (path, options) => {
+        // Then navigate as usual
+        originalNavigate(path, options);
+    };
+    // Override the navigate function
+    const wrappedNavigate = useCallback(customNavigate, [originalNavigate]);
 
     // Fetch all available outlets
     const fetchOutlets = async () => {
@@ -163,42 +190,31 @@ const ReservationForm = () => {
         }
     };
 
-    // Check if we should show location dialog when the component mounts
-    useEffect(() => {
-        // Show location dialog on initial page load if permission wasn't set before
-        if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
-            setShowLocationDialog(true);
-        }
-        
-        // After permission is granted, find the nearest outlet
-        if (locationStatus === 'granted' && userCoordinates && !nearestOutlet) {
-            findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
-        }
-    }, [locationStatus, userCoordinates]);
-
     // Find the nearest outlet using the API
     const findNearestOutlet = async (latitude, longitude) => {
         if (!latitude || !longitude) return;
         
         try {
             setLoading(true);
+            console.log("Finding nearest outlet with coordinates:", { latitude, longitude });
+            
             const response = await OutletService.getNearestOutlet(latitude, longitude);
             
             if (response && response.data) {
                 // Extract outlet data from the response
                 const outletData = response.data.outlet || response.data;
+                console.log("Nearest outlet found:", outletData);
                 setNearestOutlet(outletData);
                 
-                // Show the nearest outlet dialog only if we haven't set an outlet yet
-                if (!formData.outletId || formData.outletId === "") {
-                    setShowNearestOutletDialog(true);
-                }
+                // Always show the nearest outlet dialog when a location is found
+                setShowNearestOutletDialog(true);
             }
         } catch (error) {
             console.error("Error finding nearest outlet:", error);
             
             // If API fails, try to find nearest outlet from the list
             if (outlets.length > 0) {
+                console.log("API failed, finding nearest outlet from list of", outlets.length, "outlets");
                 // Simple distance calculation (this is just an example - real geodistance calculation would be better)
                 const nearest = outlets.reduce((nearest, outlet) => {
                     const distance = Math.sqrt(
@@ -212,12 +228,11 @@ const ReservationForm = () => {
                     return nearest;
                 }, { outlet: outlets[0], distance: Infinity });
                 
+                console.log("Nearest outlet calculated:", nearest.outlet, "at distance:", nearest.distance);
                 setNearestOutlet(nearest.outlet);
                 
-                // Show the nearest outlet dialog only if we haven't set an outlet yet
-                if (!formData.outletId || formData.outletId === "") {
-                    setShowNearestOutletDialog(true);
-                }
+                // Always show the nearest outlet dialog
+                setShowNearestOutletDialog(true);
             }
         } finally {
             setLoading(false);
@@ -263,9 +278,25 @@ const ReservationForm = () => {
 
     // Handle location access
     const handleAllowLocation = () => {
+        console.log("User granted location permission");
+        
+        // Request location access from LocationContext
         requestLocationAccess();
+        
+        // Close the dialog
         setShowLocationDialog(false);
+        
+        // Save permission in localStorage
         localStorage.setItem('locationPermission', 'granted');
+        
+        // Add a message for the user
+        setError(null); // Clear any existing errors
+        
+        // If we already have coordinates but dialog was shown again
+        if (userCoordinates) {
+            console.log("Already have coordinates:", userCoordinates);
+            findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+        }
     };
 
     // Deny location access
@@ -833,11 +864,25 @@ const ReservationForm = () => {
 
                 {locationStatus === 'granted' && (
                     <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg mb-6">
-                        <div className="flex items-center">
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                            <span>Using your location to find nearby restaurants</span>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <span>Using your location to find nearby restaurants</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (userCoordinates) {
+                                        // Always show nearest outlet when button is clicked
+                                        console.log("Showing nearest restaurant dialog from button click");
+                                        findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+                                    }
+                                }}
+                                className="text-green-700 hover:bg-green-100 font-medium py-1 px-3 rounded border border-green-300 text-sm"
+                            >
+                                Show Nearest Restaurant
+                            </button>
                         </div>
                     </div>
                 )}
@@ -998,6 +1043,8 @@ const ReservationForm = () => {
                 {step === 1 && (
                     <div className="bg-white rounded-lg shadow-md p-6 mb-8">
                         <h2 className="text-2xl font-bold mb-6">Find a Table</h2>
+
+                  
 
                         <form onSubmit={checkAvailability} className="grid md:grid-cols-4 gap-4">
                             <div>
@@ -1395,7 +1442,7 @@ const ReservationForm = () => {
                             </button>
 
                             <button
-                                onClick={() => navigate('/')}
+                                onClick={() => wrappedNavigate('/')}
                                 className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded"
                             >
                                 Return Home
