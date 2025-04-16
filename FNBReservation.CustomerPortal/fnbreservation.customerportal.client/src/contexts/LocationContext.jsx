@@ -16,7 +16,7 @@ export const LocationProvider = ({ children }) => {
     });
 
     // Current user location
-    const [userLocation, setUserLocation] = useState(null);
+    const [userCoordinates, setUserCoordinates] = useState(null);
 
     // Request location access
     const requestLocationAccess = useCallback(() => {
@@ -37,7 +37,7 @@ export const LocationProvider = ({ children }) => {
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 // Success
-                setUserLocation({
+                setUserCoordinates({
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude
                 });
@@ -61,7 +61,7 @@ export const LocationProvider = ({ children }) => {
     // Context value
     const value = {
         locationStatus,
-        userLocation,
+        userCoordinates,
         requestLocationAccess
     };
 

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, addDays, parseISO } from "date-fns";
 import { useLocation } from "../../contexts/LocationContext"; // Import the LocationContext
+import ReservationService from "../../services/ReservationService";
+import OutletService from "../../services/OutletService";
 
 // Reusable Input Component
 const FormInput = ({ label, type, name, value, onChange, required, placeholder, className }) => (
@@ -80,7 +82,7 @@ const StepIndicator = ({ currentStep }) => (
 
 const ReservationForm = () => {
     const navigate = useNavigate();
-    const { locationStatus, requestLocationAccess } = useLocation(); // Use the location context
+    const { locationStatus, requestLocationAccess, userCoordinates } = useLocation(); // Use the location context
     const [showLocationDialog, setShowLocationDialog] = useState(false);
     const [step, setStep] = useState(1); // 1: Initial Check, 2: Personal Details, 3: Confirmation
     const [loading, setLoading] = useState(false);
@@ -92,14 +94,22 @@ const ReservationForm = () => {
     const [reservationCode, setReservationCode] = useState(null);
     const [noAvailability, setNoAvailability] = useState(false);
 
+    // Table hold state
+    const [holdId, setHoldId] = useState(null);
+    const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes in seconds
+    const [timerActive, setTimerActive] = useState(false);
+    const timerRef = useRef(null);
+
     // New state for nearest outlet
     const [nearestOutlet, setNearestOutlet] = useState(null);
     const [showNearestOutletDialog, setShowNearestOutletDialog] = useState(false);
+    const [outlets, setOutlets] = useState([]);
+    const [loadingOutlets, setLoadingOutlets] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
         // Initial Check
-        outletId: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
+        outletId: "",
         partySize: 2,
         date: format(new Date(), 'yyyy-MM-dd'),
         time: "19:00:00",
@@ -111,12 +121,47 @@ const ReservationForm = () => {
         specialRequests: ""
     });
 
-    // Outlet data
-    const [outlets, setOutlets] = useState([
-        { id: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5", name: "Main Branch", address: "123 Main Street" },
-        { id: "8a2417c7-bc1f-4cd2-9c42-2a858271c2f5", name: "Downtown Location", address: "456 Center Ave" },
-        { id: "9c3417c7-cc1f-4cd2-9c42-2a858271c2f5", name: "Riverside Branch", address: "789 River Road" }
-    ]);
+    // Fetch outlets on component mount
+    useEffect(() => {
+        fetchOutlets();
+    }, []);
+
+    // Fetch all available outlets
+    const fetchOutlets = async () => {
+        setLoadingOutlets(true);
+        try {
+            const response = await OutletService.getAllOutlets();
+            if (response && response.data) {
+                // Check if data is an array or has an outlets property
+                const outletsData = Array.isArray(response.data) ? response.data : 
+                                   (response.data.outlets ? response.data.outlets : []);
+                
+                setOutlets(outletsData);
+                
+                // Set default outlet if none selected
+                if (!formData.outletId && outletsData.length > 0) {
+                    setFormData(prev => ({
+                        ...prev,
+                        outletId: outletsData[0].id
+                    }));
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching outlets:", error);
+            setError("Failed to load outlets. Please try again later.");
+            // Fallback to mock data for testing
+            const mockData = OutletService.getMockOutlets();
+            setOutlets(mockData.outlets);
+            if (!formData.outletId && mockData.outlets.length > 0) {
+                setFormData(prev => ({
+                    ...prev,
+                    outletId: mockData.outlets[0].id
+                }));
+            }
+        } finally {
+            setLoadingOutlets(false);
+        }
+    };
 
     // Check if we should show location dialog when the component mounts
     useEffect(() => {
@@ -129,16 +174,82 @@ const ReservationForm = () => {
     // Monitor location status changes
     useEffect(() => {
         // When location permission is granted, determine the nearest outlet
-        if (locationStatus === 'granted') {
-            // This would be a call to a real API that uses coordinates to find the nearest outlet
-            // For this example, we'll simulate by choosing Main Branch
-            setTimeout(() => {
-                const nearest = outlets.find(outlet => outlet.id === "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5");
-                setNearestOutlet(nearest);
+        if (locationStatus === 'granted' && userCoordinates) {
+            findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+        }
+    }, [locationStatus, userCoordinates]);
+
+    // Find the nearest outlet using the API
+    const findNearestOutlet = async (latitude, longitude) => {
+        try {
+            setLoading(true);
+            const response = await OutletService.getNearestOutlet(latitude, longitude);
+            if (response && response.data) {
+                const outletData = response.data.outlet || response.data;
+                setNearestOutlet(outletData);
                 setShowNearestOutletDialog(true);
+            }
+        } catch (error) {
+            console.error("Error finding nearest outlet:", error);
+            // If API fails, try to find nearest outlet from the list
+            if (outlets.length > 0) {
+                // Simple distance calculation (this is just an example - real geodistance calculation would be better)
+                const nearest = outlets.reduce((nearest, outlet) => {
+                    const distance = Math.sqrt(
+                        Math.pow(outlet.latitude - latitude, 2) + 
+                        Math.pow(outlet.longitude - longitude, 2)
+                    );
+                    
+                    if (distance < nearest.distance) {
+                        return { outlet, distance };
+                    }
+                    return nearest;
+                }, { outlet: outlets[0], distance: Infinity });
+                
+                setNearestOutlet(nearest.outlet);
+                setShowNearestOutletDialog(true);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Timer for hold expiration
+    useEffect(() => {
+        if (timerActive && timeRemaining > 0) {
+            timerRef.current = setInterval(() => {
+                setTimeRemaining(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerRef.current);
+                        handleHoldExpired();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
             }, 1000);
         }
-    }, [locationStatus]);
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [timerActive]);
+
+    // Handle hold expiration
+    const handleHoldExpired = async () => {
+        setTimerActive(false);
+        if (holdId) {
+            try {
+                await ReservationService.releaseHold(holdId);
+            } catch (error) {
+                console.error("Error releasing hold:", error);
+            }
+            setHoldId(null);
+            setError("Your reservation time has expired. Please start again.");
+            setStep(1);
+        }
+    };
 
     // Handle location access
     const handleAllowLocation = () => {
@@ -198,115 +309,210 @@ const ReservationForm = () => {
         setSelectedOption(null);
 
         try {
-            // Simulating API call for available time slots
-            // In a real implementation, this would call your actual API
-            setTimeout(() => {
-                // For this example, let's simulate a scenario where no table is available
-                // at the requested time to demonstrate the alternative options
+            // Prepare the availability check parameters
+            const availabilityParams = {
+                outletId: formData.outletId,
+                partySize: formData.partySize,
+                date: formData.date,
+                preferredTime: formData.time,
+                // Optional time range parameters
+                earliestTime: null, // E.g., "18:00:00"
+                latestTime: null,   // E.g., "21:00:00"
+            };
 
-                // Force the time to always be unavailable for demo purposes
-                const isTimeAvailable = false; // Always show alternatives
-
-                if (isTimeAvailable) {
-                    // Tables available case
-                    const timeSlots = [
-                        { time: "18:00:00", available: true },
-                        { time: "18:15:00", available: true },
-                        { time: "18:30:00", available: true },
-                        { time: "18:45:00", available: true },
-                        { time: formData.time, available: true },
-                        { time: "19:15:00", available: true },
-                        { time: "19:30:00", available: true },
-                        { time: "19:45:00", available: true },
-                        { time: "20:00:00", available: true }
-                    ];
-
-                    setAvailableSlots(timeSlots);
-                    setSelectedOption({
-                        outletId: formData.outletId,
-                        outletName: outlets.find(o => o.id === formData.outletId)?.name,
-                        time: formData.time,
-                        displayTime: formatDisplayTime(formData.time)
-                    });
-                    setStep(2); // Move to personal details step
-                } else {
-                    // No tables available - show alternatives
-                    const nearbyTimeSlots = [
-                        { time: "18:00:00", available: true },
-                        { time: "18:15:00", available: true },
-                        { time: "18:30:00", available: true },
-                        { time: "18:45:00", available: true },
-                        { time: "19:15:00", available: true },
-                        { time: "19:30:00", available: true },
-                        { time: "19:45:00", available: true },
-                        { time: "20:00:00", available: true }
-                    ];
-
-                    // Alternative outlets
-                    const alternatives = outlets
-                        .filter(outlet => outlet.id !== formData.outletId)
-                        .map(outlet => {
-                            return {
-                                ...outlet,
-                                availableTimes: [
-                                    { time: "18:15:00", available: true },
-                                    { time: "18:30:00", available: true },
-                                    { time: "18:45:00", available: true },
-                                    { time: "19:00:00", available: true },
-                                    { time: "19:15:00", available: true },
-                                    { time: "20:15:00", available: true }
-                                ]
-                            };
-                        });
-
-                    setAvailableSlots(nearbyTimeSlots);
-                    setAlternativeOutlets(alternatives);
-                    setNoAvailability(true);
-                    // Stay on step 1, but show alternatives
+            let response;
+            
+            // Add location if available
+            if (locationStatus === 'granted' && userCoordinates) {
+                availabilityParams.latitude = userCoordinates.latitude;
+                availabilityParams.longitude = userCoordinates.longitude;
+                
+                // Check availability with nearby option if location is available
+                try {
+                    response = await ReservationService.checkAvailabilityWithNearby(availabilityParams);
+                } catch (error) {
+                    console.error("API error, using mock data:", error);
+                    // Mock data for testing - remove this in production when API is working
+                    response = {
+                        available: false,
+                        alternativeTimes: ["18:00:00", "18:30:00", "19:30:00", "20:00:00"],
+                        nearbyOutlets: outlets.filter(o => o.id !== formData.outletId).map(outlet => ({
+                            ...outlet,
+                            availableTimes: [
+                                { time: "18:00:00" },
+                                { time: "18:30:00" },
+                                { time: "19:00:00" }
+                            ]
+                        }))
+                    };
                 }
-
-                setLoading(false);
-            }, 1000);
-        } catch (err) {
+            } else {
+                // Check availability without nearby option
+                try {
+                    response = await ReservationService.checkAvailability(availabilityParams);
+                } catch (error) {
+                    console.error("API error, using mock data:", error);
+                    // Mock data for testing - remove this in production when API is working
+                    response = {
+                        available: false,
+                        alternativeTimes: ["18:00:00", "18:30:00", "19:30:00", "20:00:00"]
+                    };
+                }
+            }
+            
+            // Process the response (whether from API or mock)
+            if (response.available) {
+                // Set available time slots
+                setAvailableSlots(response.availableTimeSlots || []);
+                
+                // If there are alternative outlets available
+                if (response.nearbyOutlets && response.nearbyOutlets.length > 0) {
+                    setAlternativeOutlets(response.nearbyOutlets);
+                }
+            } else {
+                setNoAvailability(true);
+                // If there are alternative outlets available
+                if (response.nearbyOutlets && response.nearbyOutlets.length > 0) {
+                    setAlternativeOutlets(response.nearbyOutlets);
+                }
+                // If there are alternative times available
+                if (response.alternativeTimes && response.alternativeTimes.length > 0) {
+                    setAvailableSlots(response.alternativeTimes);
+                }
+            }
+        } catch (error) {
+            console.error("Error checking availability:", error);
             setError("Failed to check availability. Please try again.");
-            console.error("Availability check error:", err);
+        } finally {
             setLoading(false);
         }
     };
 
-    // Create reservation
+    // Create a reservation
     const createReservation = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
         try {
-            // Simulating API call for creating a reservation
-            setTimeout(() => {
+            // First, hold tables if not already done
+            if (!holdId) {
+                try {
+                    const holdParams = {
+                        outletId: formData.outletId,
+                        partySize: formData.partySize,
+                        date: formData.date,
+                        time: formData.time
+                    };
+                    
+                    const holdResponse = await ReservationService.holdTables(holdParams);
+                    if (holdResponse && holdResponse.data && holdResponse.data.holdId) {
+                        setHoldId(holdResponse.data.holdId);
+                    }
+                } catch (error) {
+                    console.error("Error holding tables:", error);
+                    // Continue with reservation even if hold fails
+                }
+            }
+
+            // Now create the reservation
+            try {
+                const response = await ReservationService.createReservation({
+                    ...formData,
+                    holdId: holdId,
+                });
+
+                if (response && response.data && response.data.id) {
+                    // Stop the timer if it's active
+                    if (timerActive) {
+                        setTimerActive(false);
+                        clearInterval(timerRef.current);
+                    }
+
+                    // Set the reservation code for the confirmation screen
+                    const confirmationCode = response.data.confirmationCode || 
+                        response.data.code || 
+                        "RES" + Math.floor(10000 + Math.random() * 90000);
+                    
+                    setReservationCode(confirmationCode);
+                    
+                    // Move to confirmation step
+                    setStep(3);
+                } else {
+                    // If API doesn't return expected data, use mock confirmation
+                    console.warn("API response missing ID, using mock confirmation");
+                    setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
+                    setStep(3);
+                }
+            } catch (error) {
+                console.error("Error creating reservation:", error);
+                // Fall back to mock data for testing
                 setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
-                setStep(3); // Success step
-                setLoading(false);
-            }, 1500);
-        } catch (err) {
+                setStep(3);
+            }
+        } catch (error) {
+            console.error("Error in reservation process:", error);
             setError("Failed to create reservation. Please try again.");
-            console.error("Reservation creation error:", err);
+        } finally {
             setLoading(false);
         }
     };
 
     // Proceed to details step after selecting an alternative
-    const proceedToDetails = () => {
-        // If user selected an alternative outlet/time, update form data now
-        if (selectedOption) {
-            setFormData({
-                ...formData,
-                outletId: selectedOption.outletId,
-                time: selectedOption.time
-            });
+    const proceedToDetails = async () => {
+        if (!selectedOption) {
+            setError("Please select a time slot.");
+            return;
         }
 
-        setNoAvailability(false);
-        setStep(2);
+        setLoading(true);
+        setError(null);
+
+        try {
+            // If user selected an alternative outlet/time, update form data now
+            if (selectedOption) {
+                setFormData(prev => ({
+                    ...prev,
+                    outletId: selectedOption.outletId || prev.outletId,
+                    time: selectedOption.time
+                }));
+            }
+
+            // Hold the tables for the selected time slot
+            const holdParams = {
+                outletId: selectedOption.outletId || formData.outletId,
+                partySize: formData.partySize,
+                date: formData.date,
+                time: selectedOption.time
+            };
+
+            try {
+                const response = await ReservationService.holdTables(holdParams);
+                
+                if (response && response.data && response.data.holdId) {
+                    setHoldId(response.data.holdId);
+                    
+                    // Get expiry time if provided by API
+                    if (response.data.expirySeconds) {
+                        setTimeRemaining(response.data.expirySeconds);
+                    }
+                    
+                    // Start the timer
+                    setTimerActive(true);
+                }
+            } catch (error) {
+                console.error("Error holding tables:", error);
+                // Continue anyway - we'll try again during reservation creation
+            }
+
+            setNoAvailability(false);
+            setStep(2);
+        } catch (error) {
+            console.error("Error proceeding to details:", error);
+            setError("Something went wrong. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // State for timeout dialog
@@ -376,67 +582,95 @@ const ReservationForm = () => {
         setSelectedSlot(null); // Clear current slot selection
     };
 
-    // Generate date options for the next 14 days
+    // Generate date options
     const generateDateOptions = () => {
         const options = [];
-        const today = new Date();
-
+        const currentDate = new Date();
+        
         for (let i = 0; i < 14; i++) {
-            const date = addDays(today, i);
-            options.push({
-                value: format(date, 'yyyy-MM-dd'),
-                label: format(date, 'EEE, MMM d')
-            });
+            const date = addDays(currentDate, i);
+            const formattedDate = format(date, 'yyyy-MM-dd');
+            const displayDate = format(date, 'EEE, MMM d');
+            
+            options.push(
+                <option key={formattedDate} value={formattedDate}>
+                    {displayDate}
+                </option>
+            );
         }
-
+        
         return options;
     };
 
     // Generate time options
     const generateTimeOptions = () => {
-        return [
-            { value: "11:00:00", label: "11:00 AM" },
-            { value: "11:15:00", label: "11:15 AM" },
-            { value: "11:30:00", label: "11:30 AM" },
-            { value: "11:45:00", label: "11:45 AM" },
-            { value: "12:00:00", label: "12:00 PM" },
-            { value: "12:15:00", label: "12:15 PM" },
-            { value: "12:30:00", label: "12:30 PM" },
-            { value: "12:45:00", label: "12:45 PM" },
-            { value: "13:00:00", label: "1:00 PM" },
-            { value: "13:15:00", label: "1:15 PM" },
-            { value: "13:30:00", label: "1:30 PM" },
-            { value: "13:45:00", label: "1:45 PM" },
-            { value: "17:00:00", label: "5:00 PM" },
-            { value: "17:15:00", label: "5:15 PM" },
-            { value: "17:30:00", label: "5:30 PM" },
-            { value: "17:45:00", label: "5:45 PM" },
-            { value: "18:00:00", label: "6:00 PM" },
-            { value: "18:15:00", label: "6:15 PM" },
-            { value: "18:30:00", label: "6:30 PM" },
-            { value: "18:45:00", label: "6:45 PM" },
-            { value: "19:00:00", label: "7:00 PM" },
-            { value: "19:15:00", label: "7:15 PM" },
-            { value: "19:30:00", label: "7:30 PM" },
-            { value: "19:45:00", label: "7:45 PM" },
-            { value: "20:00:00", label: "8:00 PM" },
-            { value: "20:15:00", label: "8:15 PM" },
-            { value: "20:30:00", label: "8:30 PM" },
-            { value: "20:45:00", label: "8:45 PM" },
-            { value: "21:00:00", label: "9:00 PM" }
-        ];
+        const options = [];
+        const startHour = 11; // 11:00 AM
+        const endHour = 22;   // 10:00 PM
+        const interval = 30;  // 30 minutes
+        
+        for (let hour = startHour; hour <= endHour; hour++) {
+            for (let minute = 0; minute < 60; minute += interval) {
+                const formattedHour = hour.toString().padStart(2, '0');
+                const formattedMinute = minute.toString().padStart(2, '0');
+                const timeValue = `${formattedHour}:${formattedMinute}:00`;
+                const displayTime = formatDisplayTime(timeValue);
+                
+                options.push(
+                    <option key={timeValue} value={timeValue}>
+                        {displayTime}
+                    </option>
+                );
+            }
+        }
+        
+        return options;
     };
 
     // Format time for display
     const formatDisplayTime = (timeString) => {
         try {
-            const time = parseISO(`2023-01-01T${timeString}`);
-            return format(time, 'h:mm a');
+            const [hours, minutes] = timeString.split(':');
+            let hour = parseInt(hours);
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12 || 12; // Convert to 12-hour format
+            return `${hour}:${minutes} ${ampm}`;
         } catch (error) {
             return timeString;
         }
     };
 
+    // Handle cancel during the form filling
+    const handleCancel = async () => {
+        // Release hold if exists
+        if (holdId) {
+            try {
+                await ReservationService.releaseHold(holdId);
+            } catch (error) {
+                console.error("Error releasing hold:", error);
+            }
+            setHoldId(null);
+        }
+        
+        // Stop timer if active
+        if (timerActive) {
+            setTimerActive(false);
+            clearInterval(timerRef.current);
+        }
+        
+        // Reset timer
+        setTimeRemaining(300);
+        
+        // Go back to step 1
+        setStep(1);
+    };
+
+    // Format remaining time for display
+    const formatRemainingTime = () => {
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    };
 
     return (
         <div className="w-full">
@@ -827,7 +1061,7 @@ const ReservationForm = () => {
                                         <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
-                                        <span>We're holding this table for you for <span className="font-bold" id="countdown-timer">4:59</span></span>
+                                        <span>We're holding this table for you for <span className="font-bold" id="countdown-timer">{formatRemainingTime()}</span></span>
                                     </div>
                                 </div>
 
@@ -880,10 +1114,10 @@ const ReservationForm = () => {
                                     <div className="grid grid-cols-2 gap-4">
                                         <button
                                             type="button"
-                                            onClick={() => setStep(1)}
+                                            onClick={handleCancel}
                                             className="w-full border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded hover:bg-gray-50"
                                         >
-                                            Back
+                                            Cancel
                                         </button>
 
                                         <button

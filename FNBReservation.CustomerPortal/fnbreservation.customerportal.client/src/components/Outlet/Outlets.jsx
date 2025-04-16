@@ -7,7 +7,7 @@ const Outlets = () => {
     const [outlets, setOutlets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const { locationStatus, userLocation } = useLocation();
+    const { locationStatus, userCoordinates } = useLocation();
 
     // Function to calculate distance between two points using Haversine formula
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -40,26 +40,40 @@ const Outlets = () => {
                 console.log('API Response:', response);
                 
                 // Handle the response based on the actual API response format
-                // The backend returns an array directly
-                if (Array.isArray(response)) {
-                    setOutlets(response);
-                }
-                // Or it might return an object with outlets property
-                else if (response && Array.isArray(response.outlets)) {
-                    setOutlets(response.outlets);
-                }
-                // Or it might return success and data properties
-                else if (response && response.success && Array.isArray(response.data)) {
-                    setOutlets(response.data);
-                }
-                // Fallback
-                else {
+                if (response && response.data) {
+                    // The backend returns an array directly
+                    if (Array.isArray(response.data)) {
+                        setOutlets(response.data);
+                    }
+                    // Or it might return an object with outlets property
+                    else if (response.data && Array.isArray(response.data.outlets)) {
+                        setOutlets(response.data.outlets);
+                    }
+                    // Or it might return success and data properties
+                    else if (response.data && response.data.success && Array.isArray(response.data.data)) {
+                        setOutlets(response.data.data);
+                    }
+                    // Fallback
+                    else {
+                        console.warn('Unexpected response format:', response.data);
+                        // If all else fails, try the mock data
+                        const mockData = OutletService.getMockOutlets();
+                        setOutlets(mockData.outlets);
+                    }
+                } else {
                     setOutlets([]);
-                    console.warn('Unexpected response format:', response);
+                    console.warn('Empty response or missing data:', response);
                 }
             } catch (err) {
                 console.error('Error fetching outlets:', err);
                 setError('Failed to load outlets. Please try again later.');
+                
+                // Fallback to mock data in development
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('Using mock data as fallback');
+                    const mockData = OutletService.getMockOutlets();
+                    setOutlets(mockData.outlets);
+                }
             } finally {
                 setLoading(false);
             }
@@ -70,7 +84,7 @@ const Outlets = () => {
 
     // Sort outlets by distance if user location is available
     useEffect(() => {
-        if (locationStatus === 'granted' && userLocation && outlets.length > 0) {
+        if (locationStatus === 'granted' && userCoordinates && outlets.length > 0) {
             const sortedOutlets = [...outlets].sort((a, b) => {
                 // Handle different property case conventions (camelCase vs PascalCase)
                 const aLat = a.latitude || a.Latitude;
@@ -79,14 +93,14 @@ const Outlets = () => {
                 const bLon = b.longitude || b.Longitude;
                 
                 const distanceA = calculateDistance(
-                    userLocation.latitude,
-                    userLocation.longitude,
+                    userCoordinates.latitude,
+                    userCoordinates.longitude,
                     aLat,
                     aLon
                 );
                 const distanceB = calculateDistance(
-                    userLocation.latitude,
-                    userLocation.longitude,
+                    userCoordinates.latitude,
+                    userCoordinates.longitude,
                     bLat,
                     bLon
                 );
@@ -94,7 +108,7 @@ const Outlets = () => {
             });
             setOutlets(sortedOutlets);
         }
-    }, [locationStatus, userLocation, outlets.length]);
+    }, [locationStatus, userCoordinates, outlets.length]);
 
     // Get directions to outlet
     const getDirections = (outlet) => {

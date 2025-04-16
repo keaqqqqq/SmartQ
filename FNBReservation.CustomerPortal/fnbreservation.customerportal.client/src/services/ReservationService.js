@@ -1,6 +1,6 @@
-import axios from 'axios';
+import api from './api';
 
-const API_BASE_URL = '/api/CustomerReservation';
+const API_BASE_URL = '/api/v1/reservations';
 
 class ReservationService {
     // Get nearby outlets based on user location
@@ -13,7 +13,7 @@ class ReservationService {
                 url += `?latitude=${locationParams.latitude}&longitude=${locationParams.longitude}`;
             }
 
-            const response = await axios.get(url);
+            const response = await api.get(url);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -25,15 +25,77 @@ class ReservationService {
     async checkAvailability(availabilityParams) {
         try {
             const payload = {
-                OutletId: availabilityParams.outletId,
-                PartySize: parseInt(availabilityParams.partySize),
-                Date: `${availabilityParams.date}T00:00:00Z`,
-                PreferredTime: availabilityParams.preferredTime,
-                EarliestTime: availabilityParams.earliestTime,
-                LatestTime: availabilityParams.latestTime
+                outletId: availabilityParams.outletId,
+                partySize: parseInt(availabilityParams.partySize),
+                date: availabilityParams.date,
+                preferredTime: availabilityParams.preferredTime,
+                earliestTime: availabilityParams.earliestTime || null,
+                latestTime: availabilityParams.latestTime || null
             };
 
-            const response = await axios.post(`${API_BASE_URL}/CheckAvailability`, payload);
+            const response = await api.post(`${API_BASE_URL}/check-availability`, payload);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Check availability with nearby outlets if the selected outlet is not available
+    async checkAvailabilityWithNearby(availabilityParams) {
+        try {
+            const payload = {
+                outletId: availabilityParams.outletId,
+                partySize: parseInt(availabilityParams.partySize),
+                date: availabilityParams.date,
+                preferredTime: availabilityParams.preferredTime,
+                earliestTime: availabilityParams.earliestTime || null,
+                latestTime: availabilityParams.latestTime || null,
+                userLatitude: availabilityParams.latitude,
+                userLongitude: availabilityParams.longitude
+            };
+
+            const response = await api.post(`${API_BASE_URL}/check-availability-with-nearby`, payload);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Hold tables for a reservation
+    async holdTables(holdParams) {
+        try {
+            const payload = {
+                outletId: holdParams.outletId,
+                partySize: parseInt(holdParams.partySize),
+                date: holdParams.date,
+                time: holdParams.time
+            };
+
+            const response = await api.post(`${API_BASE_URL}/hold-tables`, payload);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Release a table hold
+    async releaseHold(holdId) {
+        try {
+            const response = await api.post(`${API_BASE_URL}/release-hold/${holdId}`);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Get alternative times for a hold
+    async getAlternativeTimesForHold(holdId) {
+        try {
+            const response = await api.get(`${API_BASE_URL}/alternative-times-for-hold/${holdId}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -45,16 +107,18 @@ class ReservationService {
     async createReservation(reservationData) {
         try {
             const payload = {
-                OutletId: reservationData.outletId,
-                CustomerName: reservationData.customerName,
-                CustomerPhone: reservationData.customerPhone,
-                CustomerEmail: reservationData.customerEmail,
-                PartySize: parseInt(reservationData.partySize),
-                ReservationDate: reservationData.reservationDate,
-                SpecialRequests: reservationData.specialRequests
+                outletId: reservationData.outletId,
+                customerName: reservationData.customerName,
+                customerPhone: reservationData.customerPhone,
+                customerEmail: reservationData.customerEmail,
+                partySize: parseInt(reservationData.partySize),
+                reservationDate: reservationData.date,
+                reservationTime: reservationData.time,
+                specialRequests: reservationData.specialRequests || "",
+                holdId: reservationData.holdId || null
             };
 
-            const response = await axios.post(`${API_BASE_URL}/CreateReservation`, payload);
+            const response = await api.post(`${API_BASE_URL}`, payload);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -65,7 +129,7 @@ class ReservationService {
     // Get reservation details by ID
     async getReservationById(id) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetReservationById?id=${id}`);
+            const response = await api.get(`${API_BASE_URL}/${id}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -76,7 +140,7 @@ class ReservationService {
     // Get reservation details by code
     async getReservationByCode(code) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetReservationByCode?code=${code}`);
+            const response = await api.get(`${API_BASE_URL}/code/${code}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -87,7 +151,8 @@ class ReservationService {
     // Get all reservations for a phone number
     async getReservationsByPhone(phone) {
         try {
-            const response = await axios.get(`${API_BASE_URL}/GetReservationsByPhone?phone=${encodeURIComponent(phone)}`);
+            const phoneWithoutFormatting = phone.replace(/\s+/g, '');
+            const response = await api.get(`${API_BASE_URL}/phone/${encodeURIComponent(phoneWithoutFormatting)}`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -98,7 +163,7 @@ class ReservationService {
     // Update an existing reservation
     async updateReservation(reservationData) {
         try {
-            const response = await axios.put(`${API_BASE_URL}/UpdateReservation`, reservationData);
+            const response = await api.put(`${API_BASE_URL}/UpdateReservation`, reservationData);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -109,7 +174,7 @@ class ReservationService {
     // Cancel a reservation
     async cancelReservation(reservationId) {
         try {
-            const response = await axios.put(`${API_BASE_URL}/CancelReservation?id=${reservationId}`);
+            const response = await api.post(`${API_BASE_URL}/${reservationId}/cancel`);
             return response.data;
         } catch (error) {
             this.handleError(error);

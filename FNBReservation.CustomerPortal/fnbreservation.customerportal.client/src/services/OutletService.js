@@ -1,6 +1,6 @@
 import api from './api';
 
-// Update API base URL to use proxy
+// Update API base URL to use the public outlets endpoint
 const API_BASE_URL = '/api/v1/public/outlets';
 
 class OutletService {
@@ -8,7 +8,7 @@ class OutletService {
     async getAllOutlets() {
         try {
             const response = await api.get(`${API_BASE_URL}`);
-            return response.data;
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
@@ -19,7 +19,7 @@ class OutletService {
     async getOutletById(id) {
         try {
             const response = await api.get(`${API_BASE_URL}/${id}`);
-            return response.data;
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
@@ -27,12 +27,22 @@ class OutletService {
     }
 
     // Get outlets near a specific location
-    async getNearbyOutlets(latitude, longitude, radius = 10) {
+    async getNearbyOutlets(latitude, longitude, limit = 3) {
         try {
-            // For now, we'll just get all outlets since the endpoint doesn't support location filtering
-            // We'll manually filter them by distance in the frontend
-            const response = await api.get(`${API_BASE_URL}`);
-            return response.data;
+            // We'll still use the geolocation endpoint for this specific function
+            const response = await api.get(`/api/v1/geolocation/nearest-outlets?latitude=${latitude}&longitude=${longitude}&limit=${limit}`);
+            return response;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    // Get nearest outlet based on location
+    async getNearestOutlet(latitude, longitude) {
+        try {
+            const response = await api.get(`/api/v1/reservations/nearest-outlet?latitude=${latitude}&longitude=${longitude}`);
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
@@ -42,8 +52,8 @@ class OutletService {
     // Get outlet operating hours
     async getOutletOperatingHours(outletId) {
         try {
-            const response = await api.get(`${API_BASE_URL}/GetOperatingHours?outletId=${outletId}`);
-            return response.data;
+            const response = await api.get(`${API_BASE_URL}/${outletId}/operating-hours`);
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;

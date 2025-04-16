@@ -15,7 +15,7 @@ export default defineConfig({
     server: {
         port: parseInt(env.DEV_SERVER_PORT || '56288'),
         proxy: {
-            '/api/v1/public': {
+            '/api/v1': {
                 target: 'http://localhost:5000',
                 changeOrigin: true,
                 secure: false
