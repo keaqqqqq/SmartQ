@@ -141,7 +141,6 @@ class ReservationService {
                 customerEmail: reservationData.customerEmail,
                 partySize: parseInt(reservationData.partySize),
                 reservationDate: reservationData.reservationDate,
-                reservationTime: reservationData.reservationTime,
                 specialRequests: reservationData.specialRequests || "",
                 holdId: reservationData.holdId || null,
                 sessionId: reservationData.sessionId || null

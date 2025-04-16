@@ -933,14 +933,18 @@ const ReservationForm = () => {
             try {
                 console.log("Creating reservation with sessionId:", currentSessionId, "and holdId:", finalHoldId);
                 
+                // Simple concatenation of date and time with 'T' and 'Z'
+                const formattedReservationDate = `${formattedDate}T${formattedTime}Z`;
+                
+                console.log("Formatted reservation date:", formattedReservationDate);
+                
                 const reservationPayload = {
                     outletId: formData.outletId,
                     customerName: formData.customerName,
                     customerPhone: formData.customerPhone,
                     customerEmail: formData.customerEmail,
                     partySize: parseInt(formData.partySize),
-                    reservationDate: formattedDate,
-                    reservationTime: formattedTime,
+                    reservationDate: formattedReservationDate,
                     specialRequests: formData.specialRequests || "",
                     holdId: finalHoldId,
                     sessionId: currentSessionId
