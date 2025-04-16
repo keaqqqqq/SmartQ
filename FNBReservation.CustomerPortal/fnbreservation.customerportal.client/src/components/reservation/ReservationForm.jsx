@@ -99,12 +99,13 @@ const ReservationForm = () => {
     const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes in seconds
     const [timerActive, setTimerActive] = useState(false);
     const timerRef = useRef(null);
-    
+
     // New state for nearest outlet
     const [nearestOutlet, setNearestOutlet] = useState(null);
     const [showNearestOutletDialog, setShowNearestOutletDialog] = useState(false);
     const [outlets, setOutlets] = useState([]);
     const [loadingOutlets, setLoadingOutlets] = useState(false);
+    const [nearestOutletConfirmation, setNearestOutletConfirmation] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -120,6 +121,20 @@ const ReservationForm = () => {
         customerEmail: "",
         specialRequests: ""
     });
+
+    // Special effect to ensure UI sync with outlet selection
+    useEffect(() => {
+        if (formData.outletId) {
+            // Ensure the UI matches the state
+            setTimeout(() => {
+                const outletSelect = document.getElementById('outletId');
+                if (outletSelect && outletSelect.value !== formData.outletId) {
+                    console.log("Syncing UI with outlet ID:", formData.outletId);
+                    outletSelect.value = formData.outletId;
+                }
+            }, 200);
+        }
+    }, [formData.outletId]); // Only run when outletId changes
 
     // Fetch outlets on component mount and handle location
     useEffect(() => {
@@ -137,8 +152,8 @@ const ReservationForm = () => {
             } 
             else if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
                 console.log("Showing location permission dialog");
-                setShowLocationDialog(true);
-            }
+            setShowLocationDialog(true);
+        }
         }, 300);
         
         return () => clearTimeout(timer);
@@ -163,13 +178,36 @@ const ReservationForm = () => {
                 const outletsData = Array.isArray(response.data) ? response.data : 
                                    (response.data.outlets ? response.data.outlets : []);
                 
-                setOutlets(outletsData);
+                console.log("Fetched outlets data:", outletsData);
+                // Ensure all outlets have valid IDs
+                const validOutlets = outletsData.filter(outlet => {
+                    if (!outlet.id) {
+                        console.warn("Outlet missing ID, attempting to fix:", outlet);
+                        if (outlet._id) {
+                            outlet.id = outlet._id;
+                            return true;
+                        } else if (outlet.outletId) {
+                            outlet.id = outlet.outletId;
+                            return true;
+                        }
+                        console.error("Outlet has no usable ID, skipping:", outlet);
+                        return false;
+                    }
+                    return true;
+                });
+                
+                if (validOutlets.length < outletsData.length) {
+                    console.warn(`Filtered out ${outletsData.length - validOutlets.length} outlets without valid IDs`);
+                }
+                
+                setOutlets(validOutlets);
                 
                 // Set default outlet if none selected
-                if (!formData.outletId && outletsData.length > 0) {
+                if (!formData.outletId && validOutlets.length > 0) {
+                    console.log("Setting default outlet:", validOutlets[0]);
                     setFormData(prev => ({
                         ...prev,
-                        outletId: outletsData[0].id
+                        outletId: validOutlets[0].id
                     }));
                 }
             }
@@ -178,6 +216,7 @@ const ReservationForm = () => {
             setError("Failed to load outlets. Please try again later.");
             // Fallback to mock data for testing
             const mockData = OutletService.getMockOutlets();
+            console.log("Using mock outlets data:", mockData.outlets);
             setOutlets(mockData.outlets);
             if (!formData.outletId && mockData.outlets.length > 0) {
                 setFormData(prev => ({
@@ -203,7 +242,32 @@ const ReservationForm = () => {
             if (response && response.data) {
                 // Extract outlet data from the response
                 const outletData = response.data.outlet || response.data;
-                console.log("Nearest outlet found:", outletData);
+                console.log("Nearest outlet data received:", outletData);
+                
+                // Validate that the outlet has an ID before setting it
+                if (!outletData.id) {
+                    console.error("Error: Outlet data missing ID property", outletData);
+                    // If no ID, try to find an ID or use a fallback
+                    if (outletData._id) {
+                        outletData.id = outletData._id; // Use _id if available
+                        console.log("Using _id as fallback:", outletData.id);
+                    } else if (outletData.outletId) {
+                        outletData.id = outletData.outletId; // Use outletId if available
+                        console.log("Using outletId as fallback:", outletData.id);
+                    } else if (outlets.length > 0) {
+                        // Use first outlet as fallback if no ID can be determined
+                        console.warn("Unable to determine outlet ID, using first available outlet as fallback");
+                        setNearestOutlet({...outlets[0], name: outletData.name || outlets[0].name});
+                        setShowNearestOutletDialog(true);
+                        return;
+                    } else {
+                        // If all else fails, don't show the dialog
+                        console.error("No valid outlet ID available and no fallback outlets");
+                        setError("Unable to find a valid restaurant location. Please select one manually.");
+                        return;
+                    }
+                }
+                
                 setNearestOutlet(outletData);
                 
                 // Always show the nearest outlet dialog when a location is found
@@ -228,11 +292,16 @@ const ReservationForm = () => {
                     return nearest;
                 }, { outlet: outlets[0], distance: Infinity });
                 
-                console.log("Nearest outlet calculated:", nearest.outlet, "at distance:", nearest.distance);
-                setNearestOutlet(nearest.outlet);
-                
-                // Always show the nearest outlet dialog
-                setShowNearestOutletDialog(true);
+                // Ensure the selected outlet has a valid ID
+                if (nearest.outlet && nearest.outlet.id) {
+                    console.log("Nearest outlet calculated:", nearest.outlet, "at distance:", nearest.distance);
+                    setNearestOutlet(nearest.outlet);
+                    
+                    // Always show the nearest outlet dialog
+                    setShowNearestOutletDialog(true);
+                } else {
+                    setError("No valid restaurant location found. Please select one manually.");
+                }
             }
         } finally {
             setLoading(false);
@@ -308,24 +377,63 @@ const ReservationForm = () => {
     // Accept nearest outlet suggestion
     const acceptNearestOutlet = () => {
         if (nearestOutlet) {
-            // Update the form data with the nearest outlet ID
+            console.log("Accepting nearest outlet:", nearestOutlet.name, "ID:", nearestOutlet.id);
+            
+            // Validate that we have a valid outlet ID
+            if (!nearestOutlet.id) {
+                console.error("Cannot accept outlet with undefined ID", nearestOutlet);
+                setError("Unable to select this restaurant due to missing data. Please choose another restaurant.");
+                setShowNearestOutletDialog(false);
+                return;
+            }
+            
+            // Get the selected outlet's operating hours to determine valid time
+            const operatingHours = nearestOutlet.operatingHours || "11:00 AM - 10:00 PM";
+            const { start } = parseOperatingHours(operatingHours);
+            
+            // Update the form data with the nearest outlet ID and adjusted time if needed
             setFormData(prev => ({
                 ...prev,
-                outletId: nearestOutlet.id
+                outletId: nearestOutlet.id,
+                time: `${start}:00` // Format as HH:MM:00
             }));
             
-            // Force-refresh the time options based on the new outlet's operating hours
+            // Show a confirmation message to the user
+            setNearestOutletConfirmation({
+                name: nearestOutlet.name,
+                time: new Date().getTime() // Use for auto-dismissal timing
+            });
+            
+            // Auto-dismiss the confirmation after 5 seconds
             setTimeout(() => {
-                const timeOptions = document.getElementById('time');
-                if (timeOptions) {
-                    // Select first available time if current time becomes invalid
-                    const firstOption = timeOptions.options[0]?.value;
-                    if (firstOption && !Array.from(timeOptions.options).some(opt => opt.value === formData.time)) {
-                        setFormData(prev => ({
-                            ...prev,
-                            time: firstOption
-                        }));
-                    }
+                setNearestOutletConfirmation(null);
+            }, 5000);
+            
+            // Ensure the select element visually updates - this is critical
+            setTimeout(() => {
+                // First try with standard DOM methods
+                const outletSelect = document.getElementById('outletId');
+                if (outletSelect) {
+                    outletSelect.value = nearestOutlet.id;
+                    
+                    // Trigger change event to ensure any listeners know the value changed
+                    const event = new Event('change', { bubbles: true });
+                    outletSelect.dispatchEvent(event);
+                    
+                    // Force UI refresh - this can help in certain React contexts
+                    outletSelect.blur();
+                    outletSelect.focus();
+                }
+                
+                // Create a temporary state update to force React to re-render
+                // This is a backup method if the DOM manipulation doesn't work
+                setFormData(prev => ({ ...prev }));
+                
+                // Additional backup - force full outlets re-fetch
+                if (outlets.length > 0) {
+                    const currentOutlets = [...outlets];
+                    setOutlets([]);
+                    setTimeout(() => setOutlets(currentOutlets), 50);
                 }
             }, 100);
         }
@@ -418,8 +526,8 @@ const ReservationForm = () => {
                         available: false,
                         alternativeTimes: ["18:00:00", "18:30:00", "19:30:00", "20:00:00"],
                         nearbyOutlets: outlets.filter(o => o.id !== formData.outletId).map(outlet => ({
-                            ...outlet,
-                            availableTimes: [
+                                ...outlet,
+                                availableTimes: [
                                 { time: "18:00:00" },
                                 { time: "18:30:00" },
                                 { time: "19:00:00" }
@@ -451,7 +559,7 @@ const ReservationForm = () => {
                     setAlternativeOutlets(response.nearbyOutlets);
                 }
             } else {
-                setNoAvailability(true);
+                    setNoAvailability(true);
                 // If there are alternative outlets available
                 if (response.nearbyOutlets && response.nearbyOutlets.length > 0) {
                     setAlternativeOutlets(response.nearbyOutlets);
@@ -522,7 +630,7 @@ const ReservationForm = () => {
                 } else {
                     // If API doesn't return expected data, use mock confirmation
                     console.warn("API response missing ID, using mock confirmation");
-                    setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
+                setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
                     setStep(3);
                 }
             } catch (error) {
@@ -550,12 +658,12 @@ const ReservationForm = () => {
         setError(null);
 
         try {
-            // If user selected an alternative outlet/time, update form data now
-            if (selectedOption) {
+        // If user selected an alternative outlet/time, update form data now
+        if (selectedOption) {
                 setFormData(prev => ({
                     ...prev,
                     outletId: selectedOption.outletId || prev.outletId,
-                    time: selectedOption.time
+                time: selectedOption.time
                 }));
             }
 
@@ -584,10 +692,10 @@ const ReservationForm = () => {
             } catch (error) {
                 console.error("Error holding tables:", error);
                 // Continue anyway - we'll try again during reservation creation
-            }
+        }
 
-            setNoAvailability(false);
-            setStep(2);
+        setNoAvailability(false);
+        setStep(2);
         } catch (error) {
             console.error("Error proceeding to details:", error);
             setError("Something went wrong. Please try again.");
@@ -680,7 +788,7 @@ const ReservationForm = () => {
                 </option>
             );
         }
-        
+
         return options;
     };
 
@@ -845,6 +953,28 @@ const ReservationForm = () => {
             </div>
 
             <div className="max-w-5xl mx-auto px-4 pb-12">
+                {/* Nearest Outlet Confirmation */}
+                {nearestOutletConfirmation && (
+                    <div className="bg-green-100 border border-green-300 text-green-800 rounded-md p-4 mb-6 animate-fade-in">
+                        <div className="flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="font-medium">
+                                Location updated to {nearestOutletConfirmation.name}
+                            </span>
+                            <button 
+                                onClick={() => setNearestOutletConfirmation(null)}
+                                className="ml-auto text-green-600 hover:text-green-800"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Error Message */}
                 {error && (
                     <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6" role="alert">
@@ -865,11 +995,11 @@ const ReservationForm = () => {
                 {locationStatus === 'granted' && (
                     <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg mb-6">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                                <span>Using your location to find nearby restaurants</span>
+                        <div className="flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Using your location to find nearby restaurants</span>
                             </div>
                             <button
                                 onClick={() => {
@@ -905,7 +1035,7 @@ const ReservationForm = () => {
                 )}
 
                 {/* Nearest Outlet Suggestion Dialog */}
-                {showNearestOutletDialog && nearestOutlet && (
+                {showNearestOutletDialog && nearestOutlet && nearestOutlet.id && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
                         <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4 p-6 animate-fade-in">
                             <div className="flex justify-between items-start mb-4">
@@ -1121,11 +1251,14 @@ const ReservationForm = () => {
                                     onChange={handleChange}
                                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                                     required
+                                    key={`outlet-selector-${formData.outletId}`}
                                 >
                                     {outlets.map(outlet => (
                                         <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
                                     ))}
                                 </select>
+                                
+                              
                             </div>
 
                             <div className="md:col-span-4 mt-2">
