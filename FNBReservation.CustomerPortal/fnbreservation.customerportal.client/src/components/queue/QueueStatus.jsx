@@ -26,38 +26,43 @@ const QueueStatus = () => {
         
         setLoadingStatus(true);
         try {
-            const data = await QueueService.getQueueStatusByCode(id);
-            console.log('Queue data received:', data); // Add debug logging
+            let data = await QueueService.getQueueStatusByCode(id);
+            console.log('Queue data received with all properties:', data);
+            console.log('Available position properties:', {
+                position: data?.position,
+                queuePosition: data?.queuePosition
+            });
+            console.log('Available time properties:', {
+                joinedAt: data?.joinedAt,
+                queuedAt: data?.queuedAt
+            });
             
-            // Ensure all required properties exist
-            if (data) {
-                // Ensure wait time is available
-                if (data.estimatedWaitMinutes === undefined && data.estimatedWaitTime === undefined) {
-                    // Try to get estimated wait time from API
-                    try {
-                        if (data.outletId && data.partySize) {
-                            const waitTimeResponse = await QueueService.getQueueEstimation(data.outletId, data.partySize);
-                            console.log('Wait time response:', waitTimeResponse);
-                            if (waitTimeResponse && waitTimeResponse.estimatedWaitMinutes !== undefined) {
-                                data.estimatedWaitMinutes = waitTimeResponse.estimatedWaitMinutes;
-                            } else if (waitTimeResponse && waitTimeResponse.estimatedWaitTime !== undefined) {
-                                data.estimatedWaitTime = waitTimeResponse.estimatedWaitTime;
-                            }
-                        }
-                    } catch (waitTimeError) {
-                        console.error('Error fetching wait time:', waitTimeError);
-                    }
-                }
-                
-                // Ensure position is available
-                if (data.position === undefined && data.queuePosition === undefined) {
-                    // Default to 0 if not provided
-                    data.position = "N/A";
-                }
+            // Handle the case where data might be wrapped in an object
+            if (data && data.data) {
+                data = data.data;
             }
             
             setQueueDetails(data);
             setError(null);
+            
+            // Fetch wait time estimate if needed
+            if (data && data.status === 'Waiting' && data.outletId && data.partySize && 
+                !data.estimatedWaitMinutes && !data.estimatedWaitTime) {
+                try {
+                    const waitTimeData = await QueueService.getQueueEstimation(data.outletId, data.partySize);
+                    console.log('Wait time data with all properties:', waitTimeData);
+                    
+                    if (waitTimeData) {
+                        // Update the queue details with wait time information
+                        setQueueDetails(prev => ({
+                            ...prev,
+                            estimatedWaitMinutes: waitTimeData.estimatedWaitMinutes || waitTimeData.estimatedWaitTime
+                        }));
+                    }
+                } catch (waitTimeError) {
+                    console.error("Error fetching wait time:", waitTimeError);
+                }
+            }
         } catch (error) {
             console.error("Error fetching queue status:", error);
             setError("Failed to load queue status. Please try again.");
@@ -126,6 +131,37 @@ const QueueStatus = () => {
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+    };
+
+    // Format date to Malaysia time zone (UTC+8)
+    const formatMalaysiaTime = (dateString) => {
+        if (!dateString) return 'N/A';
+        
+        try {
+            // Create date object from string
+            const date = new Date(dateString);
+            
+            // Check if date is valid
+            if (isNaN(date.getTime())) {
+                return 'Invalid Date';
+            }
+            
+            // Manually adjust time to Malaysia timezone (UTC+8)
+            const malaysiaTime = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+            
+            // Format for display
+            return malaysiaTime.toLocaleString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'Invalid Date';
+        }
     };
 
     // Handle cancel queue (exit queue)
@@ -351,7 +387,11 @@ const QueueStatus = () => {
                         </div>
                         <div>
                             <p className="text-sm text-gray-600">Joined At</p>
-                            <p className="font-medium">{new Date(queueDetails.joinedAt).toLocaleTimeString()}</p>
+                            <p className="font-medium">
+                                {queueDetails.queuedAt ? formatMalaysiaTime(queueDetails.queuedAt) : 
+                                 queueDetails.joinedAt ? formatMalaysiaTime(queueDetails.joinedAt) : 
+                                 'N/A'}
+                            </p>
                         </div>
                     </div>
                 </div>
