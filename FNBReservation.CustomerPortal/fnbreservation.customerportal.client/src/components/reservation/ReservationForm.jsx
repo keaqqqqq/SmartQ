@@ -94,6 +94,10 @@ const ReservationForm = () => {
     const [reservationCode, setReservationCode] = useState(null);
     const [noAvailability, setNoAvailability] = useState(false);
     const [sessionId, setSessionId] = useState(null);
+    
+    // Track page visits with a ref to ensure dialog shows on every visit
+    const pageVisitRef = useRef(0);
+    const triggerDialogRef = useRef(true); // Control showing the dialog
 
     // Table hold state
     const [holdId, setHoldId] = useState(null);
@@ -139,30 +143,76 @@ const ReservationForm = () => {
 
     // Fetch outlets on component mount and handle location
     useEffect(() => {
+        // Increment the visit counter on every render
+        pageVisitRef.current += 1;
+        
         // Fetch outlets first
         fetchOutlets();
-        console.log("Component mounted - fetching outlets");
+        console.log("Component mounted - fetching outlets, visit #", pageVisitRef.current);
         
-        // Add a direct call to find nearest outlet if location permission is granted
-        const timer = setTimeout(() => {
-            if (locationStatus === 'granted' && userCoordinates) {
-                console.log("Component mounted with location permission - ALWAYS showing nearest outlet");
-                // This will ALWAYS run when the component mounts and location is available
-                setShowNearestOutletDialog(false); // Reset first to ensure it shows properly
-                findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
-            } 
-            else if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
-                console.log("Showing location permission dialog");
-            setShowLocationDialog(true);
+        // Log current location status and coordinates
+        console.log("Current location status:", locationStatus);
+        console.log("Current coordinates:", userCoordinates);
+        
+        // Check for coordinates in session storage as a backup
+        try {
+            const savedCoords = sessionStorage.getItem('userCoordinates');
+            if (savedCoords && !userCoordinates) {
+                const coords = JSON.parse(savedCoords);
+                console.log("Found coordinates in session storage:", coords);
+            }
+        } catch (error) {
+            console.error("Error checking session storage for coordinates:", error);
         }
+        
+        // Basic location check
+        const timer = setTimeout(() => {
+            if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
+                console.log("Showing location permission dialog");
+                setShowLocationDialog(true);
+            } else if (locationStatus === 'granted' && !userCoordinates) {
+                // If location is granted but no coordinates, request again
+                console.log("Location granted but no coordinates - requesting again");
+                requestLocationAccess();
+            }
         }, 300);
         
-        return () => clearTimeout(timer);
-    }, [locationStatus, userCoordinates]); // This will run on mount AND when location/coords change
+        return () => {
+            clearTimeout(timer);
+            // Reset the trigger to ensure dialog shows on next visit
+            triggerDialogRef.current = true;
+        };
+    }, [locationStatus, userCoordinates, requestLocationAccess]);
+    
+    // Always show nearest outlet dialog when coordinates are available
+    useEffect(() => {
+        // When location permission is granted but we don't have coordinates, request them
+        if (locationStatus === 'granted' && !userCoordinates) {
+            console.log("Location permission granted but no coordinates - requesting coordinates");
+            requestLocationAccess(); // Re-request to get coordinates
+            return;
+        }
+        
+        // When location is available with coordinates, always show nearest outlet
+        if (locationStatus === 'granted' && userCoordinates && triggerDialogRef.current) {
+            const timer = setTimeout(() => {
+                console.log("Always showing nearest outlet dialog on visit #", pageVisitRef.current);
+                console.log("Using coordinates:", userCoordinates);
+                findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+                setShowNearestOutletDialog(true);
+                // Mark dialog as shown for this session
+                triggerDialogRef.current = false;
+            }, 800);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [locationStatus, userCoordinates, requestLocationAccess]); // Add requestLocationAccess to dependencies
 
     // Replace the navigate function to reset state when navigating
     const originalNavigate = navigate;
     const customNavigate = (path, options) => {
+        // Reset dialog trigger when navigating
+        triggerDialogRef.current = true;
         // Then navigate as usual
         originalNavigate(path, options);
     };
@@ -362,10 +412,18 @@ const ReservationForm = () => {
         // Add a message for the user
         setError(null); // Clear any existing errors
         
+        // We'll wait for coordinates in our useEffect hook that watches for coordinate changes
+        console.log("Current coordinates status:", userCoordinates ? "Available" : "Not yet available");
+        
         // If we already have coordinates but dialog was shown again
         if (userCoordinates) {
             console.log("Already have coordinates:", userCoordinates);
-            findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+            // Reset the trigger to ensure the nearest outlet dialog shows
+            triggerDialogRef.current = true;
+            // Small delay to allow state updates to complete
+            setTimeout(() => {
+                findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
+            }, 300);
         }
     };
 
@@ -385,6 +443,8 @@ const ReservationForm = () => {
                 console.error("Cannot accept outlet with undefined ID", nearestOutlet);
                 setError("Unable to select this restaurant due to missing data. Please choose another restaurant.");
                 setShowNearestOutletDialog(false);
+                // Reset trigger so dialog shows again on next visit
+                triggerDialogRef.current = true;
                 return;
             }
             
@@ -439,11 +499,15 @@ const ReservationForm = () => {
             }, 100);
         }
         setShowNearestOutletDialog(false);
+        // Reset the triggerDialogRef to ensure dialog shows again on next visit
+        triggerDialogRef.current = true;
     };
 
     // Decline nearest outlet suggestion
     const declineNearestOutlet = () => {
         setShowNearestOutletDialog(false);
+        // Reset the dialog trigger to allow showing again on the next page visit
+        triggerDialogRef.current = true;
     };
 
     // Handle input changes
