@@ -169,35 +169,41 @@ const ReservationForm = () => {
         if (locationStatus === 'initial' && !localStorage.getItem('locationPermission')) {
             setShowLocationDialog(true);
         }
-    }, [locationStatus]);
-
-    // Monitor location status changes
-    useEffect(() => {
-        // When location permission is granted, determine the nearest outlet
-        if (locationStatus === 'granted' && userCoordinates) {
+        
+        // After permission is granted, find the nearest outlet
+        if (locationStatus === 'granted' && userCoordinates && !nearestOutlet) {
             findNearestOutlet(userCoordinates.latitude, userCoordinates.longitude);
         }
     }, [locationStatus, userCoordinates]);
 
     // Find the nearest outlet using the API
     const findNearestOutlet = async (latitude, longitude) => {
+        if (!latitude || !longitude) return;
+        
         try {
             setLoading(true);
             const response = await OutletService.getNearestOutlet(latitude, longitude);
+            
             if (response && response.data) {
+                // Extract outlet data from the response
                 const outletData = response.data.outlet || response.data;
                 setNearestOutlet(outletData);
-                setShowNearestOutletDialog(true);
+                
+                // Show the nearest outlet dialog only if we haven't set an outlet yet
+                if (!formData.outletId || formData.outletId === "") {
+                    setShowNearestOutletDialog(true);
+                }
             }
         } catch (error) {
             console.error("Error finding nearest outlet:", error);
+            
             // If API fails, try to find nearest outlet from the list
             if (outlets.length > 0) {
                 // Simple distance calculation (this is just an example - real geodistance calculation would be better)
                 const nearest = outlets.reduce((nearest, outlet) => {
                     const distance = Math.sqrt(
-                        Math.pow(outlet.latitude - latitude, 2) + 
-                        Math.pow(outlet.longitude - longitude, 2)
+                        Math.pow((outlet.latitude || 0) - latitude, 2) + 
+                        Math.pow((outlet.longitude || 0) - longitude, 2)
                     );
                     
                     if (distance < nearest.distance) {
@@ -207,7 +213,11 @@ const ReservationForm = () => {
                 }, { outlet: outlets[0], distance: Infinity });
                 
                 setNearestOutlet(nearest.outlet);
-                setShowNearestOutletDialog(true);
+                
+                // Show the nearest outlet dialog only if we haven't set an outlet yet
+                if (!formData.outletId || formData.outletId === "") {
+                    setShowNearestOutletDialog(true);
+                }
             }
         } finally {
             setLoading(false);
@@ -267,10 +277,26 @@ const ReservationForm = () => {
     // Accept nearest outlet suggestion
     const acceptNearestOutlet = () => {
         if (nearestOutlet) {
-            setFormData({
-                ...formData,
+            // Update the form data with the nearest outlet ID
+            setFormData(prev => ({
+                ...prev,
                 outletId: nearestOutlet.id
-            });
+            }));
+            
+            // Force-refresh the time options based on the new outlet's operating hours
+            setTimeout(() => {
+                const timeOptions = document.getElementById('time');
+                if (timeOptions) {
+                    // Select first available time if current time becomes invalid
+                    const firstOption = timeOptions.options[0]?.value;
+                    if (firstOption && !Array.from(timeOptions.options).some(opt => opt.value === formData.time)) {
+                        setFormData(prev => ({
+                            ...prev,
+                            time: firstOption
+                        }));
+                    }
+                }
+            }, 100);
         }
         setShowNearestOutletDialog(false);
     };
@@ -283,10 +309,34 @@ const ReservationForm = () => {
     // Handle input changes
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData({
-            ...formData,
+        
+        // Update form data with the new value
+        setFormData(prevData => ({
+            ...prevData,
             [name]: value
-        });
+        }));
+        
+        // If outlet is changed, we might need to reset the time based on operating hours
+        if (name === 'outletId') {
+            console.log("Outlet changed to:", value);
+            
+            // Get the selected outlet's operating hours
+            const selectedOutlet = outlets.find(o => o.id === value);
+            
+            if (selectedOutlet) {
+                console.log("Selected outlet:", selectedOutlet.name, "Operating hours:", selectedOutlet.operatingHours);
+                
+                // Parse operating hours to get valid time range
+                const { start } = parseOperatingHours(selectedOutlet.operatingHours || "11:00 AM - 10:00 PM");
+                
+                // Set time to the start of operating hours by default
+                setFormData(prevData => ({
+                    ...prevData,
+                    [name]: value,
+                    time: `${start}:00` // Format as HH:MM:00
+                }));
+            }
+        }
     };
 
     // Format date for display
@@ -582,12 +632,13 @@ const ReservationForm = () => {
         setSelectedSlot(null); // Clear current slot selection
     };
 
-    // Generate date options
+    // Generate date options for the next 30 days (month)
     const generateDateOptions = () => {
         const options = [];
         const currentDate = new Date();
         
-        for (let i = 0; i < 14; i++) {
+        // Generate dates from today until next 30 days (approximately a month)
+        for (let i = 0; i < 30; i++) {
             const date = addDays(currentDate, i);
             const formattedDate = format(date, 'yyyy-MM-dd');
             const displayDate = format(date, 'EEE, MMM d');
@@ -602,26 +653,82 @@ const ReservationForm = () => {
         return options;
     };
 
-    // Generate time options
+    // Parse operating hours string (e.g. "08:00 AM - 10:00 PM") to get start and end time
+    const parseOperatingHours = (hoursString) => {
+        if (!hoursString) return { start: "11:00", end: "22:00" }; // Default if no hours provided
+        
+        try {
+            const [startStr, endStr] = hoursString.split(' - ');
+            
+            // Parse start time
+            let startHour = parseInt(startStr.split(':')[0]);
+            let startMinute = parseInt(startStr.split(':')[1].split(' ')[0]);
+            const startAmPm = startStr.split(' ')[1];
+            
+            if (startAmPm === 'PM' && startHour !== 12) startHour += 12;
+            if (startAmPm === 'AM' && startHour === 12) startHour = 0;
+            
+            // Parse end time
+            let endHour = parseInt(endStr.split(':')[0]);
+            let endMinute = parseInt(endStr.split(':')[1].split(' ')[0]);
+            const endAmPm = endStr.split(' ')[1];
+            
+            if (endAmPm === 'PM' && endHour !== 12) endHour += 12;
+            if (endAmPm === 'AM' && endHour === 12) endHour = 0;
+            
+            // Special case for late night hours (e.g., "10:00 PM - 02:00 AM")
+            // If end time is earlier than start time, it means it's on the next day
+            if (endHour < startHour) endHour += 24;
+            
+            // Check if this is an overnight operation (e.g. 6PM - 2AM)
+            const isOvernight = endHour >= 24;
+            
+            return {
+                start: `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`,
+                end: `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`,
+                isOvernight
+            };
+        } catch (error) {
+            console.error("Error parsing operating hours:", error);
+            return { start: "11:00", end: "22:00", isOvernight: false }; // Default if parsing fails
+        }
+    };
+
+    // Generate time options based on outlet's operating hours
     const generateTimeOptions = () => {
         const options = [];
-        const startHour = 11; // 11:00 AM
-        const endHour = 22;   // 10:00 PM
-        const interval = 30;  // 30 minutes
         
-        for (let hour = startHour; hour <= endHour; hour++) {
-            for (let minute = 0; minute < 60; minute += interval) {
-                const formattedHour = hour.toString().padStart(2, '0');
-                const formattedMinute = minute.toString().padStart(2, '0');
-                const timeValue = `${formattedHour}:${formattedMinute}:00`;
-                const displayTime = formatDisplayTime(timeValue);
-                
-                options.push(
-                    <option key={timeValue} value={timeValue}>
-                        {displayTime}
-                    </option>
-                );
-            }
+        // Get selected outlet's operating hours
+        const selectedOutlet = outlets.find(o => o.id === formData.outletId);
+        const operatingHours = selectedOutlet?.operatingHours || "11:00 AM - 10:00 PM"; // Default if none found
+        
+        // Parse operating hours
+        const { start, end, isOvernight } = parseOperatingHours(operatingHours);
+        
+        // Convert to minutes for easier calculation
+        let startMinutes = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1]);
+        let endMinutes = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]);
+        
+        // Log for debugging
+        console.log("Operating hours:", operatingHours);
+        console.log("Parsed:", { start, end, isOvernight });
+        console.log("Minutes:", { startMinutes, endMinutes });
+        
+        // Generate time slots at 30-minute intervals
+        for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
+            // Normalize hour for display (convert 24+ hours back to 0-23 range)
+            const normalizedHour = Math.floor(minutes / 60) % 24;
+            const minute = minutes % 60;
+            
+            const formattedHour = normalizedHour.toString().padStart(2, '0');
+            const formattedMinute = minute.toString().padStart(2, '0');
+            const timeValue = `${formattedHour}:${formattedMinute}:00`;
+            
+            options.push(
+                <option key={timeValue} value={timeValue}>
+                    {formatDisplayTime(timeValue)}
+                </option>
+            );
         }
         
         return options;
@@ -670,6 +777,27 @@ const ReservationForm = () => {
         const minutes = Math.floor(timeRemaining / 60);
         const seconds = timeRemaining % 60;
         return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    };
+
+    // Calculate distance between two points using the Haversine formula
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+        
+        const R = 6371; // Radius of the earth in km
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c; // Distance in km
+        return distance;
+    };
+    
+    // Convert degrees to radians
+    const deg2rad = (deg) => {
+        return deg * (Math.PI / 180);
     };
 
     return (
@@ -752,14 +880,51 @@ const ReservationForm = () => {
                                     </svg>
                                 </div>
                                 <p className="text-gray-600 text-center mb-2">
-                                    The closest restaurant to your location is:
+                                    We found this restaurant closest to your location:
                                 </p>
-                                <div className="bg-gray-50 p-4 rounded-lg mb-2">
+                                <div className="bg-gray-50 p-4 rounded-lg mb-4">
                                     <h3 className="font-bold text-lg">{nearestOutlet.name}</h3>
-                                    <p className="text-gray-600">{nearestOutlet.address}</p>
+                                    <p className="text-gray-600">{nearestOutlet.location || nearestOutlet.address}</p>
+                                    
+                                    {nearestOutlet.operatingHours && (
+                                        <div className="flex items-center mt-2 text-gray-600">
+                                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>{nearestOutlet.operatingHours}</span>
+                                        </div>
+                                    )}
+                                    
+                                    {nearestOutlet.contact && (
+                                        <div className="flex items-center mt-2 text-gray-600">
+                                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                            </svg>
+                                            <span>{nearestOutlet.contact}</span>
+                                        </div>
+                                    )}
+                                    
+                                    {userCoordinates && nearestOutlet.latitude && nearestOutlet.longitude && (
+                                        <div className="flex items-center mt-2 text-gray-600">
+                                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                            </svg>
+                                            <span>
+                                                {calculateDistance(
+                                                    userCoordinates.latitude,
+                                                    userCoordinates.longitude,
+                                                    nearestOutlet.latitude,
+                                                    nearestOutlet.longitude
+                                                ).toFixed(1)} km away
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 <p className="text-gray-600 text-center">
-                                    Would you like to make your reservation at this location?
+                                    Would you like to make your reservation at this restaurant?
                                 </p>
                             </div>
 
@@ -865,9 +1030,7 @@ const ReservationForm = () => {
                                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                                     required
                                 >
-                                    {generateDateOptions().map((option, index) => (
-                                        <option key={index} value={option.value}>{option.label}</option>
-                                    ))}
+                                    {generateDateOptions()}
                                 </select>
                             </div>
 
@@ -882,11 +1045,22 @@ const ReservationForm = () => {
                                     onChange={handleChange}
                                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                                     required
+                                    key={`time-selector-${formData.outletId}`}
                                 >
-                                    {generateTimeOptions().map((option, index) => (
-                                        <option key={index} value={option.value}>{option.label}</option>
-                                    ))}
+                                    {generateTimeOptions()}
                                 </select>
+                                {/* Info about late night hours */}
+                                {(() => {
+                                    const selectedOutlet = outlets.find(o => o.id === formData.outletId);
+                                    const operatingHours = selectedOutlet?.operatingHours || "";
+                                    const { isOvernight } = parseOperatingHours(operatingHours);
+                                    
+                                    return isOvernight && (
+                                        <div className="mt-1 text-xs text-blue-600">
+                                            This outlet operates late night hours (past midnight).
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             <div>
