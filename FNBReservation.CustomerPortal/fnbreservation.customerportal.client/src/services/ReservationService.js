@@ -33,6 +33,8 @@ class ReservationService {
                 latestTime: availabilityParams.latestTime || null
             };
 
+            console.log("Checking availability with payload:", payload);
+
             const response = await api.post(`${API_BASE_URL}/check-availability`, payload);
             return response.data;
         } catch (error) {
@@ -55,6 +57,8 @@ class ReservationService {
                 userLongitude: availabilityParams.longitude
             };
 
+            console.log("Checking availability with nearby with payload:", payload);
+
             const response = await api.post(`${API_BASE_URL}/check-availability-with-nearby`, payload);
             return response.data;
         } catch (error) {
@@ -64,28 +68,52 @@ class ReservationService {
     }
 
     // Hold tables for a reservation
-    async holdTables(holdParams) {
+    async holdTables(holdParams, sessionId = null) {
         try {
+            // Generate a session ID if none is provided
+            const actualSessionId = sessionId || this.generateSessionId();
+            
+            // Ensure all parameters are in the correct format
             const payload = {
                 outletId: holdParams.outletId,
                 partySize: parseInt(holdParams.partySize),
                 date: holdParams.date,
-                time: holdParams.time
+                time: holdParams.time,
+                sessionId: actualSessionId
             };
 
+            console.log("Sending hold tables request with payload:", payload);
+
             const response = await api.post(`${API_BASE_URL}/hold-tables`, payload);
-            return response.data;
+            
+            // Log the response for debugging
+            console.log("Hold tables response:", response.data);
+            
+            // Store the holdId in localStorage for backup retrieval if needed
+            if (response.data && (response.data.holdId || response.data.id)) {
+                const holdId = response.data.holdId || response.data.id;
+                localStorage.setItem('reservation_hold_id', holdId);
+                console.log("Stored holdId in localStorage:", holdId);
+            }
+            
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
         }
     }
 
+    // Generate a random session ID for table holds
+    generateSessionId() {
+        // Generate a random string that can be used as a session ID
+        return 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    }
+
     // Release a table hold
     async releaseHold(holdId) {
         try {
             const response = await api.post(`${API_BASE_URL}/release-hold/${holdId}`);
-            return response.data;
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
@@ -112,14 +140,17 @@ class ReservationService {
                 customerPhone: reservationData.customerPhone,
                 customerEmail: reservationData.customerEmail,
                 partySize: parseInt(reservationData.partySize),
-                reservationDate: reservationData.date,
-                reservationTime: reservationData.time,
+                reservationDate: reservationData.reservationDate,
+                reservationTime: reservationData.reservationTime,
                 specialRequests: reservationData.specialRequests || "",
-                holdId: reservationData.holdId || null
+                holdId: reservationData.holdId || null,
+                sessionId: reservationData.sessionId || null
             };
 
+            console.log("Sending create reservation request with payload:", payload);
+
             const response = await api.post(`${API_BASE_URL}`, payload);
-            return response.data;
+            return response;
         } catch (error) {
             this.handleError(error);
             throw error;
@@ -194,6 +225,11 @@ class ReservationService {
             // Server responded with a status code outside of 2xx range
             console.error('Error response:', error.response.data);
             console.error('Status:', error.response.status);
+            
+            // Log more details about validation errors
+            if (error.response.data && error.response.data.errors) {
+                console.error('Validation errors:', error.response.data.errors);
+            }
         } else if (error.request) {
             // Request was made but no response was received
             console.error('No response received:', error.request);
