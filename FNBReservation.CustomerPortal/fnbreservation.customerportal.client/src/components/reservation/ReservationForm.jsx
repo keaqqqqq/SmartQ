@@ -848,53 +848,49 @@ const ReservationForm = () => {
 
     // Unified function to hold a table and proceed to details
     const holdTableAndProceed = async (selectedOption) => {
-        if (!selectedOption) {
-            setError("Please select a time slot.");
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-
         try {
-            // Update form data with the selected outlet/time if different
-            if (selectedOption.outletId !== formData.outletId || selectedOption.time !== formData.time) {
-                setFormData(prev => ({
-                    ...prev,
-                    outletId: selectedOption.outletId || prev.outletId,
-                    time: selectedOption.time
-                }));
-            }
+            setLoading(true);
+            setError(null);
 
             // Format date properly for API - ensure it's ISO format or yyyy-MM-dd
-            const formattedDate = formData.date.includes('T') 
-                ? formData.date.split('T')[0] 
+            const formattedDate = formData.date.includes('T')
+                ? formData.date.split('T')[0]
                 : formData.date;
 
             // Format time - ensure it's in HH:MM:SS format
-            let formattedTime = selectedOption.time;
+            let formattedTime = selectedOption.time || formData.time;
             if (!formattedTime.includes(':')) {
                 formattedTime = `${formattedTime}:00:00`;
             } else if (formattedTime.split(':').length === 2) {
                 formattedTime = `${formattedTime}:00`;
             }
 
-            // Generate a consistent sessionId for this reservation transaction
-            // Use outlet-specific sessionKey for better management
-            const sessionKey = 'reservation_session_id_' + (selectedOption.outletId || formData.outletId);
+            // Use outlet-specific sessionKey for better consistency
+            const outletId = selectedOption.outletId || formData.outletId;
+            const sessionKey = 'reservation_session_id_' + outletId;
             
-            // Get current sessionId or create a new one
-            let currentSessionId = sessionId;
-            if (!currentSessionId) {
+            // First check for existing sessionId in localStorage to ensure consistency
+            let currentSessionId = localStorage.getItem(sessionKey);
+            console.log("Retrieved sessionId from localStorage:", currentSessionId);
+            
+            // If we have a sessionId in state but not in localStorage, use the one from state
+            if (!currentSessionId && sessionId) {
+                currentSessionId = sessionId;
+                console.log("Using existing sessionId from state:", currentSessionId);
+            } 
+            // Only if we don't have any sessionId, create a new one
+            else if (!currentSessionId) {
                 currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
                 console.log("Created new sessionId:", currentSessionId);
-                setSessionId(currentSessionId);
-                localStorage.setItem(sessionKey, currentSessionId);
             }
+            
+            // Store in localStorage AND in component state to ensure consistency
+            localStorage.setItem(sessionKey, currentSessionId);
+            setSessionId(currentSessionId);
 
             // Log what we're sending to the API for debugging
             console.log("Holding tables with params:", {
-                outletId: selectedOption.outletId || formData.outletId,
+                outletId: outletId,
                 partySize: formData.partySize,
                 date: formattedDate,
                 time: formattedTime,
@@ -903,7 +899,7 @@ const ReservationForm = () => {
 
             // Hold the tables for the selected time slot
             const holdParams = {
-                outletId: selectedOption.outletId || formData.outletId,
+                outletId: outletId,
                 partySize: parseInt(formData.partySize), // Ensure partySize is a number
                 date: formattedDate,
                 time: formattedTime
@@ -926,6 +922,16 @@ const ReservationForm = () => {
                         // Store holdId in component state
                         setHoldId(holdId);
                         
+                        // Store holdId in localStorage for redundancy
+                        localStorage.setItem('reservation_hold_id', holdId);
+                        
+                        // Log the saved session and hold IDs
+                        console.log("Saved session info:", {
+                            sessionId: currentSessionId,
+                            holdId: holdId,
+                            sessionKey: sessionKey
+                        });
+                        
                         // Start the timer
                         if (responseData.expirySeconds) {
                             setTimeRemaining(responseData.expirySeconds);
@@ -939,6 +945,8 @@ const ReservationForm = () => {
             } catch (error) {
                 console.error("Error holding tables:", error);
                 // Don't show error to user as we'll still proceed
+                setError("Unable to hold tables. Please try a different time.");
+                return;
             }
 
             setNoAvailability(false);
@@ -982,139 +990,154 @@ const ReservationForm = () => {
                 formattedTime = `${formattedTime}:00`;
             }
             
+            // Create the full ISO date with timezone for reservation
+            const formattedReservationDate = `${formattedDate}T${formattedTime}`;
+            console.log("Formatted reservation date:", formattedReservationDate);
+            
             // Use outlet-specific sessionKey for better consistency
-            const sessionKey = 'reservation_session_id_' + formData.outletId;
+            const outletId = formData.outletId;
+            const sessionKey = 'reservation_session_id_' + outletId;
             
-            // Get current sessionId or retrieve from localStorage
-            let currentSessionId = sessionId;
-            if (!currentSessionId) {
-                currentSessionId = localStorage.getItem(sessionKey);
-                console.log("Retrieved sessionId from localStorage:", currentSessionId);
-            }
-            
-            // If still no sessionId, create a new one
-            if (!currentSessionId) {
-                currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
-                console.log("Created new sessionId for reservation:", currentSessionId);
-                setSessionId(currentSessionId);
-                localStorage.setItem(sessionKey, currentSessionId);
-            }
-
-            // Get existing holdId from state or localStorage
+            // CRITICAL: Get THE SAME sessionId used for the hold
+            // First, check the holdId in state and localStorage
             let finalHoldId = holdId;
             if (!finalHoldId) {
                 // Try to get it from localStorage
                 finalHoldId = localStorage.getItem('reservation_hold_id');
                 console.log("Retrieved holdId from localStorage:", finalHoldId);
             }
-
-            // First, hold tables if no hold ID exists
+            
+            // Get the corresponding sessionId from localStorage - this is critical for consistent session handling
+            let finalSessionId = localStorage.getItem(sessionKey);
+            
+            // IMPORTANT: Never create a new sessionId here, this must match what was used during holdTables
+            // If we don't have the sessionId that was used during holdTables, we can't proceed
+            if (!finalSessionId && sessionId) {
+                // If we have sessionId in component state but not in localStorage, use that
+                finalSessionId = sessionId;
+                // Save it to localStorage so it's consistent
+                localStorage.setItem(sessionKey, finalSessionId);
+                console.log("Using sessionId from component state:", finalSessionId);
+            } else if (!finalSessionId) {
+                console.error("No valid sessionId found for this reservation - cannot proceed");
+                setError("Session error: Your session has expired. Please try again from the beginning.");
+                setLoading(false);
+                setStep(1); // Go back to step 1
+                return;
+            }
+            
+            console.log("Using sessionId for reservation:", finalSessionId);
+            
+            // If no holdId found, we need to get one
             if (!finalHoldId) {
-                try {
-                    const holdParams = {
-                        outletId: formData.outletId,
-                        partySize: parseInt(formData.partySize),
-                        date: formattedDate,
-                        time: formattedTime,
-                        // Add the reservationDateTime
-                        reservationDateTime: `${formattedDate}T${formattedTime}`
-                    };
-                    
-                    console.log("Holding tables with params:", holdParams, "with sessionId:", currentSessionId);
-                    
-                    const holdResponse = await ReservationService.holdTables(holdParams, currentSessionId);
-                    
-                    // Extract holdId from the response
-                    if (holdResponse.data) {
-                        // Check different possible structures
-                        const responseData = holdResponse.data.data || holdResponse.data;
-                        finalHoldId = responseData.holdId || responseData.id;
-                        
-                        console.log("Got new holdId from API:", finalHoldId);
-                        
-                        if (finalHoldId) {
-                            setHoldId(finalHoldId);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error holding tables:", error);
-                    // Continue with reservation even if hold fails
-                }
+                console.log("No holdId found - this shouldn't happen if hold was successful");
+                setError("There was an issue with your reservation. Please try again from the beginning.");
+                setLoading(false);
+                setStep(1); // Go back to step 1
+                return;
             }
 
-            // Now create the reservation
-            try {
-                console.log("Creating reservation with sessionId:", currentSessionId, "and holdId:", finalHoldId);
-                
-                // Create the full ISO date with timezone
-                const formattedReservationDate = `${formattedDate}T${formattedTime}`;
-                
-                console.log("Formatted reservation date:", formattedReservationDate);
-                
-                const reservationPayload = {
-                    outletId: formData.outletId,
-                    customerName: formData.customerName,
-                    customerPhone: formData.customerPhone,
-                    customerEmail: formData.customerEmail,
-                    partySize: parseInt(formData.partySize),
-                    reservationDate: formattedReservationDate, // Use properly formatted ISO date
-                    specialRequests: formData.specialRequests || "",
-                    holdId: finalHoldId,
-                    sessionId: currentSessionId
-                };
-                
-                console.log("Creating reservation with payload:", reservationPayload);
-                
-                const response = await ReservationService.createReservation(reservationPayload);
-                
-                // API response structure may have changed - check both response.data and response directly
-                const responseData = response.data?.data || response.data || response;
-                console.log("Reservation response:", responseData);
-                
-                // Check multiple possible id structures
-                const hasValidId = responseData?.id || responseData?.reservationId || 
-                                   (typeof responseData === 'object' && Object.keys(responseData).length > 0);
+            // Make absolutely sure we have a sessionId - backend requires this
+            if (!finalSessionId) {
+                console.error("CRITICAL: No sessionId available for reservation");
+                setError("Session error: Could not establish a valid session. Please refresh and try again.");
+                setLoading(false);
+                return;
+            }
 
-                if (hasValidId) {
-                    // Stop the timer if it's active
-                    if (timerActive) {
-                        setTimerActive(false);
-                        clearInterval(timerRef.current);
-                    }
+            console.log("Creating reservation with sessionId:", finalSessionId, "and holdId:", finalHoldId);
+            
+            // If we don't have a holdId, we can't proceed with the reservation
+            if (!finalHoldId) {
+                setError("Unable to secure a table at this time. Please try again or select a different time.");
+                setLoading(false);
+                return;
+            }
 
-                    // Clear holdId from localStorage
-                    localStorage.removeItem('reservation_hold_id');
+            const reservationPayload = {
+                OutletId: formData.outletId,
+                CustomerName: formData.customerName,
+                CustomerPhone: formData.customerPhone,
+                CustomerEmail: formData.customerEmail,
+                PartySize: parseInt(formData.partySize),
+                ReservationDate: formattedReservationDate, // Use properly formatted ISO date
+                SpecialRequests: formData.specialRequests || "",
+                HoldId: finalHoldId,
+                SessionId: finalSessionId
+            };
+            
+            console.log("Creating reservation with payload:", reservationPayload);
+            console.log("VERIFYING VALUES:", {
+                hasReservationDate: !!reservationPayload.ReservationDate,
+                holdId: reservationPayload.HoldId,
+                sessionId: reservationPayload.SessionId
+            });
+            
+            // Important: Do not release the hold before the reservation is created
+            // The API will handle the hold release after successful reservation creation
+            const response = await ReservationService.createReservation(reservationPayload);
+            
+            // API response structure may have changed - check both response.data and response directly
+            const responseData = response.data?.data || response.data || response;
+            console.log("Reservation response:", responseData);
+            
+            // Check multiple possible id structures
+            const hasValidId = responseData?.id || responseData?.reservationId || 
+                               (typeof responseData === 'object' && Object.keys(responseData).length > 0);
 
-                    // Set the reservation code for the confirmation screen
-                    const confirmationCode = responseData.confirmationCode || 
-                        responseData.code || 
-                        "RES" + Math.floor(10000 + Math.random() * 90000);
-                    
-                    setReservationCode(confirmationCode);
-                    
-                    // Move to confirmation step
-                    setStep(3);
-                } else {
-                    // If API doesn't return expected data, use mock confirmation
-                    console.warn("API response missing ID, using mock confirmation");
-                    setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
-                    setStep(3);
+            if (hasValidId) {
+                // Stop the timer if it's active
+                if (timerActive) {
+                    setTimerActive(false);
+                    clearInterval(timerRef.current);
                 }
-            } catch (error) {
-                console.error("Error creating reservation:", error, error.response?.data);
+
+                // Clear holdId from localStorage only after successful reservation
+                localStorage.removeItem('reservation_hold_id');
                 
-                // Check if it's a validation error that we can show to the user
-                if (error.response?.data?.errors) {
-                    setError(`Validation error: ${JSON.stringify(error.response.data.errors)}`);
-                } else {
-                    // Fall back to mock data for testing
-                    setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
-                    setStep(3);
-                }
+                // Also clear component state for holdId
+                setHoldId(null);
+                
+                // DO NOT clear sessionId - this breaks future reservations
+                // Keep the sessionId value in localStorage and state to maintain consistent sessions
+
+                // Set the reservation code for the confirmation screen
+                const confirmationCode = responseData.confirmationCode || 
+                    responseData.code || 
+                    "RES" + Math.floor(10000 + Math.random() * 90000);
+                
+                setReservationCode(confirmationCode);
+                
+                // Move to confirmation step
+                setStep(3);
+            } else {
+                // If API doesn't return expected data, use mock confirmation
+                console.warn("API response missing ID, using mock confirmation");
+                setReservationCode("RES" + Math.floor(10000 + Math.random() * 90000));
+                setStep(3);
             }
         } catch (error) {
-            console.error("Error in reservation process:", error);
-            setError("Failed to create reservation. Please try again.");
+            console.error("Error creating reservation:", error, error.response?.data);
+            
+            // Check if it's the session mismatch error
+            if (error.response?.data?.message === 'This hold belongs to another session.') {
+                setError("Session error: The hold has expired or belongs to another session. Please try again.");
+                setStep(1); // Go back to step 1
+            }
+            // Check for missing sessionId validation error
+            else if (error.response?.data?.errors?.SessionId) {
+                console.error("SessionId validation error:", error.response.data.errors.SessionId);
+                setError("Session error: A valid session ID is required. Please try again from the beginning.");
+                setStep(1); // Go back to step 1
+            }
+            // Check if it's a validation error that we can show to the user
+            else if (error.response?.data?.errors) {
+                setError(`Validation error: ${JSON.stringify(error.response.data.errors)}`);
+            } else if (error.response?.data?.message) {
+                setError(error.response?.data?.message);
+            } else {
+                setError("Failed to create reservation. Please try again.");
+            }
         } finally {
             setLoading(false);
         }
@@ -1372,37 +1395,92 @@ const ReservationForm = () => {
                 clearInterval(timerRef.current);
             }
             
-            // Release hold if exists
-            if (holdId) {
-                ReservationService.releaseHold(holdId)
-                    .catch(error => console.error("Error releasing hold on unmount:", error));
+            // Do not automatically release hold when unmounting
+            // The hold will either be consumed by a successful reservation
+            // or it will expire naturally on the server side
+            
+            // Don't clear session ID during unmount - this causes the session mismatch
+            // If a user refreshes the page, we want the sessionId to persist
+            
+            // Clear holdId from localStorage only if not in the reservation process
+            if (step !== 2) {
+                localStorage.removeItem('reservation_hold_id');
+                setHoldId(null);
             }
             
-            // Clear session ID from state and localStorage
-            if (formData.outletId) {
-                const sessionKey = 'reservation_session_id_' + formData.outletId;
-                localStorage.removeItem(sessionKey);
-            }
-            
-            // Clear holdId from localStorage
-            localStorage.removeItem('reservation_hold_id');
-            
-            setHoldId(null);
-            setSessionId(null);
+            // Don't clear sessionId as it breaks the hold-to-reservation flow
+            // setSessionId(null); 
         };
-    }, [holdId, formData.outletId]);
+    }, [holdId, formData.outletId, step]);
 
     // Clean up session data when reaching confirmation step
     useEffect(() => {
         if (step === 3) {
-            // Clear session ID from localStorage when reservation is confirmed
-            if (formData.outletId) {
-                const sessionKey = 'reservation_session_id_' + formData.outletId;
-                localStorage.removeItem(sessionKey);
-            }
-            // Keep sessionId in state until component unmounts
+            // Success! The reservation is completed, so we can clear the holdId
+            localStorage.removeItem('reservation_hold_id');
+            
+            // Don't clear sessionId from localStorage when reservation is confirmed
+            // This could cause issues if the user tries to make another reservation in the same session
+            // The backend should manage session validity
         }
     }, [step, formData.outletId]);
+
+    // Component mount effect - restore session/hold IDs from localStorage
+    useEffect(() => {
+        // Restore holdId from localStorage if not already in state
+        const storedHoldId = localStorage.getItem('reservation_hold_id');
+        if (storedHoldId && !holdId) {
+            console.log("Restored holdId from localStorage on component mount:", storedHoldId);
+            setHoldId(storedHoldId);
+        }
+        
+        // Clean up expired holds when component mounts
+        const checkHoldValidity = async () => {
+            if (storedHoldId) {
+                try {
+                    // Check if the hold is still valid by making a lightweight call
+                    // This could be a separate API endpoint in the future
+                    console.log("Checking validity of existing hold:", storedHoldId);
+                } catch (error) {
+                    // If any error occurs, consider the hold expired
+                    console.log("Removing expired hold from localStorage");
+                    localStorage.removeItem('reservation_hold_id');
+                }
+            }
+        };
+        
+        checkHoldValidity();
+    }, []);
+
+    // Add a dev debug button to help troubleshoot localStorage issues
+    const clearLocalStorage = () => {
+        localStorage.removeItem('reservation_hold_id');
+        localStorage.removeItem('reservation_session_id_' + formData.outletId);
+        console.log("Cleared localStorage reservation data");
+        setHoldId(null);
+        setSessionId(null);
+    };
+
+    // Debug effect to track holdId changes
+    useEffect(() => {
+        console.log("holdId state changed to:", holdId);
+        // Ensure localStorage is in sync with state when holdId changes
+        if (holdId) {
+            localStorage.setItem('reservation_hold_id', holdId);
+        }
+    }, [holdId]);
+
+    // Debug effect to track sessionId changes
+    useEffect(() => {
+        console.log("sessionId state changed to:", sessionId);
+        
+        // Ensure localStorage is in sync with state when sessionId changes
+        if (sessionId && formData.outletId) {
+            const sessionKey = 'reservation_session_id_' + formData.outletId;
+            localStorage.setItem(sessionKey, sessionId);
+            console.log(`Stored sessionId ${sessionId} in localStorage with key ${sessionKey}`);
+        }
+    }, [sessionId, formData.outletId]);
 
     return (
         <div className="w-full">

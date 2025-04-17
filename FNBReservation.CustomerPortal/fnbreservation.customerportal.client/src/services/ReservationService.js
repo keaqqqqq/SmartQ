@@ -25,12 +25,12 @@ class ReservationService {
     async checkAvailability(availabilityParams) {
         try {
             const payload = {
-                outletId: availabilityParams.outletId,
-                partySize: parseInt(availabilityParams.partySize),
-                date: availabilityParams.date,
-                preferredTime: availabilityParams.preferredTime,
-                earliestTime: availabilityParams.earliestTime || null,
-                latestTime: availabilityParams.latestTime || null
+                OutletId: availabilityParams.outletId,
+                PartySize: parseInt(availabilityParams.partySize),
+                Date: availabilityParams.date,
+                PreferredTime: availabilityParams.preferredTime,
+                EarliestTime: availabilityParams.earliestTime || null,
+                LatestTime: availabilityParams.latestTime || null
             };
 
             console.log("Checking availability with payload:", payload);
@@ -65,25 +65,25 @@ class ReservationService {
     async checkAvailabilityWithNearby(availabilityParams) {
         try {
             const payload = {
-                outletId: availabilityParams.outletId,
-                partySize: parseInt(availabilityParams.partySize),
-                date: availabilityParams.date,
-                preferredTime: availabilityParams.preferredTime,
-                earliestTime: availabilityParams.earliestTime || null,
-                latestTime: availabilityParams.latestTime || null,
+                OutletId: availabilityParams.outletId,
+                PartySize: parseInt(availabilityParams.partySize),
+                Date: availabilityParams.date,
+                PreferredTime: availabilityParams.preferredTime,
+                EarliestTime: availabilityParams.earliestTime || null,
+                LatestTime: availabilityParams.latestTime || null,
                 
                 // Add the flag to check nearby outlets - this is critical
-                checkNearbyOutlets: true,
+                CheckNearbyOutlets: true,
                 
                 // Add location permission flag
-                hasLocationPermission: true,
+                HasLocationPermission: true,
                 
                 // Include coordinates if available
-                latitude: availabilityParams.latitude,
-                longitude: availabilityParams.longitude,
+                Latitude: availabilityParams.latitude,
+                Longitude: availabilityParams.longitude,
                 
                 // Additional parameters to control nearby search
-                maxNearbyOutlets: 5 // Request up to 5 nearby outlets
+                MaxNearbyOutlets: 5 // Request up to 5 nearby outlets
             };
 
             console.log("Checking availability with nearby with payload:", payload);
@@ -121,14 +121,13 @@ class ReservationService {
                 // Fallback to separate date and time if formatting fails
             }
             
-            // Ensure all parameters are in the correct format
+            // Ensure all parameters are in the correct format with proper Pascal case
             const payload = {
-                outletId: holdParams.outletId,
-                partySize: parseInt(holdParams.partySize),
-                reservationDateTime: reservationDateTime,
-                date: holdParams.date, // Keep for backward compatibility
-                time: holdParams.time, // Keep for backward compatibility
-                sessionId: actualSessionId
+                OutletId: holdParams.outletId,
+                PartySize: parseInt(holdParams.partySize),
+                ReservationDateTime: reservationDateTime,
+                SessionId: actualSessionId
+                // Note: Removed date and time fields as they're not needed in Pascal case format
             };
 
             console.log("Sending hold tables request with payload:", payload);
@@ -184,26 +183,70 @@ class ReservationService {
     async createReservation(reservationData) {
         try {
             // Make sure reservationDate is properly formatted
-            let reservationDate = reservationData.reservationDate;
+            let reservationDate = reservationData.ReservationDate;
             
             // Log the original value for debugging
             console.log("Original reservationDate:", reservationDate);
             
-            // Format the payload
+            // Validate that we have a holdId before sending to API
+            if (!reservationData.HoldId) {
+                console.error("Missing HoldId in reservation data. Cannot create reservation without a valid hold.");
+                throw new Error("Missing HoldId - Cannot create a reservation without first holding a table.");
+            }
+
+            // Validate that we have a SessionId - critical field
+            if (!reservationData.SessionId) {
+                console.error("CRITICAL: Missing SessionId in payload. This is a required field.");
+                throw new Error("Missing SessionId - Cannot create a reservation without a valid session ID.");
+            }
+
+            // Validate that we have a ReservationDate - critical field
+            if (!reservationDate) {
+                console.error("Missing ReservationDate in payload. This is a required field.");
+                throw new Error("Missing ReservationDate - Cannot create a reservation without a date and time.");
+            }
+            
+            // Ensure we're using the correct SessionId - this must match what was used in holdTables
+            // Get the sessionId from localStorage using the outlet as the key
+            const sessionKey = `reservation_session_id_${reservationData.OutletId}`;
+            const storedSessionId = localStorage.getItem(sessionKey);
+            
+            // If we have a stored sessionId and it doesn't match what was provided, use the stored one
+            if (storedSessionId && storedSessionId !== reservationData.SessionId) {
+                console.warn(`Session ID mismatch! Using stored sessionId (${storedSessionId}) instead of provided (${reservationData.SessionId})`);
+                reservationData.SessionId = storedSessionId;
+            }
+            
+            // Format the payload with proper Pascal case field names
             const payload = {
-                outletId: reservationData.outletId,
-                customerName: reservationData.customerName,
-                customerPhone: reservationData.customerPhone,
-                customerEmail: reservationData.customerEmail,
-                partySize: parseInt(reservationData.partySize),
-                reservationDate: reservationDate, // Already formatted by the calling component
-                specialRequests: reservationData.specialRequests || "",
-                holdId: reservationData.holdId || null,
-                sessionId: reservationData.sessionId || null
+                OutletId: reservationData.OutletId,
+                CustomerName: reservationData.CustomerName,
+                CustomerPhone: reservationData.CustomerPhone,
+                CustomerEmail: reservationData.CustomerEmail,
+                PartySize: parseInt(reservationData.PartySize),
+                ReservationDate: reservationDate, // Already formatted by the calling component
+                SpecialRequests: reservationData.SpecialRequests || "",
+                HoldId: reservationData.HoldId,
+                SessionId: reservationData.SessionId
             };
 
             console.log("Sending create reservation request with payload:", payload);
+            console.log("HoldId being sent to API:", payload.HoldId);
+            console.log("SessionId being sent to API:", payload.SessionId);
+            console.log("ReservationDate being sent to API:", payload.ReservationDate);
 
+            // Backup the SessionId to localStorage just in case it's needed for reference
+            // This ensures we can debug session issues more easily
+            try {
+                const sessionKey = `last_used_session_${payload.OutletId}`;
+                localStorage.setItem(sessionKey, payload.SessionId);
+                console.log(`Saved session ID for debugging: ${payload.SessionId} to key ${sessionKey}`);
+            } catch (e) {
+                console.warn("Could not save session ID to localStorage:", e);
+            }
+
+            // The API call to create the reservation
+            // Note: We do NOT want to release the hold before this completes
             const response = await api.post(`${API_BASE_URL}`, payload);
             
             // Log the response for debugging
@@ -211,6 +254,24 @@ class ReservationService {
             
             return response;
         } catch (error) {
+            console.error("Error in createReservation:", error);
+            
+            // Enhanced error logging for validation errors
+            if (error.response?.data?.errors) {
+                console.error("Validation errors:", error.response.data.errors);
+                
+                // Log detailed validation issues
+                Object.keys(error.response.data.errors).forEach(key => {
+                    console.error(`Field '${key}' error:`, error.response.data.errors[key]);
+                });
+                
+                // Special handling for session ID errors
+                if (error.response?.data?.errors?.SessionId) {
+                    console.error("SESSION ID ERROR - This is a critical error that needs to be fixed");
+                    console.error("Last session used:", localStorage.getItem(`last_used_session_${error.config?.data?.OutletId}`));
+                }
+            }
+            
             this.handleError(error);
             throw error;
         }
@@ -291,17 +352,17 @@ class ReservationService {
             if (isChangingCriticalFields) {
                 console.log("Critical fields are changing - including holdId and sessionId");
                 payload = {
-                    partySize: Number(reservationData.partySize),
-                    reservationDate: reservationData.reservationDate,
-                    specialRequests: reservationData.specialRequests || "",
-                    holdId: reservationData.holdId,
-                    sessionId: reservationData.sessionId
+                    PartySize: Number(reservationData.partySize),
+                    ReservationDate: reservationData.reservationDate,
+                    SpecialRequests: reservationData.specialRequests || "",
+                    HoldId: reservationData.holdId,
+                    SessionId: reservationData.sessionId
                 };
             } else {
                 // For non-critical updates, only include the fields that can be updated without a hold
                 console.log("Only updating non-critical fields");
                 payload = {
-                    specialRequests: reservationData.specialRequests || ""
+                    SpecialRequests: reservationData.specialRequests || ""
                 };
             }
             
@@ -341,7 +402,7 @@ class ReservationService {
         try {
             // Create a proper cancelReservationDto object
             const cancelReservationDto = {
-                reason: reason
+                Reason: reason
             };
             
             const response = await api.put(`${API_BASE_URL}/${reservationId}/cancel`, cancelReservationDto);
