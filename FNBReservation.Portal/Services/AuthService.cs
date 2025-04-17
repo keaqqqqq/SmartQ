@@ -114,7 +114,8 @@ namespace FNBReservation.Portal.Services
                                     userUsername, 
                                     userRole,
                                     null,  // Access token is in HTTP-only cookie
-                                    null); // Refresh token is in HTTP-only cookie
+                                    null, // Refresh token is in HTTP-only cookie
+                                    apiResponse.OutletId); // Pass outletId for staff users
                                 
                                 await _jsRuntime.InvokeVoidAsync("console.log", "Authentication state updated for: " + userUsername);
                             }
@@ -123,7 +124,8 @@ namespace FNBReservation.Portal.Services
                             {
                                 Success = true,
                                 Username = userUsername,
-                                Role = userRole
+                                Role = userRole,
+                                OutletId = apiResponse.OutletId
                             };
                         }
                     }
@@ -322,11 +324,13 @@ namespace FNBReservation.Portal.Services
     // Class that matches the actual API response structure
     public class ApiLoginResponse
     {
+        public bool Success { get; set; }
         public string AccessToken { get; set; }
         public string RefreshToken { get; set; }
         public int ExpiresIn { get; set; }
         public string Role { get; set; }
         public string Username { get; set; }
+        public string OutletId { get; set; }
     }
 
     public class LoginResult
@@ -335,6 +339,7 @@ namespace FNBReservation.Portal.Services
         public string ErrorMessage { get; set; }
         public string Role { get; set; }
         public string Username { get; set; }
+        public string OutletId { get; set; }
     }
 
     public class ResetPasswordResult

@@ -231,7 +231,7 @@ namespace FNBReservation.Portal.Services
             
             try
             {
-                var reservations = JsonSerializer.Deserialize<List<ApiReservation>>(content, _jsonOptions);
+                var reservations = JsonSerializer.Deserialize<List<InternalApiReservation>>(content, _jsonOptions);
                 if (reservations != null && reservations.Any())
                 {
                     // Create a new detailed customer with the reservations
@@ -423,8 +423,9 @@ namespace FNBReservation.Portal.Services
             {
                 dto.BanReason = apiCustomer.BanInfo.Reason;
                 dto.BannedDate = apiCustomer.BanInfo.BannedAt;
-                dto.BannedBy = "Admin"; // Always use "Admin" regardless of what comes from the API
+                dto.BannedBy = apiCustomer.BanInfo.BannedByName; // Use the actual name from the API
                 dto.BanExpiryDate = apiCustomer.BanInfo.EndsAt;
+                dto.IsBanned = true; // If BanInfo exists, customer is banned
             }
             
             // Map reservation history if available for detailed customer
@@ -440,6 +441,19 @@ namespace FNBReservation.Portal.Services
                     Status = r.Status,
                     Notes = r.SpecialRequests
                 }).ToList();
+            }
+
+            // Log mapping summary (will be called after initialization, so safe to use JSInterop)
+            try
+            {
+                if (_isInitialized)
+                {
+                    _ = LogToConsoleAsync("log", $"Mapped customer: {dto.Name}, IsBanned: {dto.IsBanned}, Reason: {dto.BanReason ?? "N/A"}");
+                }
+            }
+            catch 
+            {
+                // Ignore JS interop errors
             }
             
             return dto;
@@ -473,10 +487,10 @@ namespace FNBReservation.Portal.Services
         
         private class ApiCustomerDetail : ApiCustomer
         {
-            public List<ApiReservation> ReservationHistory { get; set; } = new List<ApiReservation>();
+            public List<InternalApiReservation> ReservationHistory { get; set; } = new List<InternalApiReservation>();
         }
         
-        private class ApiReservation
+        private class InternalApiReservation
         {
             public Guid ReservationId { get; set; }
             public string ReservationCode { get; set; } = string.Empty;
@@ -505,6 +519,690 @@ namespace FNBReservation.Portal.Services
             public Guid CustomerId { get; set; }
             public string Reason { get; set; } = string.Empty;
             public int DurationDays { get; set; } // 0 means permanent
+        }
+
+        // Staff-specific methods for customer management
+        public async Task<List<CustomerDto>> GetOutletCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            try
+            {
+                await LogToConsoleAsync("log", $"Getting customers for outlet {outletId} with search term: {searchTerm}");
+                
+                string url = $"{_baseUrl}/api/v1/outlets/{outletId}/customers";
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    url += $"?searchTerm={Uri.EscapeDataString(searchTerm)}";
+                }
+                
+                await LogToConsoleAsync("log", $"Calling API URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                await LogToConsoleAsync("log", $"Response status code: {(int)response.StatusCode} ({response.StatusCode})");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync("error", $"API error response: {errorContent}");
+                    return new List<CustomerDto>();
+                }
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                await LogToConsoleAsync("log", $"Outlet customers response received with length: {responseContent.Length}");
+                
+                // Try different approaches to parse the response
+                List<CustomerDto> customers = new List<CustomerDto>();
+                
+                try
+                {
+                    // First, try to parse as ApiResponse (the expected format)
+                    var customerListResponse = JsonSerializer.Deserialize<ApiResponse>(responseContent, _jsonOptions);
+                    if (customerListResponse?.Customers != null)
+                    {
+                        customers = customerListResponse.Customers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as ApiResponse with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as ApiResponse: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as a direct array of ApiCustomer
+                    var apiCustomers = JsonSerializer.Deserialize<List<ApiCustomer>>(responseContent, _jsonOptions);
+                    if (apiCustomers != null)
+                    {
+                        customers = apiCustomers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as List<ApiCustomer> with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as List<ApiCustomer>: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as a custom format - checking for common property names
+                    using (var jsonDoc = JsonDocument.Parse(responseContent))
+                    {
+                        var root = jsonDoc.RootElement;
+                        
+                        if (root.ValueKind == JsonValueKind.Object)
+                        {
+                            // Check for common property names in APIs
+                            foreach (string propertyName in new[] { "data", "customers", "items", "results" })
+                            {
+                                if (root.TryGetProperty(propertyName, out var customersElement) && 
+                                    customersElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    var customersArray = customersElement.GetRawText();
+                                    var customersFromProperty = JsonSerializer.Deserialize<List<ApiCustomer>>(customersArray, _jsonOptions);
+                                    
+                                    if (customersFromProperty != null)
+                                    {
+                                        customers = customersFromProperty.Select(MapApiCustomerToDto).ToList();
+                                        await LogToConsoleAsync("log", $"Successfully parsed response from '{propertyName}' property with {customers.Count} customers");
+                                        return customers;
+                                    }
+                                }
+                            }
+                        }
+                        else if (root.ValueKind == JsonValueKind.Array)
+                        {
+                            // The root itself is an array in a different format than ApiCustomer
+                            // Try to map manually
+                            var customersList = new List<CustomerDto>();
+                            
+                            foreach (var element in root.EnumerateArray())
+                            {
+                                try
+                                {
+                                    var customer = new CustomerDto
+                                    {
+                                        CustomerId = GetStringProperty(element, "id", "customerId", "customer_id"),
+                                        Name = GetStringProperty(element, "name", "customerName", "customer_name"),
+                                        PhoneNumber = GetStringProperty(element, "phone", "phoneNumber", "phone_number"),
+                                        Email = GetStringProperty(element, "email"),
+                                        IsBanned = GetStringProperty(element, "status")?.ToLower() == "banned",
+                                        TotalReservations = GetIntProperty(element, "totalReservations", "total_reservations", "reservationCount"),
+                                        NoShows = GetIntProperty(element, "noShows", "no_shows", "noShowCount"),
+                                        LastVisit = GetDateTimeProperty(element, "lastVisit", "last_visit"),
+                                        FirstVisit = GetDateTimeProperty(element, "firstVisit", "first_visit")
+                                    };
+                                    
+                                    // Check for ban info
+                                    if (element.TryGetProperty("banInfo", out var banInfo) || 
+                                        element.TryGetProperty("ban", out banInfo) ||
+                                        element.TryGetProperty("banDetails", out banInfo))
+                                    {
+                                        customer.BanReason = GetStringProperty(banInfo, "reason", "banReason");
+                                        customer.BannedDate = GetDateTimeProperty(banInfo, "bannedAt", "bannedDate");
+                                        customer.BannedBy = GetStringProperty(banInfo, "bannedBy", "bannedByName");
+                                        customer.BanExpiryDate = GetDateTimeProperty(banInfo, "endsAt", "expiryDate");
+                                    }
+                                    
+                                    customersList.Add(customer);
+                                }
+                                catch
+                                {
+                                    // Skip elements that can't be mapped
+                                    continue;
+                                }
+                            }
+                            
+                            if (customersList.Any())
+                            {
+                                await LogToConsoleAsync("log", $"Successfully parsed {customersList.Count} customers from custom array format");
+                                return customersList;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse with JsonDocument: {ex.Message}");
+                }
+                
+                // If all parsing attempts fail, log and return empty list
+                await LogToConsoleAsync("error", "Could not parse outlet customers response in any recognized format");
+                return new List<CustomerDto>();
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error getting outlet customers: {ex.Message}");
+                _logger.LogError(ex, "Error getting customers for outlet {OutletId}", outletId);
+                return new List<CustomerDto>();
+            }
+        }
+
+        public async Task<List<CustomerDto>> GetOutletActiveCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            try
+            {
+                await LogToConsoleAsync("log", $"Getting active customers for outlet {outletId}");
+                
+                string url = $"{_baseUrl}/api/v1/outlets/{outletId}/customers/active";
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    url += $"?searchTerm={Uri.EscapeDataString(searchTerm)}";
+                }
+                
+                await LogToConsoleAsync("log", $"Calling API URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync("error", $"API error response: {errorContent}");
+                    return new List<CustomerDto>();
+                }
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                await LogToConsoleAsync("log", $"Raw active customers response: {responseContent}");
+                
+                // Try different approaches to parse the response
+                List<CustomerDto> customers = new List<CustomerDto>();
+                
+                try
+                {
+                    // First, try to parse as ApiResponse (the expected format)
+                    var customerListResponse = JsonSerializer.Deserialize<ApiResponse>(responseContent, _jsonOptions);
+                    if (customerListResponse?.Customers != null)
+                    {
+                        customers = customerListResponse.Customers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as ApiResponse with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as ApiResponse: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as a direct array of ApiCustomer
+                    var apiCustomers = JsonSerializer.Deserialize<List<ApiCustomer>>(responseContent, _jsonOptions);
+                    if (apiCustomers != null)
+                    {
+                        customers = apiCustomers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as List<ApiCustomer> with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as List<ApiCustomer>: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as a custom format - checking for common property names
+                    using (var jsonDoc = JsonDocument.Parse(responseContent))
+                    {
+                        var root = jsonDoc.RootElement;
+                        
+                        if (root.ValueKind == JsonValueKind.Object)
+                        {
+                            // Check for common property names in APIs
+                            foreach (string propertyName in new[] { "data", "customers", "items", "results", "activeCustomers" })
+                            {
+                                if (root.TryGetProperty(propertyName, out var customersElement) && 
+                                    customersElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    var customersArray = customersElement.GetRawText();
+                                    var customersFromProperty = JsonSerializer.Deserialize<List<ApiCustomer>>(customersArray, _jsonOptions);
+                                    
+                                    if (customersFromProperty != null)
+                                    {
+                                        customers = customersFromProperty.Select(MapApiCustomerToDto).ToList();
+                                        await LogToConsoleAsync("log", $"Successfully parsed response from '{propertyName}' property with {customers.Count} customers");
+                                        return customers;
+                                    }
+                                }
+                            }
+                        }
+                        else if (root.ValueKind == JsonValueKind.Array)
+                        {
+                            // The root itself is an array in a different format than ApiCustomer
+                            // Try to map manually
+                            var customersList = new List<CustomerDto>();
+                            
+                            foreach (var element in root.EnumerateArray())
+                            {
+                                try
+                                {
+                                    var customer = new CustomerDto
+                                    {
+                                        CustomerId = GetStringProperty(element, "id", "customerId", "customer_id"),
+                                        Name = GetStringProperty(element, "name", "customerName", "customer_name"),
+                                        PhoneNumber = GetStringProperty(element, "phone", "phoneNumber", "phone_number"),
+                                        Email = GetStringProperty(element, "email"),
+                                        IsBanned = false, // Since this is the active customers endpoint
+                                        TotalReservations = GetIntProperty(element, "totalReservations", "total_reservations", "reservationCount"),
+                                        NoShows = GetIntProperty(element, "noShows", "no_shows", "noShowCount"),
+                                        LastVisit = GetDateTimeProperty(element, "lastVisit", "last_visit"),
+                                        FirstVisit = GetDateTimeProperty(element, "firstVisit", "first_visit")
+                                    };
+                                    
+                                    customersList.Add(customer);
+                                }
+                                catch
+                                {
+                                    // Skip elements that can't be mapped
+                                    continue;
+                                }
+                            }
+                            
+                            if (customersList.Any())
+                            {
+                                await LogToConsoleAsync("log", $"Successfully parsed {customersList.Count} customers from custom array format");
+                                return customersList;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse with JsonDocument: {ex.Message}");
+                }
+                
+                // If all parsing attempts fail, log and return empty list
+                await LogToConsoleAsync("error", "Could not parse active customers response in any recognized format");
+                return new List<CustomerDto>();
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error getting active outlet customers: {ex.Message}");
+                _logger.LogError(ex, "Error getting active customers for outlet {OutletId}", outletId);
+                return new List<CustomerDto>();
+            }
+        }
+
+        public async Task<List<CustomerDto>> GetOutletBannedCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            try
+            {
+                await LogToConsoleAsync("log", $"Getting banned customers for outlet {outletId}");
+                
+                string url = $"{_baseUrl}/api/v1/outlets/{outletId}/customers/banned";
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    url += $"?searchTerm={Uri.EscapeDataString(searchTerm)}";
+                }
+                
+                await LogToConsoleAsync("log", $"Calling API URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync("error", $"API error response: {errorContent}");
+                    return new List<CustomerDto>();
+                }
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                await LogToConsoleAsync("log", $"Raw banned customers response: {responseContent}");
+                
+                // First, log the exact raw JSON to see the structure
+                await LogToConsoleAsync("log", $"Raw banned customers response exact structure:");
+                using (var doc = JsonDocument.Parse(responseContent))
+                {
+                    await LogToConsoleAsync("log", JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                
+                try
+                {
+                    // Try to parse as a direct array of BannedCustomerApiResponse
+                    var bannedCustomers = JsonSerializer.Deserialize<List<BannedCustomerApiResponse>>(responseContent, _jsonOptions);
+                    if (bannedCustomers != null && bannedCustomers.Any())
+                    {
+                        var customersList = new List<CustomerDto>();
+                        foreach (var item in bannedCustomers)
+                        {
+                            var customer = new CustomerDto
+                            {
+                                CustomerId = item.CustomerId,
+                                Name = item.Name,
+                                PhoneNumber = item.Phone,
+                                IsBanned = true,
+                                BanReason = item.Reason,
+                                BannedDate = item.BannedAt,
+                                BannedBy = item.BannedByName,
+                                BanExpiryDate = item.EndsAt
+                            };
+                            
+                            await LogToConsoleAsync("log", $"Mapped banned customer: {customer.Name}, ID: {customer.CustomerId}, IsBanned: {customer.IsBanned}, Reason: {customer.BanReason}, BannedDate: {customer.BannedDate}, BannedBy: {customer.BannedBy}");
+                            customersList.Add(customer);
+                        }
+                        
+                        await LogToConsoleAsync("log", $"Successfully parsed {customersList.Count} banned customers with direct mapping");
+                        return customersList;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as List<BannedCustomerApiResponse>: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as ApiResponse (the expected format)
+                    var customerListResponse = JsonSerializer.Deserialize<ApiResponse>(responseContent, _jsonOptions);
+                    if (customerListResponse?.Customers != null)
+                    {
+                        var customers = customerListResponse.Customers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as ApiResponse with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as ApiResponse: {ex.Message}");
+                }
+                
+                try
+                {
+                    // Try to parse as a direct array of ApiCustomer
+                    var apiCustomers = JsonSerializer.Deserialize<List<ApiCustomer>>(responseContent, _jsonOptions);
+                    if (apiCustomers != null)
+                    {
+                        var customers = apiCustomers.Select(MapApiCustomerToDto).ToList();
+                        await LogToConsoleAsync("log", $"Successfully parsed response as List<ApiCustomer> with {customers.Count} customers");
+                        return customers;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as List<ApiCustomer>: {ex.Message}");
+                }
+                
+                try
+                {
+                    // As a last resort, try to parse with JsonDocument and manual mapping
+                    using (var jsonDoc = JsonDocument.Parse(responseContent))
+                    {
+                        var root = jsonDoc.RootElement;
+                        
+                        if (root.ValueKind == JsonValueKind.Object)
+                        {
+                            // Check for common property names in APIs
+                            foreach (string propertyName in new[] { "data", "customers", "items", "results", "bannedCustomers" })
+                            {
+                                if (root.TryGetProperty(propertyName, out var customersElement) && 
+                                    customersElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    var customersList = new List<CustomerDto>();
+                                    
+                                    foreach (var element in customersElement.EnumerateArray())
+                                    {
+                                        try
+                                        {
+                                            var customer = ParseCustomerFromJsonElement(element, true);
+                                            if (customer != null)
+                                            {
+                                                customersList.Add(customer);
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            // Skip elements that can't be mapped
+                                            continue;
+                                        }
+                                    }
+                                    
+                                    if (customersList.Any())
+                                    {
+                                        await LogToConsoleAsync("log", $"Successfully parsed {customersList.Count} customers from '{propertyName}' property");
+                                        return customersList;
+                                    }
+                                }
+                            }
+                        }
+                        else if (root.ValueKind == JsonValueKind.Array)
+                        {
+                            // The root itself is an array but doesn't match our custom models
+                            var customersList = new List<CustomerDto>();
+                            
+                            foreach (var element in root.EnumerateArray())
+                            {
+                                try
+                                {
+                                    var customer = ParseCustomerFromJsonElement(element, true);
+                                    if (customer != null)
+                                    {
+                                        customersList.Add(customer);
+                                    }
+                                }
+                                catch
+                                {
+                                    // Skip elements that can't be mapped
+                                    continue;
+                                }
+                            }
+                            
+                            if (customersList.Any())
+                            {
+                                await LogToConsoleAsync("log", $"Successfully parsed {customersList.Count} customers from array with fallback mapping");
+                                return customersList;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse with JsonDocument: {ex.Message}");
+                }
+                
+                // If all parsing attempts fail, log and return empty list
+                await LogToConsoleAsync("error", "Could not parse banned customers response in any recognized format");
+                return new List<CustomerDto>();
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error getting banned outlet customers: {ex.Message}");
+                _logger.LogError(ex, "Error getting banned customers for outlet {OutletId}", outletId);
+                return new List<CustomerDto>();
+            }
+        }
+
+        // Helper method to parse a customer from a JsonElement
+        private CustomerDto? ParseCustomerFromJsonElement(JsonElement element, bool isBanned)
+        {
+            try
+            {
+                var customer = new CustomerDto
+                {
+                    CustomerId = GetStringProperty(element, "id", "customerId", "customer_id"),
+                    Name = GetStringProperty(element, "name", "customerName", "customer_name"),
+                    PhoneNumber = GetStringProperty(element, "phone", "phoneNumber", "phone_number"),
+                    Email = GetStringProperty(element, "email"),
+                    IsBanned = isBanned,
+                    BanReason = GetStringProperty(element, "reason", "banReason", "ban_reason"),
+                    BannedDate = GetDateTimeProperty(element, "bannedAt", "bannedDate", "banned_at", "banned_date"),
+                    BannedBy = GetStringProperty(element, "bannedBy", "bannedByName", "banned_by", "banned_by_name"),
+                    BanExpiryDate = GetDateTimeProperty(element, "endsAt", "expiryDate", "expiry_date", "ends_at"),
+                    TotalReservations = GetIntProperty(element, "totalReservations", "total_reservations", "reservationCount"),
+                    NoShows = GetIntProperty(element, "noShows", "no_shows", "noShowCount")
+                };
+                
+                // Log the parsing result
+                LogToConsoleAsync("log", $"Parsed customer from JsonElement: {customer.Name}, ID: {customer.CustomerId}, IsBanned: {customer.IsBanned}").GetAwaiter().GetResult();
+                
+                return customer;
+            }
+            catch (Exception ex)
+            {
+                LogToConsoleAsync("warning", $"Error parsing customer from JsonElement: {ex.Message}").GetAwaiter().GetResult();
+                return null;
+            }
+        }
+
+        // Helper methods for parsing JSON
+        private string GetStringProperty(JsonElement element, params string[] possibleNames)
+        {
+            foreach (var name in possibleNames)
+            {
+                if (element.TryGetProperty(name, out var prop) && 
+                    prop.ValueKind == JsonValueKind.String)
+                {
+                    return prop.GetString() ?? string.Empty;
+                }
+            }
+            return string.Empty;
+        }
+
+        private DateTime? GetDateTimeProperty(JsonElement element, params string[] possibleNames)
+        {
+            foreach (var name in possibleNames)
+            {
+                if (element.TryGetProperty(name, out var prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.String && 
+                        DateTime.TryParse(prop.GetString(), out var date))
+                    {
+                        return date;
+                    }
+                    else if (prop.TryGetDateTime(out var dt))
+                    {
+                        return dt;
+                    }
+                }
+            }
+            return null;
+        }
+
+        private int GetIntProperty(JsonElement element, params string[] possibleNames)
+        {
+            foreach (var name in possibleNames)
+            {
+                if (element.TryGetProperty(name, out var prop) && 
+                    prop.TryGetInt32(out var value))
+                {
+                    return value;
+                }
+            }
+            return 0;
+        }
+
+        public async Task<CustomerDto?> GetOutletCustomerByIdAsync(string outletId, string customerId)
+        {
+            try
+            {
+                await LogToConsoleAsync("log", $"Getting customer {customerId} for outlet {outletId}");
+                
+                string url = $"{_baseUrl}/api/v1/outlets/{outletId}/customers/{customerId}";
+                await LogToConsoleAsync("log", $"Calling API URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    await LogToConsoleAsync("log", "Customer not found in outlet");
+                    return null;
+                }
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync("error", $"API error response: {errorContent}");
+                    return null;
+                }
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                
+                // First, try to deserialize as a detailed customer (with reservation history)
+                var detailedCustomer = JsonSerializer.Deserialize<ApiCustomerDetail>(responseContent, _jsonOptions);
+                
+                if (detailedCustomer != null)
+                {
+                    return MapApiCustomerToDto(detailedCustomer);
+                }
+                
+                // If that fails, try to deserialize as a regular customer
+                var apiCustomer = JsonSerializer.Deserialize<ApiCustomer>(responseContent, _jsonOptions);
+                
+                if (apiCustomer == null)
+                {
+                    return null;
+                }
+                
+                return MapApiCustomerToDto(apiCustomer);
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error getting outlet customer: {ex.Message}");
+                _logger.LogError(ex, "Error getting customer {CustomerId} for outlet {OutletId}", customerId, outletId);
+                return null;
+            }
+        }
+
+        public async Task<List<ApiReservation>> GetOutletCustomerReservationsAsync(string outletId, string customerId)
+        {
+            try
+            {
+                await LogToConsoleAsync("log", $"Getting reservations for customer {customerId} in outlet {outletId}");
+                
+                string url = $"{_baseUrl}/api/v1/outlets/{outletId}/customers/{customerId}/reservations";
+                await LogToConsoleAsync("log", $"Calling API URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync("error", $"API error response: {errorContent}");
+                    return new List<ApiReservation>();
+                }
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var internalReservations = JsonSerializer.Deserialize<List<InternalApiReservation>>(responseContent, _jsonOptions);
+                
+                if (internalReservations == null)
+                {
+                    return new List<ApiReservation>();
+                }
+                
+                // Convert internal reservation model to public ApiReservation
+                var reservations = internalReservations.Select(r => new ApiReservation
+                {
+                    ReservationId = r.ReservationId,
+                    ReservationCode = r.ReservationCode,
+                    Date = r.Date,
+                    OutletId = r.OutletId,
+                    OutletName = r.OutletName,
+                    PartySize = r.PartySize,
+                    Status = r.Status,
+                    SpecialRequests = r.SpecialRequests
+                }).ToList();
+                
+                return reservations;
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error getting outlet customer reservations: {ex.Message}");
+                _logger.LogError(ex, "Error getting reservations for customer {CustomerId} in outlet {OutletId}", customerId, outletId);
+                return new List<ApiReservation>();
+            }
+        }
+
+        // Class to match the exact format of the banned customers API response
+        private class BannedCustomerApiResponse
+        {
+            public string CustomerId { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public string Phone { get; set; } = string.Empty;
+            public string Reason { get; set; } = string.Empty;
+            public DateTime BannedAt { get; set; }
+            public int DurationDays { get; set; }
+            public DateTime? EndsAt { get; set; }
+            public string BannedByName { get; set; } = string.Empty;
         }
     }
 } 

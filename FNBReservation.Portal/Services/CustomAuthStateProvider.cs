@@ -46,6 +46,11 @@ namespace FNBReservation.Portal.Services
                                     claims.Add(new Claim(ClaimTypes.NameIdentifier, userInfo.UserId));
                                 }
 
+                                if (!string.IsNullOrEmpty(userInfo.OutletId))
+                                {
+                                    claims.Add(new Claim("OutletId", userInfo.OutletId));
+                                }
+
                                 var identity = new ClaimsIdentity(claims, "FNBReservation");
                                 var user = new ClaimsPrincipal(identity);
                                 
@@ -84,6 +89,11 @@ namespace FNBReservation.Portal.Services
                             new Claim(ClaimTypes.Name, authData.Username),
                             new Claim(ClaimTypes.Role, authData.Role)
                         };
+                        
+                        if (!string.IsNullOrEmpty(authData.OutletId))
+                        {
+                            claims.Add(new Claim("OutletId", authData.OutletId));
+                        }
                         
                         var identity = new ClaimsIdentity(claims, "FNBReservation");
                         var user = new ClaimsPrincipal(identity);
@@ -137,6 +147,11 @@ namespace FNBReservation.Portal.Services
                                     userClaims.Add(new Claim(ClaimTypes.NameIdentifier, userInfo.UserId));
                                 }
 
+                                if (!string.IsNullOrEmpty(userInfo.OutletId))
+                                {
+                                    userClaims.Add(new Claim("OutletId", userInfo.OutletId));
+                                }
+
                                 var userIdentity = new ClaimsIdentity(userClaims, "FNBReservation");
                                 var userPrincipal = new ClaimsPrincipal(userIdentity);
                                 
@@ -183,6 +198,11 @@ namespace FNBReservation.Portal.Services
                         new Claim(ClaimTypes.Role, authData.Role)
                     };
 
+                    if (!string.IsNullOrEmpty(authData.OutletId))
+                    {
+                        claims.Add(new Claim("OutletId", authData.OutletId));
+                    }
+
                     var identity = new ClaimsIdentity(claims, "FNBReservation");
                     var user = new ClaimsPrincipal(identity);
                     
@@ -204,7 +224,7 @@ namespace FNBReservation.Portal.Services
             }
         }
 
-        public void NotifyUserAuthentication(string username, string role, string accessToken = null, string refreshToken = null)
+        public void NotifyUserAuthentication(string username, string role, string accessToken = null, string refreshToken = null, string outletId = null)
         {
             try
             {
@@ -213,7 +233,8 @@ namespace FNBReservation.Portal.Services
                 var authData = new AuthData 
                 { 
                     Username = username, 
-                    Role = role
+                    Role = role,
+                    OutletId = outletId
                     // No need to store tokens here anymore
                 };
                 var serializedData = JsonSerializer.Serialize(authData);
@@ -229,12 +250,19 @@ namespace FNBReservation.Portal.Services
                 }
                 
                 // Create and update the claims identity
-                var identity = new ClaimsIdentity(new[]
+                var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, username),
                     new Claim(ClaimTypes.Role, role)
-                }, "FNBReservation");
+                };
                 
+                // Add outletId claim if available (for staff users)
+                if (!string.IsNullOrEmpty(outletId))
+                {
+                    claims.Add(new Claim("OutletId", outletId));
+                }
+                
+                var identity = new ClaimsIdentity(claims, "FNBReservation");
                 var user = new ClaimsPrincipal(identity);
                 
                 // Notify the auth state changed
@@ -297,5 +325,6 @@ namespace FNBReservation.Portal.Services
         public string Role { get; set; }
         public string AccessToken { get; set; }
         public string RefreshToken { get; set; }
+        public string OutletId { get; set; }
     }
 }

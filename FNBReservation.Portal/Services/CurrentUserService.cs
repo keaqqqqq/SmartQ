@@ -68,5 +68,55 @@ namespace FNBReservation.Portal.Services
                 return "Admin"; // Default fallback value
             }
         }
+
+        public async Task<string> GetCurrentRoleAsync()
+        {
+            try
+            {
+                var authState = await _authStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var roleClaim = user.FindFirst(ClaimTypes.Role);
+                    if (roleClaim != null && !string.IsNullOrEmpty(roleClaim.Value))
+                    {
+                        return roleClaim.Value;
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting current user role");
+                return null;
+            }
+        }
+        
+        public async Task<string> GetCurrentOutletIdAsync()
+        {
+            try
+            {
+                var authState = await _authStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var outletIdClaim = user.FindFirst("OutletId");
+                    if (outletIdClaim != null && !string.IsNullOrEmpty(outletIdClaim.Value))
+                    {
+                        return outletIdClaim.Value;
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting current user outlet ID");
+                return null;
+            }
+        }
     }
 } 

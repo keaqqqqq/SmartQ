@@ -57,9 +57,12 @@ namespace FNBReservation.Portal.Services
                         
                         if (refreshResult.Success)
                         {
-                            // Update with the new token
+                            // Update with the new token - get it from cookies via TokenService
+                            var newToken = await _jwtTokenService.GetAccessTokenAsync();
+                            
+                            // Remove existing Authorization header
                             _httpClient.DefaultRequestHeaders.Remove("Authorization");
-                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", refreshResult.AccessToken);
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", newToken);
                             await _jsRuntime.InvokeVoidAsync("console.log", "Authorization header updated with refreshed token");
                         }
                         else

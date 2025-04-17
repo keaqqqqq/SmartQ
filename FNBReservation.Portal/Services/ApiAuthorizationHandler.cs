@@ -49,8 +49,11 @@ namespace FNBReservation.Portal.Services
                         // Clone the original request
                         var newRequest = CloneHttpRequestMessage(request);
                         
+                        // Get the new token from cookies via TokenService
+                        var newToken = await _tokenService.GetAccessTokenAsync();
+                        
                         // Update the Authorization header with the new token
-                        newRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshResult.AccessToken);
+                        newRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
                         
                         // Retry the request
                         return await base.SendAsync(newRequest, cancellationToken);

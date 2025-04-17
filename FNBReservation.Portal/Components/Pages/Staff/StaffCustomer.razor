@@ -14,37 +14,37 @@
 <PageTitle>Customer Management - F&B Reservation System</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge">
-    <MudText Typo="Typo.h4" Class="mb-4">Customer Management</MudText>
+    <MudText Typo="Typo.h4" Class="mb-4">Outlet Customer Management</MudText>
 
     <MudCard>
-        <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pa-0" @bind-ActivePanelIndex="activeTabIndex">
+        <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pa-0" @bind-ActivePanelIndex="ViewModel.ActiveTabIndex">
             <MudTabPanel Icon="@Icons.Material.Filled.People" Text="ALL CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
                         <!-- Enhanced search UI -->
                         <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
                             <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..."
-                                          Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                            <MudTextField @bind-Value="ViewModel.SearchTerm" Placeholder="Search by name, phone, email..."
+                                          Immediate="true" OnDebounceIntervalElapsed="ViewModel.SearchCustomersAsync" DebounceInterval="300"
                                           DisableUnderLine="true" Variant="Variant.Text"
-                                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                          Clearable="true" OnClearButtonClick="ViewModel.ClearSearchAsync" Style="min-width: 300px;"
                                           Class="my-0 py-0"
-                                          OnKeyDown="@SearchOnEnter" />
+                                          OnKeyDown="@ViewModel.SearchOnEnterAsync" />
                             <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default"
-                                           OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                           OnClick="ViewModel.ClearSearchAsync" Size="Size.Small" Title="Clear search"
                                            Class="ml-1" />
                         </MudPaper>
 
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        @if (!string.IsNullOrWhiteSpace(ViewModel.SearchTerm))
                         {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ViewModel.ClearSearchAsync" T="string">
+                                @($"Search: {ViewModel.SearchTerm}")
                             </MudChip>
                         }
                     </div>
 
-                    <MudTable Items="@GetAllCustomers()" Hover="true" Breakpoint="Breakpoint.Sm"
-                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                    <MudTable Items="@ViewModel.AllCustomers" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@ViewModel.IsLoading" LoadingProgressColor="Color.Primary"
                               T="CustomerDto" Class="mb-4" Dense="true">
                         <HeaderContent>
                             <MudTh>Customer</MudTh>
@@ -113,27 +113,27 @@
                         <!-- Enhanced search UI -->
                         <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
                             <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..."
-                                          Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                            <MudTextField @bind-Value="ViewModel.SearchTerm" Placeholder="Search by name, phone, email..."
+                                          Immediate="true" OnDebounceIntervalElapsed="ViewModel.SearchCustomersAsync" DebounceInterval="300"
                                           DisableUnderLine="true" Variant="Variant.Text"
-                                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                          Clearable="true" OnClearButtonClick="ViewModel.ClearSearchAsync" Style="min-width: 300px;"
                                           Class="my-0 py-0"
-                                          OnKeyDown="@SearchOnEnter" />
+                                          OnKeyDown="@ViewModel.SearchOnEnterAsync" />
                             <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default"
-                                           OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                           OnClick="ViewModel.ClearSearchAsync" Size="Size.Small" Title="Clear search"
                                            Class="ml-1" />
                         </MudPaper>
 
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        @if (!string.IsNullOrWhiteSpace(ViewModel.SearchTerm))
                         {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ViewModel.ClearSearchAsync" T="string">
+                                @($"Search: {ViewModel.SearchTerm}")
                             </MudChip>
                         }
                     </div>
 
-                    <MudTable Items="@GetFilteredCustomers(false)" Hover="true" Breakpoint="Breakpoint.Sm"
-                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                    <MudTable Items="@ViewModel.ActiveCustomers" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@ViewModel.IsLoading" LoadingProgressColor="Color.Primary"
                               T="CustomerDto" Class="mb-4" Dense="true">
                         <HeaderContent>
                             <MudTh>Customer</MudTh>
@@ -192,27 +192,37 @@
                         <!-- Enhanced search UI -->
                         <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
                             <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..."
-                                          Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                            <MudTextField @bind-Value="ViewModel.SearchTerm" Placeholder="Search by name, phone, email..."
+                                          Immediate="true" OnDebounceIntervalElapsed="ViewModel.SearchCustomersAsync" DebounceInterval="300"
                                           DisableUnderLine="true" Variant="Variant.Text"
-                                          Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                          Clearable="true" OnClearButtonClick="ViewModel.ClearSearchAsync" Style="min-width: 300px;"
                                           Class="my-0 py-0"
-                                          OnKeyDown="@SearchOnEnter" />
+                                          OnKeyDown="@ViewModel.SearchOnEnterAsync" />
                             <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default"
-                                           OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                           OnClick="ViewModel.ClearSearchAsync" Size="Size.Small" Title="Clear search"
                                            Class="ml-1" />
                         </MudPaper>
 
-                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        @if (!string.IsNullOrWhiteSpace(ViewModel.SearchTerm))
                         {
-                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
-                                @($"Search: {SearchTerm}")
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ViewModel.ClearSearchAsync" T="string">
+                                @($"Search: {ViewModel.SearchTerm}")
                             </MudChip>
                         }
                     </div>
 
-                    <MudTable Items="@GetFilteredCustomers(true)" Hover="true" Breakpoint="Breakpoint.Sm"
-                              Loading="@isLoading" LoadingProgressColor="Color.Primary"
+                    <!-- Debug information -->
+                    @if (ViewModel.BannedCustomers.Count > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mb-2">Found @ViewModel.BannedCustomers.Count banned customers</MudText>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-2">No banned customers found in the data. Count: @ViewModel.BannedCustomers.Count</MudAlert>
+                    }
+
+                    <MudTable Items="@ViewModel.BannedCustomers" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Loading="@ViewModel.IsLoading" LoadingProgressColor="Color.Primary"
                               T="CustomerDto" Class="mb-4" Dense="true">
                         <HeaderContent>
                             <MudTh>Customer</MudTh>
@@ -263,6 +273,26 @@
                             <MudTablePager PageSizeOptions="new int[] { 5, 10, 25 }" />
                         </PagerContent>
                     </MudTable>
+
+                    <!-- Additional debug info -->
+                    @if (ViewModel.BannedCustomers.Count > 0)
+                    {
+                        <MudExpansionPanels Style="margin-bottom: 16px;">
+                            <MudExpansionPanel Text="Debug Information (Banned Customers Data)">
+                                <MudText Typo="Typo.body2">Count: @ViewModel.BannedCustomers.Count</MudText>
+                                @foreach (var customer in ViewModel.BannedCustomers)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.body2">Name: @customer.Name</MudText>
+                                    <MudText Typo="Typo.body2">ID: @customer.CustomerId</MudText>
+                                    <MudText Typo="Typo.body2">IsBanned: @customer.IsBanned</MudText>
+                                    <MudText Typo="Typo.body2">Reason: @(customer.BanReason ?? "N/A")</MudText>
+                                    <MudText Typo="Typo.body2">BannedDate: @(customer.BannedDate?.ToString() ?? "N/A")</MudText>
+                                    <MudText Typo="Typo.body2">BannedBy: @(customer.BannedBy ?? "N/A")</MudText>
+                                }
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
                 </MudCardContent>
             </MudTabPanel>
         </MudTabs>
@@ -270,209 +300,38 @@
 </MudContainer>
 
 @code {
-    private List<CustomerDto> customers = new();
-    private bool isLoading = true;
-    private string SearchTerm = "";
-    private int activeTabIndex = 0;
-    private bool _isInitialized = false;
-    private Exception _loadException = null;
-    private string _currentUsername = "Admin"; // Default fallback value
+    // Use the ViewModel to handle all logic
+    private StaffCustomerViewModel ViewModel { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadCustomers();
-
-        // Get the current username from the auth service
-        try
-        {
-            _currentUsername = await UserService.GetCurrentUsernameAsync();
-        }
-        catch
-        {
-            // Keep the default value if there's an error
-        }
+        // Initialize ViewModel with all required services
+        ViewModel = new StaffCustomerViewModel(
+            CustomerService,
+            UserService,
+            JSRuntime,
+            Snackbar,
+            DialogService
+        );
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            _isInitialized = true;
-
-            // Initialize the customer service for JS interop
-            if (CustomerService is HttpClientCustomerService httpClientService)
-            {
-                await httpClientService.InitializeAsync();
-            }
-
-            // Try to get username from localStorage
-            try
-            {
-                var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentUser");
-                if (!string.IsNullOrEmpty(username))
-                {
-                    _currentUsername = username;
-                }
-            }
-            catch (Exception ex)
-            {
-                await JSRuntime.InvokeVoidAsync("console.error", "Error getting username from localStorage:", ex.Message);
-            }
-
-            // Log any error that occurred during initialization
-            if (_loadException != null)
-            {
-                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", _loadException.Message, _loadException.StackTrace);
-            }
-        }
-    }
-
-    private async Task LoadCustomers()
-    {
-        try
-        {
-            isLoading = true;
+            await JSRuntime.InvokeVoidAsync("console.log", "StaffCustomer component initialized");
+            await ViewModel.InitializeAsync();
             StateHasChanged();
-
-            customers = await CustomerService.GetCustomersAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading customers: {ex.Message}", Severity.Error);
-
-            // Store the exception to log after rendering
-            _loadException = ex;
-
-            // Only log to console if we've already rendered
-            if (_isInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex.Message, ex.StackTrace);
-            }
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private List<CustomerDto> GetAllCustomers()
-    {
-        var filteredList = customers.ToList();
-
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            filteredList = filteredList
-                .Where(c =>
-                    c.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    c.PhoneNumber.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    c.Email?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true ||
-                    c.CustomerId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        return filteredList;
-    }
-
-    private List<CustomerDto> GetFilteredCustomers(bool showBanned)
-    {
-        var filteredList = customers.Where(c => c.IsBanned == showBanned).ToList();
-
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            filteredList = filteredList
-                .Where(c =>
-                    c.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    c.PhoneNumber.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    c.Email?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true ||
-                    c.CustomerId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        return filteredList;
-    }
-
-    private async Task SearchCustomers()
-    {
-        try
-        {
-            if (_isInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("console.log", $"Searching for customers with term: '{SearchTerm}'");
-            }
-
-            if (string.IsNullOrWhiteSpace(SearchTerm))
-            {
-                return;
-            }
-
-            var results = GetAllCustomers();
-            if (results.Count == 0)
-            {
-                Snackbar.Add($"No customers found matching '{SearchTerm}'", Severity.Info);
-            }
-            else
-            {
-                Snackbar.Add($"Found {results.Count} customers matching '{SearchTerm}'", Severity.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Search error: {ex.Message}", Severity.Error);
-
-            if (_isInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
-            }
-        }
-        finally
-        {
-            StateHasChanged();
-        }
-    }
-
-    private async Task ClearSearch()
-    {
-        SearchTerm = "";
-
-        if (_isInitialized)
-        {
-            await JSRuntime.InvokeVoidAsync("console.log", "Customer search cleared");
-        }
-
-        StateHasChanged();
-    }
-
-    private async Task SearchOnEnter(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            if (_isInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("console.log", "Customer search triggered by Enter key");
-            }
-
-            await SearchCustomers();
         }
     }
 
     private async Task OpenBanCustomerDialog(CustomerDto customer)
     {
-        // Refresh username in case it changed
-        try
-        {
-            _currentUsername = await UserService.GetCurrentUsernameAsync();
-        }
-        catch
-        {
-            // Keep the current value if there's an error
-        }
-
         var parameters = new DialogParameters
-            {
-                ["Customer"] = customer,
-                ["CurrentUser"] = _currentUsername
-            };
+        {
+            ["Customer"] = customer,
+            ["CurrentUser"] = ViewModel.CurrentUsername
+        };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
         var dialog = await DialogService.ShowAsync<BanCustomerDialog>("Ban Customer", parameters, options);
@@ -480,18 +339,18 @@
 
         if (!result.Canceled)
         {
-            await LoadCustomers();
+            await ViewModel.LoadCustomersAsync();
         }
     }
 
     private async Task UnbanCustomer(CustomerDto customer)
     {
         var parameters = new DialogParameters
-            {
-                ["ContentText"] = $"Are you sure you want to remove the ban for <b>{customer.Name}</b>? This will allow them to make reservations again.",
-                ["ButtonText"] = "Remove Ban",
-                ["Color"] = Color.Success
-            };
+        {
+            ["ContentText"] = $"Are you sure you want to remove the ban for <b>{customer.Name}</b>? This will allow them to make reservations again.",
+            ["ButtonText"] = "Remove Ban",
+            ["Color"] = Color.Success
+        };
 
         var options = new DialogOptions { CloseOnEscapeKey = true };
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Unban", parameters, options);
@@ -499,43 +358,24 @@
 
         if (!result.Canceled)
         {
-            try
-            {
-                var success = await CustomerService.UnbanCustomerAsync(customer.CustomerId);
-                if (success)
-                {
-                    Snackbar.Add($"Ban removed for customer {customer.Name}", Severity.Success);
-                    await LoadCustomers();
-                }
-                else
-                {
-                    Snackbar.Add("Failed to remove customer ban", Severity.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-            }
+            await ViewModel.UnbanCustomerAsync(customer.CustomerId);
         }
     }
 
     private async Task ViewCustomerDetails(CustomerDto customer)
     {
-        // Refresh username in case it changed
-        try
+        var customerDetails = await ViewModel.GetCustomerDetailsAsync(customer.CustomerId);
+        
+        if (customerDetails == null)
         {
-            _currentUsername = await UserService.GetCurrentUsernameAsync();
+            return;
         }
-        catch
-        {
-            // Keep the current value if there's an error
-        }
-
+        
         var parameters = new DialogParameters
-            {
-                ["CustomerId"] = customer.CustomerId,
-                ["CurrentUser"] = _currentUsername
-            };
+        {
+            ["CustomerId"] = customer.CustomerId,
+            ["CurrentUser"] = ViewModel.CurrentUsername
+        };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
         var dialog = await DialogService.ShowAsync<CustomerDetailsDialog>("Customer Details", parameters, options);
@@ -544,7 +384,7 @@
         // Refresh data after dialog is closed in case any changes were made
         if (!result.Canceled)
         {
-            await LoadCustomers();
+            await ViewModel.LoadCustomersAsync();
         }
     }
 }

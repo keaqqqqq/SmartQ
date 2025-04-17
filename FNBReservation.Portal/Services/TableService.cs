@@ -63,10 +63,15 @@ namespace FNBReservation.Portal.Services
                 if (!isTokenValid)
                 {
                     var refreshResult = await _jwtTokenService.RefreshTokenAsync();
-                    if (refreshResult != null && !string.IsNullOrEmpty(refreshResult.AccessToken))
+                    if (refreshResult != null && refreshResult.Success)
                     {
-                        _httpClient.DefaultRequestHeaders.Remove("Authorization");
-                        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", refreshResult.AccessToken);
+                        // After successful refresh, get the token again (it's in HTTP-only cookies now)
+                        token = await _jwtTokenService.GetAccessTokenAsync();
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            _httpClient.DefaultRequestHeaders.Remove("Authorization");
+                            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                        }
                     }
                 }
             }

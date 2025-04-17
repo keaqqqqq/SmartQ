@@ -207,12 +207,9 @@ namespace FNBReservation.Portal.Services
                 // We don't need to send it in the request body
                 
                 string fullUrl = $"{_baseUrl.TrimEnd('/')}/{_refreshTokenEndpoint}";
-                // Send empty content as refresh token is in cookies
-                var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
                 
-                // Make sure credentials are included (cookies)
+                // Create a request with an empty body since refresh token is in cookie
                 var request = new HttpRequestMessage(HttpMethod.Post, fullUrl);
-                request.Content = content;
                 // Add header to indicate credentials should be included
                 request.Headers.Add("X-Include-Credentials", "true");
                 
@@ -224,19 +221,21 @@ namespace FNBReservation.Portal.Services
                     var refreshResponse = JsonSerializer.Deserialize<ApiRefreshResponse>(responseContent, 
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                    if (refreshResponse != null)
+                    if (refreshResponse != null && refreshResponse.Success)
                     {
                         // No need to update storage - the backend sets cookies
-                        
+                        await _jsRuntime.InvokeVoidAsync("console.log", "Token refresh successful");
                         return new RefreshTokenResponse 
                         { 
                             Success = true, 
-                            AccessToken = null, // Not needed as we use HTTP-only cookies
-                            RefreshToken = null  // Not needed as we use HTTP-only cookies
+                            Username = refreshResponse.Username,
+                            Role = refreshResponse.Role,
+                            OutletId = refreshResponse.OutletId
                         };
                     }
                 }
 
+                await _jsRuntime.InvokeVoidAsync("console.log", "Token refresh failed");
                 return new RefreshTokenResponse { Success = false, ErrorMessage = "Failed to refresh token" };
             }
             catch (Exception ex)
@@ -273,6 +272,7 @@ namespace FNBReservation.Portal.Services
                                 {
                                     Username = tokenData.Username,
                                     Role = tokenData.Role,
+                                    OutletId = tokenData.OutletId
                                     // Other properties if available
                                 };
                             }
@@ -301,7 +301,8 @@ namespace FNBReservation.Portal.Services
                     Role = jwtToken.Claims.FirstOrDefault(c => c.Type == "role")?.Value 
                         ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value,
                     UserId = jwtToken.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value 
-                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value,
+                    OutletId = jwtToken.Claims.FirstOrDefault(c => c.Type == "OutletId")?.Value
                 };
 
                 return userInfo;
@@ -320,6 +321,7 @@ namespace FNBReservation.Portal.Services
         public string RefreshToken { get; set; }
         public string Username { get; set; }
         public string Role { get; set; }
+        public string OutletId { get; set; }
     }
 
     public class UserInfo
@@ -327,6 +329,7 @@ namespace FNBReservation.Portal.Services
         public string Username { get; set; }
         public string Role { get; set; }
         public string UserId { get; set; }
+        public string OutletId { get; set; }
     }
 
     public class ApiRefreshResponse
@@ -334,13 +337,18 @@ namespace FNBReservation.Portal.Services
         public string AccessToken { get; set; }
         public string RefreshToken { get; set; }
         public int ExpiresIn { get; set; }
+        public string Username { get; set; }
+        public string Role { get; set; }
+        public string OutletId { get; set; }
+        public bool Success { get; set; }
     }
 
     public class RefreshTokenResponse
     {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; }
-        public string AccessToken { get; set; }
-        public string RefreshToken { get; set; }
+        public string Username { get; set; }
+        public string Role { get; set; }
+        public string OutletId { get; set; }
     }
 } 
