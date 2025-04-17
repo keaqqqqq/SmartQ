@@ -109,7 +109,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             return (refreshToken, expiryTime);
         }
 
-        public async Task<TokenResult> RefreshTokenAsync(string refreshToken)
+        public async Task<TokenResult> RefreshTokenAsync(string refreshToken = null)
         {
             // If refresh token wasn't provided in the request body, try to get it from the cookie
             if (string.IsNullOrEmpty(refreshToken) && _httpContextAccessor.HttpContext != null)
@@ -173,7 +173,8 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 RefreshToken = newRefreshToken,
                 ExpiresIn = 900, // 15 minutes in seconds
                 Role = user.Role,
-                Username = user.Username
+                Username = user.Username,
+                OutletId = user.Role == "OutletStaff" ? user.OutletId : null
             };
         }
 
