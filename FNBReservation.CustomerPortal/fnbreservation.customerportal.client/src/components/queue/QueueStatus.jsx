@@ -209,28 +209,8 @@ const QueueStatus = () => {
             const queueData = await QueueService.getQueueStatusByCode(id);
             console.log('Refreshed queue data:', queueData);
             
-            // If we have queue data, also fetch wait time estimation
-            if (queueData && queueData.outletId && queueData.partySize) {
-                try {
-                    const waitTimeData = await QueueService.getQueueEstimation(
-                        queueData.outletId, 
-                        queueData.partySize
-                    );
-                    console.log('Refreshed wait time data:', waitTimeData);
-                    
-                    // Update queue data with wait time info
-                    if (waitTimeData) {
-                        if (waitTimeData.estimatedWaitMinutes !== undefined) {
-                            queueData.estimatedWaitMinutes = waitTimeData.estimatedWaitMinutes;
-                        } else if (waitTimeData.estimatedWaitTime !== undefined) {
-                            queueData.estimatedWaitTime = waitTimeData.estimatedWaitTime;
-                        }
-                    }
-                } catch (waitTimeError) {
-                    console.error('Error refreshing wait time:', waitTimeError);
-                }
-            }
-            
+            // Set queue details directly, no need for additional wait time API call
+            // since estimatedWaitMinutes is already included in the response
             setQueueDetails(queueData);
             setError(null);
         } catch (error) {

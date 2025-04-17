@@ -173,6 +173,23 @@ builder.Services.AddScoped<IOutletService>(sp => {
     );
 });
 
+// Register the real HttpClientReservationService for reservation management
+builder.Services.AddScoped<IReservationService>(sp => {
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<HttpClientReservationService>>();
+    
+    return new HttpClientReservationService(
+        httpClientFactory.CreateClient("API"),
+        jwtTokenService,
+        jsRuntime,
+        configuration,
+        logger
+    );
+});
+
 // Register TableService
 builder.Services.AddScoped<ITableService>(sp =>
 {
@@ -224,7 +241,6 @@ builder.Services.AddScoped<ICustomerService>(sp => {
     );
 });
 
-builder.Services.AddScoped<IReservationService, MockReservationService>();
 builder.Services.AddMudServices();
 
 var app = builder.Build();

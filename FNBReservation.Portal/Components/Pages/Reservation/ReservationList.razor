@@ -7,6 +7,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime _jsRuntime
 @rendermode InteractiveServer
 
 <PageTitle>Reservations - F&B Reservation System</PageTitle>
@@ -46,7 +47,6 @@
                                HelperText="Filter by status">
                         <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
                         <MudSelectItem Value="@("Confirmed")">Confirmed</MudSelectItem>
-                        <MudSelectItem Value="@("Seated")">Seated</MudSelectItem>
                         <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
                         <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
                         <MudSelectItem Value="@("No-Show")">No-Show</MudSelectItem>
@@ -123,7 +123,7 @@
                                 </MudChip>
                             </MudTd>
                             <MudTd DataLabel="Tables">
-                                @(string.Join(", ", context.TableAssignments))
+                                @(string.Join(", ", context.TableNumbers))
                             </MudTd>
                             <MudTd DataLabel="Special Requests">
                                 <div style="max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -132,10 +132,6 @@
                             </MudTd>
                             <MudTd DataLabel="Actions">
                                 <div class="d-flex gap-1">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                   OnClick="@(() => EditReservation(context))"
-                                                   Color="Color.Primary"
-                                                   Title="Edit" />
                                     <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
                                                    OnClick="@(() => ViewReservationDetails(context))"
                                                    Color="Color.Info"
@@ -143,23 +139,9 @@
                                     @if (context.Status == "Confirmed")
                                     {
                                         <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small"
-                                                       OnClick="@(() => CheckInReservation(context))"
-                                                       Color="Color.Success"
-                                                       Title="Check In" />
-                                    }
-                                    @if (context.Status == "Seated")
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Assignment" Size="Size.Small"
-                                                       OnClick="@(() => CheckOutReservation(context))"
+                                                       OnClick="@(() => MarkCompleted(context))"
                                                        Color="Color.Dark"
-                                                       Title="Check Out" />
-                                    }
-                                    @if (context.Status == "Confirmed")
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small"
-                                                       OnClick="@(() => CancelReservation(context))"
-                                                       Color="Color.Error"
-                                                       Title="Cancel" />
+                                                       Title="Mark as Completed" />
                                         <MudIconButton Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small"
                                                        OnClick="@(() => MarkNoShow(context))"
                                                        Color="Color.Warning"
@@ -193,11 +175,21 @@
     private string searchTerm = "";
 
     private bool isLoading = true;
+    private bool isFirstRender = true;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadOutlets();
-        await LoadReservations();
+        // We will load reservations in OnAfterRenderAsync to avoid JS interop during prerendering
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isFirstRender)
+        {
+            isFirstRender = false;
+            await LoadReservations();
+        }
     }
 
     private async Task LoadOutlets()
@@ -220,25 +212,53 @@
             StateHasChanged();
 
             var filter = new ReservationFilterDto
-                {
-                    OutletId = selectedOutletId == "all" ? null : selectedOutletId,
-                    Status = string.IsNullOrEmpty(selectedStatus) ? null : selectedStatus,
-                    StartDate = dateRange.Start,
-                    EndDate = dateRange.End,
-                    SearchTerm = string.IsNullOrEmpty(searchTerm) ? null : searchTerm
-                };
+            {
+                OutletId = selectedOutletId == "all" ? null : selectedOutletId,
+                Status = string.IsNullOrEmpty(selectedStatus) ? null : selectedStatus,
+                StartDate = dateRange.Start,
+                EndDate = dateRange.End,
+                SearchTerm = string.IsNullOrEmpty(searchTerm) ? null : searchTerm
+            };
+
+            // Log filter values to console
+            await LogToConsoleAsync("Loading reservations with filter:");
+            await LogToConsoleAsync($"  OutletId: {selectedOutletId}");
+            await LogToConsoleAsync($"  Status: {selectedStatus}");
+            await LogToConsoleAsync($"  StartDate: {dateRange.Start}");
+            await LogToConsoleAsync($"  EndDate: {dateRange.End}");
+            await LogToConsoleAsync($"  SearchTerm: {searchTerm}");
 
             reservations = await ReservationService.GetReservationsAsync(filter);
+            await LogToConsoleAsync($"Retrieved {reservations.Count} reservations");
             filteredReservations = reservations.ToList();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading reservations: {ex.Message}", Severity.Error);
+            await LogToConsoleAsync($"Exception loading reservations: {ex.Message}");
+            await LogToConsoleAsync(ex.StackTrace);
         }
         finally
         {
             isLoading = false;
             StateHasChanged();
+        }
+    }
+
+    // Safe method to log to console that won't be called during prerendering
+    private async Task LogToConsoleAsync(string message)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("console.log", message);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("prerendering"))
+        {
+            // Silently ignore JS interop issues during prerendering
+        }
+        catch (Exception)
+        {
+            // Ignore other console logging errors - they shouldn't break the app
         }
     }
 
@@ -290,7 +310,6 @@
         return status.ToLower() switch
         {
             "confirmed" => Color.Info,
-            "seated" => Color.Success,
             "completed" => Color.Dark,
             "cancelled" => Color.Error,
             "no-show" => Color.Warning,
@@ -330,32 +349,6 @@
         await dialog.Result;
     }
 
-    private async Task EditReservation(ReservationDto reservation)
-    {
-        try
-        {
-            var parameters = new DialogParameters
-                {
-                    ["ReservationId"] = reservation.ReservationId,
-                    ["IsEdit"] = true
-                };
-
-            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
-            var dialog = await DialogService.ShowAsync<ReservationFormDialog>("Edit Reservation", parameters, options);
-            var result = await dialog.Result;
-
-            if (!result.Canceled)
-            {
-                await LoadReservations();
-                Snackbar.Add("Reservation updated successfully", Severity.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error editing reservation: {ex.Message}", Severity.Error);
-        }
-    }
-
     private async Task CancelReservation(ReservationDto reservation)
     {
         var parameters = new DialogParameters
@@ -383,64 +376,84 @@
         }
     }
 
-    private async Task CheckInReservation(ReservationDto reservation)
-    {
-        var success = await ReservationService.CheckInReservationAsync(reservation.ReservationId);
-        if (success)
-        {
-            Snackbar.Add("Customer checked in successfully", Severity.Success);
-            await LoadReservations();
-        }
-        else
-        {
-            Snackbar.Add("Failed to check in customer", Severity.Error);
-        }
-    }
-
-    private async Task CheckOutReservation(ReservationDto reservation)
-    {
-        var success = await ReservationService.CheckOutReservationAsync(reservation.ReservationId);
-        if (success)
-        {
-            Snackbar.Add("Customer checked out successfully", Severity.Success);
-            await LoadReservations();
-        }
-        else
-        {
-            Snackbar.Add("Failed to check out customer", Severity.Error);
-        }
-    }
-
     private async Task MarkNoShow(ReservationDto reservation)
     {
-        var parameters = new DialogParameters
-            {
-                ["ContentText"] = $"Are you sure you want to mark {reservation.CustomerName}'s reservation as a no-show?",
-                ["ButtonText"] = "Mark as No-Show",
-                ["Color"] = Color.Warning
-            };
+        var result = await DialogService.ShowMessageBox(
+            "Mark as No-Show",
+            $"Are you sure you want to mark the reservation for {reservation.CustomerName} as a no-show?",
+            "Yes", "Cancel");
 
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm No-Show", parameters);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
+        if (result == true)
         {
-            var updateRequest = new UpdateReservationDto
-                {
-                    ReservationId = reservation.ReservationId,
-                    Status = "No-Show",
-                    Notes = "Marked as no-show by admin"
-                };
+            isLoading = true;
+            StateHasChanged();
 
-            var updatedReservation = await ReservationService.UpdateReservationAsync(updateRequest);
-            if (updatedReservation != null)
+            try
             {
-                Snackbar.Add("Reservation marked as no-show", Severity.Success);
-                await LoadReservations();
+                // Call the MarkAsNoShowAsync method from our HttpClientReservationService
+                var success = await ReservationService.MarkAsNoShowAsync(reservation.ReservationId);
+
+                if (success)
+                {
+                    Snackbar.Add("Reservation marked as no-show successfully", Severity.Success);
+                    // Refresh the reservations list
+                    await LoadReservations();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to mark reservation as no-show", Severity.Error);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Snackbar.Add("Failed to update reservation status", Severity.Error);
+                Snackbar.Add($"Error marking as no-show: {ex.Message}", Severity.Error);
+                await LogToConsoleAsync($"Error marking as no-show: {ex.Message}");
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task MarkCompleted(ReservationDto reservation)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Mark as Completed",
+            $"Are you sure you want to mark the reservation for {reservation.CustomerName} as completed?",
+            "Yes", "Cancel");
+
+        if (result == true)
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            try
+            {
+                // Call the MarkAsCompletedAsync method from our HttpClientReservationService
+                var success = await ReservationService.MarkAsCompletedAsync(reservation.ReservationId);
+
+                if (success)
+                {
+                    Snackbar.Add("Reservation marked as completed successfully", Severity.Success);
+                    // Refresh the reservations list
+                    await LoadReservations();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to mark reservation as completed", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error marking as completed: {ex.Message}", Severity.Error);
+                await LogToConsoleAsync($"Error marking as completed: {ex.Message}");
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
             }
         }
     }

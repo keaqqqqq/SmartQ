@@ -13,6 +13,8 @@ namespace FNBReservation.Portal.Services
         Task<bool> CheckInReservationAsync(string reservationId);
         Task<bool> CheckOutReservationAsync(string reservationId);
         Task<List<ReservationDto>> GetReservationsByOutletAndDateAsync(string outletId, DateTime date);
+        Task<bool> MarkAsNoShowAsync(string reservationId);
+        Task<bool> MarkAsCompletedAsync(string reservationId);
     }
 
     public class MockReservationService : IReservationService
@@ -144,6 +146,18 @@ namespace FNBReservation.Portal.Services
             };
         }
 
+        // Method to convert string table numbers to TableAssignment objects
+        private List<TableAssignment> ConvertToTableAssignments(List<string> tableNumbers)
+        {
+            return tableNumbers.Select(tn => new TableAssignment 
+            { 
+                TableId = Guid.NewGuid().ToString(), // Generate a fake ID for mock data
+                TableNumber = tn,
+                Section = "Main Dining", // Default section
+                Capacity = 4  // Default capacity
+            }).ToList();
+        }
+
         public async Task<ReservationDto?> CreateReservationAsync(CreateReservationDto request)
         {
             var outlet = await _outletService.GetOutletByIdAsync(request.OutletId);
@@ -170,9 +184,6 @@ namespace FNBReservation.Portal.Services
                 return null;
             }
 
-            // Calculate end time (using outlet's default dining duration)
-            var endTime = request.ReservationDate.AddMinutes(outlet.DefaultDiningDurationMinutes);
-
             // Simulate table assignment
             var tables = new List<string>();
             var requiredCapacity = request.PartySize;
@@ -185,9 +196,13 @@ namespace FNBReservation.Portal.Services
                 requiredCapacity -= table.Capacity;
             }
 
+            // Create a random code for reservationCode
+            string reservationCode = "R" + GenerateRandomCode(6);
+
             var newReservation = new ReservationDto
             {
                 ReservationId = $"res-{_reservations.Count + 1:D3}",
+                ReservationCode = reservationCode,
                 OutletId = outlet.OutletId,
                 OutletName = outlet.Name,
                 CustomerName = request.CustomerName,
@@ -195,8 +210,8 @@ namespace FNBReservation.Portal.Services
                 CustomerEmail = request.CustomerEmail,
                 PartySize = request.PartySize,
                 ReservationDate = request.ReservationDate,
-                EndTime = endTime,
-                TableAssignments = tables,
+                Duration = TimeSpan.FromMinutes(outlet.DefaultDiningDurationMinutes).ToString(@"hh\:mm\:ss"),
+                TableAssignments = ConvertToTableAssignments(tables),
                 Status = "Confirmed",
                 Source = request.Source,
                 SpecialRequests = request.SpecialRequests,
@@ -206,6 +221,15 @@ namespace FNBReservation.Portal.Services
 
             _reservations.Add(newReservation);
             return newReservation;
+        }
+
+        // Helper to generate a random code for reservation codes
+        private string GenerateRandomCode(int length)
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            var random = new Random();
+            return new string(Enumerable.Repeat(chars, length)
+              .Select(s => s[random.Next(s.Length)]).ToArray());
         }
 
         public async Task<ReservationDto?> UpdateReservationAsync(UpdateReservationDto request)
@@ -240,12 +264,12 @@ namespace FNBReservation.Portal.Services
 
             if (request.ReservationDate.HasValue)
             {
-                // Get the outlet to calculate new end time
+                // Get the outlet to calculate new duration
                 var outlet = await _outletService.GetOutletByIdAsync(existingReservation.OutletId);
                 if (outlet != null)
                 {
                     existingReservation.ReservationDate = request.ReservationDate.Value;
-                    existingReservation.EndTime = request.ReservationDate.Value.AddMinutes(outlet.DefaultDiningDurationMinutes);
+                    existingReservation.Duration = TimeSpan.FromMinutes(outlet.DefaultDiningDurationMinutes).ToString(@"hh\:mm\:ss");
                 }
             }
 
@@ -256,7 +280,8 @@ namespace FNBReservation.Portal.Services
 
             if (request.TableAssignments != null)
             {
-                existingReservation.TableAssignments = request.TableAssignments;
+                // Convert string table numbers to TableAssignment objects
+                existingReservation.TableAssignments = ConvertToTableAssignments(request.TableAssignments);
             }
 
             if (request.SpecialRequests != null)
@@ -331,6 +356,36 @@ namespace FNBReservation.Portal.Services
                 .ToList();
         }
 
+        public async Task<bool> MarkAsNoShowAsync(string reservationId)
+        {
+            var reservation = _reservations.FirstOrDefault(r => r.ReservationId == reservationId);
+
+            if (reservation == null || reservation.Status != "Confirmed")
+            {
+                return false;
+            }
+
+            reservation.Status = "No-Show";
+            reservation.UpdatedAt = DateTime.Now;
+
+            return true;
+        }
+
+        public async Task<bool> MarkAsCompletedAsync(string reservationId)
+        {
+            var reservation = _reservations.FirstOrDefault(r => r.ReservationId == reservationId);
+
+            if (reservation == null || reservation.Status != "Seated")
+            {
+                return false;
+            }
+
+            reservation.Status = "Completed";
+            reservation.UpdatedAt = DateTime.Now;
+
+            return true;
+        }
+
         private List<ReservationDto> GenerateSampleReservations()
         {
             var today = DateTime.Now.Date;
@@ -343,6 +398,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-001",
+                    ReservationCode = "R5HMCB1",
                     OutletId = "A15",
                     OutletName = "Ocean View Restaurant - Downtown",
                     CustomerName = "John Smith",
@@ -350,8 +406,12 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "john.smith@example.com",
                     PartySize = 4,
                     ReservationDate = today.AddHours(18),
-                    EndTime = today.AddHours(19).AddMinutes(30),
-                    TableAssignments = new List<string> { "T1", "T2" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T1", Section = "Main Dining", Capacity = 4 },
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T2", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Confirmed",
                     Source = "Website",
                     SpecialRequests = "Window seating preferred",
@@ -361,6 +421,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-002",
+                    ReservationCode = "R7KPVU2",
                     OutletId = "A15",
                     OutletName = "Ocean View Restaurant - Downtown",
                     CustomerName = "Emily Johnson",
@@ -368,8 +429,11 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "emily.j@example.com",
                     PartySize = 2,
                     ReservationDate = today.AddHours(19),
-                    EndTime = today.AddHours(20).AddMinutes(30),
-                    TableAssignments = new List<string> { "T3" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T3", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Seated",
                     Source = "Phone",
                     CheckInTime = today.AddHours(19).AddMinutes(5),
@@ -379,6 +443,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-003",
+                    ReservationCode = "R8TFXQ3",
                     OutletId = "A16",
                     OutletName = "Ocean View Restaurant - Beachside",
                     CustomerName = "Robert Brown",
@@ -386,8 +451,12 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "robert.b@example.com",
                     PartySize = 6,
                     ReservationDate = today.AddHours(20),
-                    EndTime = today.AddHours(22),
-                    TableAssignments = new List<string> { "T4", "T5" },
+                    Duration = "02:00:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T4", Section = "Main Dining", Capacity = 4 },
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T5", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Confirmed",
                     Source = "Website",
                     SpecialRequests = "Birthday celebration - please prepare a cake",
@@ -399,6 +468,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-004",
+                    ReservationCode = "RKJLFP4",
                     OutletId = "A15",
                     OutletName = "Ocean View Restaurant - Downtown",
                     CustomerName = "Sarah Williams",
@@ -406,8 +476,11 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "sarah.w@example.com",
                     PartySize = 3,
                     ReservationDate = tomorrow.AddHours(12).AddMinutes(30),
-                    EndTime = tomorrow.AddHours(14),
-                    TableAssignments = new List<string> { "T6" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T6", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Confirmed",
                     Source = "Phone",
                     CreatedAt = today.AddDays(-4),
@@ -416,6 +489,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-005",
+                    ReservationCode = "RGTHFD5",
                     OutletId = "A16",
                     OutletName = "Ocean View Restaurant - Beachside",
                     CustomerName = "Michael Davis",
@@ -423,8 +497,11 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "m.davis@example.com",
                     PartySize = 4,
                     ReservationDate = tomorrow.AddHours(19),
-                    EndTime = tomorrow.AddHours(20).AddMinutes(30),
-                    TableAssignments = new List<string> { "T1" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T1", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Confirmed",
                     Source = "Website",
                     SpecialRequests = "Gluten-free options needed",
@@ -436,6 +513,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-006",
+                    ReservationCode = "RVBNKZ6",
                     OutletId = "A17",
                     OutletName = "Ocean View Restaurant - Harborfront",
                     CustomerName = "Jessica Martinez",
@@ -443,8 +521,13 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "j.martinez@example.com",
                     PartySize = 8,
                     ReservationDate = dayAfterTomorrow.AddHours(18),
-                    EndTime = dayAfterTomorrow.AddHours(20),
-                    TableAssignments = new List<string> { "T7", "T8", "T9" },
+                    Duration = "02:00:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T7", Section = "Main Dining", Capacity = 4 },
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T8", Section = "Main Dining", Capacity = 4 },
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T9", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Confirmed",
                     Source = "Website",
                     SpecialRequests = "Business dinner - need quiet area",
@@ -456,6 +539,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-007",
+                    ReservationCode = "RQ2PMF7",
                     OutletId = "A15",
                     OutletName = "Ocean View Restaurant - Downtown",
                     CustomerName = "David Wilson",
@@ -463,8 +547,11 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "d.wilson@example.com",
                     PartySize = 2,
                     ReservationDate = today.AddDays(-1).AddHours(19),
-                    EndTime = today.AddDays(-1).AddHours(20).AddMinutes(30),
-                    TableAssignments = new List<string> { "T2" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T2", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Completed",
                     Source = "Phone",
                     CheckInTime = today.AddDays(-1).AddHours(19).AddMinutes(5),
@@ -475,6 +562,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-008",
+                    ReservationCode = "RLY4JN8",
                     OutletId = "A16",
                     OutletName = "Ocean View Restaurant - Beachside",
                     CustomerName = "Linda Taylor",
@@ -482,8 +570,11 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "l.taylor@example.com",
                     PartySize = 4,
                     ReservationDate = today.AddDays(-2).AddHours(18),
-                    EndTime = today.AddDays(-2).AddHours(19).AddMinutes(30),
-                    TableAssignments = new List<string> { "T3" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T3", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "No-Show",
                     Source = "Website",
                     Notes = "Customer did not arrive within 15 minutes of reservation time",
@@ -493,6 +584,7 @@ namespace FNBReservation.Portal.Services
                 new ReservationDto
                 {
                     ReservationId = "res-009",
+                    ReservationCode = "RP9THM9",
                     OutletId = "A17",
                     OutletName = "Ocean View Restaurant - Harborfront",
                     CustomerName = "James Anderson",
@@ -500,8 +592,12 @@ namespace FNBReservation.Portal.Services
                     CustomerEmail = "j.anderson@example.com",
                     PartySize = 6,
                     ReservationDate = today.AddDays(-3).AddHours(19).AddMinutes(30),
-                    EndTime = today.AddDays(-3).AddHours(21),
-                    TableAssignments = new List<string> { "T4", "T5" },
+                    Duration = "01:30:00",
+                    TableAssignments = new List<TableAssignment>
+                    {
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T4", Section = "Main Dining", Capacity = 4 },
+                        new TableAssignment { TableId = Guid.NewGuid().ToString(), TableNumber = "T5", Section = "Main Dining", Capacity = 4 }
+                    },
                     Status = "Cancelled",
                     Source = "Phone",
                     Notes = "Customer called to cancel due to illness",
