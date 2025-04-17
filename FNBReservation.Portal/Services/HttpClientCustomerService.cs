@@ -161,17 +161,40 @@ namespace FNBReservation.Portal.Services
                     return null;
                 }
                 
-                response.EnsureSuccessStatusCode();
-                
                 var responseContent = await response.Content.ReadAsStringAsync();
                 await LogToConsoleAsync("log", $"Customer response: {responseContent}");
                 
+                // First, try to deserialize as a detailed customer (with reservation history)
+                var detailedCustomer = JsonSerializer.Deserialize<ApiCustomerDetail>(responseContent, _jsonOptions);
+                
+                if (detailedCustomer != null)
+                {
+                    await LogToConsoleAsync("log", $"Successfully deserialized customer with reservation history. History count: {detailedCustomer.ReservationHistory?.Count ?? 0}");
+                    return MapApiCustomerToDto(detailedCustomer);
+                }
+                
+                // If that fails, try to deserialize as a regular customer
                 var apiCustomer = JsonSerializer.Deserialize<ApiCustomer>(responseContent, _jsonOptions);
                 
                 if (apiCustomer == null)
                 {
                     await LogToConsoleAsync("log", "Failed to deserialize customer");
                     return null;
+                }
+                
+                // If there's reservation history in the JSON but not in our model, try to get it separately
+                if (responseContent.Contains("reservationHistory") && !responseContent.Contains("\"reservationHistory\":[]") && !responseContent.Contains("\"reservationHistory\": []"))
+                {
+                    await LogToConsoleAsync("log", "Found reservation history in JSON but not in model, trying manual extraction");
+                    try
+                    {
+                        // Try to get reservations separately
+                        await GetCustomerReservationsAsync(customerId, apiCustomer);
+                    }
+                    catch (Exception ex)
+                    {
+                        await LogToConsoleAsync("error", $"Error extracting reservations: {ex.Message}");
+                    }
                 }
                 
                 return MapApiCustomerToDto(apiCustomer);
@@ -181,6 +204,62 @@ namespace FNBReservation.Portal.Services
                 await LogToConsoleAsync("error", $"Error getting customer: {ex.Message}");
                 _logger.LogError(ex, "Error getting customer by ID {CustomerId}", customerId);
                 return null;
+            }
+        }
+        
+        private async Task GetCustomerReservationsAsync(string customerId, ApiCustomer customer)
+        {
+            string url = $"{_baseUrl}/api/v1/admin/customers/{customerId}/reservations";
+            await LogToConsoleAsync("log", $"Getting customer reservations from: {url}");
+            
+            var response = await _httpClient.GetAsync(url);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogToConsoleAsync("error", $"Failed to get reservations: {response.StatusCode}");
+                return;
+            }
+            
+            var content = await response.Content.ReadAsStringAsync();
+            await LogToConsoleAsync("log", $"Reservations response: {content}");
+            
+            // If customer is already ApiCustomerDetail, we don't need to do anything
+            if (customer is ApiCustomerDetail detailedCustomer)
+            {
+                return;
+            }
+            
+            try
+            {
+                var reservations = JsonSerializer.Deserialize<List<ApiReservation>>(content, _jsonOptions);
+                if (reservations != null && reservations.Any())
+                {
+                    // Create a new detailed customer with the reservations
+                    var newDetailedCustomer = new ApiCustomerDetail
+                    {
+                        Id = customer.Id,
+                        Name = customer.Name,
+                        Phone = customer.Phone,
+                        Email = customer.Email,
+                        Status = customer.Status,
+                        TotalReservations = customer.TotalReservations,
+                        NoShows = customer.NoShows,
+                        NoShowRate = customer.NoShowRate,
+                        LastVisit = customer.LastVisit,
+                        FirstVisit = customer.FirstVisit,
+                        BanInfo = customer.BanInfo,
+                        ReservationHistory = reservations
+                    };
+                    
+                    // Replace the customer object
+                    customer = newDetailedCustomer;
+                    
+                    await LogToConsoleAsync("log", $"Added {reservations.Count} reservations to customer");
+                }
+            }
+            catch (Exception ex)
+            {
+                await LogToConsoleAsync("error", $"Error parsing reservations: {ex.Message}");
             }
         }
         

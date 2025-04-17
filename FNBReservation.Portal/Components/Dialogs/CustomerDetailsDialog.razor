@@ -140,7 +140,10 @@
                                 </MudItem>
                                 <MudItem xs="12" md="4">
                                     <MudText Typo="Typo.subtitle2" Color="Color.Error">Banned By</MudText>
-                                    <MudText Typo="Typo.body2">@(customer.BannedBy ?? "Unknown")</MudText>
+                                    <div class="d-flex align-center mt-1">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                        <MudText Typo="Typo.body2"><strong>@(customer.BannedBy ?? "Unknown")</strong></MudText>
+                                    </div>
                                 </MudItem>
                                 <MudItem xs="12" md="4">
                                     <MudText Typo="Typo.subtitle2" Color="Color.Error">Ban Duration</MudText>
@@ -169,14 +172,26 @@
                     {
                         <MudTable Items="@customer.ReservationHistory" Dense="true" Hover="true" Bordered="true">
                             <HeaderContent>
-                                <MudTh>Date</MudTh>
+                                <MudTh>Reservation ID</MudTh>
+                                <MudTh>Date & Time</MudTh>
                                 <MudTh>Outlet</MudTh>
                                 <MudTh>Guests</MudTh>
                                 <MudTh>Status</MudTh>
-                                <MudTh>Special Request</MudTh>
+                                <MudTh>Notes</MudTh>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd DataLabel="Date">@context.ReservationDate.ToString("d MMM yyyy HH:mm")</MudTd>
+                                <MudTd DataLabel="Reservation ID">
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Small" Class="mr-1" />
+                                        <span>@context.ReservationId</span>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Date & Time">
+                                    <div class="d-flex flex-column">
+                                        <span>@context.ReservationDate.ToString("d MMM yyyy")</span>
+                                        <MudText Typo="Typo.caption">@context.ReservationDate.ToString("HH:mm")</MudText>
+                                    </div>
+                                </MudTd>
                                 <MudTd DataLabel="Outlet">@context.OutletName</MudTd>
                                 <MudTd DataLabel="Guests">@context.GuestCount</MudTd>
                                 <MudTd DataLabel="Status">
@@ -184,7 +199,16 @@
                                         @context.Status
                                     </MudChip>
                                 </MudTd>
-                                <MudTd DataLabel="Notes">@context.Notes</MudTd> 
+                                <MudTd DataLabel="Notes">
+                                    @if (string.IsNullOrEmpty(context.Notes))
+                                    {
+                                        <span class="mud-text-disabled">None</span>
+                                    }
+                                    else
+                                    {
+                                        @context.Notes
+                                    }
+                                </MudTd>
                             </RowTemplate>
                         </MudTable>
                     }

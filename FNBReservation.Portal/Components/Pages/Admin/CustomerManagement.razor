@@ -242,7 +242,10 @@
                                 }
                             </MudTd>
                             <MudTd DataLabel="Banned By">
-                                @(customer.BannedBy ?? "Unknown")
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
+                                    <span>@(customer.BannedBy ?? "Unknown")</span>
+                                </div>
                             </MudTd>
                             <MudTd DataLabel="Actions">
                                 <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small"
