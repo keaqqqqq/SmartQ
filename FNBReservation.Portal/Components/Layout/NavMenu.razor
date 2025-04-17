@@ -18,41 +18,42 @@
                 
                 @if (_isAuthenticated)
                 {
-                    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
-                        Dashboard
-                    </MudNavLink>
-                    
-                    <MudNavLink Href="/reservations" Icon="@Icons.Material.Filled.CalendarToday">
-                        Booking
-                    </MudNavLink>
-                    
-                    <MudNavLink Href="/customers" Icon="@Icons.Material.Filled.People">
-                        Customers
-                    </MudNavLink>
-                    
-                    <MudNavLink Href="/staff" Icon="@Icons.Material.Filled.PersonOutline" 
-                               Disabled="@(!_canAccessStaffModule)">
-                        Staff
-                    </MudNavLink>
-                    
-                    <MudNavLink Href="/analytics" Icon="@Icons.Material.Filled.BarChart">
-                        Analytics
-                    </MudNavLink>
-                    <MudNavLink Href="/reservation-dashboard" Icon="@Icons.Material.Filled.EventAvailable">
-                        Reservation Dashboard
-                    </MudNavLink>
+                    @if (_userRole == "Admin")
+                    {
+                        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                            Dashboard
+                        </MudNavLink>
+                        
+                        <MudNavLink Href="/reservations" Icon="@Icons.Material.Filled.CalendarToday">
+                            Booking
+                        </MudNavLink>
+                        
+                        <MudNavLink Href="/customers" Icon="@Icons.Material.Filled.People">
+                            Customers
+                        </MudNavLink>
+                        
+                        <MudNavLink Href="/staff" Icon="@Icons.Material.Filled.PersonOutline" 
+                                   Disabled="@(!_canAccessStaffModule)">
+                            Staff
+                        </MudNavLink>
 
-                    <MudNavLink Href="/outlets" Icon="@Icons.Material.Filled.Store">
-                        Outlet
-                    </MudNavLink>
+                        <MudNavLink Href="/outlets" Icon="@Icons.Material.Filled.Store">
+                            Outlet
+                        </MudNavLink>
+                    }
+                    else if (_userRole == "OutletStaff")
+                    {
+                        <MudNavLink Href="/staff-dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                            Dashboard
+                        </MudNavLink>
+                        
+                        <MudNavLink Href="/staff-customers" Icon="@Icons.Material.Filled.People">
+                            Customers
+                        </MudNavLink>
+                    }
                     
                     <MudDivider Class="my-2" />
-                    
-                    <MudText Typo="Typo.subtitle2" Color="Color.Dark" Class="mx-4 my-2">Preferences</MudText>
-                    
-                    <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">
-                        Settings
-                    </MudNavLink>
+                   
                 }
                 else
                 {

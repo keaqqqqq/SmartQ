@@ -15,6 +15,7 @@
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject JwtTokenService TokenService
+@attribute [Authorize(Roles = "Admin")]
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
