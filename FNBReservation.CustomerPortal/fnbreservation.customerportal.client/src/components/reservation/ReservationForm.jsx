@@ -865,6 +865,16 @@ const ReservationForm = () => {
                 formattedTime = `${formattedTime}:00`;
             }
 
+            // Update formData with the selected time to ensure consistency when creating reservation
+            setFormData(prevData => ({
+                ...prevData,
+                time: formattedTime // Update formData with the selected time 
+            }));
+
+            // Store the reservation time in localStorage for backup
+            localStorage.setItem('reservation_selected_time', formattedTime);
+            console.log("Updated formData time and stored in localStorage:", formattedTime);
+
             // Use outlet-specific sessionKey for better consistency
             const outletId = selectedOption.outletId || formData.outletId;
             const sessionKey = 'reservation_session_id_' + outletId;
@@ -982,8 +992,14 @@ const ReservationForm = () => {
                 ? formData.date.split('T')[0]
                 : formData.date;
 
+            // Check for saved time from holdTables operation in localStorage
+            const savedHoldTime = localStorage.getItem('reservation_selected_time');
+            
+            // Use the time that was used for holding tables, or fall back to formData.time
+            let formattedTime = savedHoldTime || formData.time;
+            console.log("Using time for reservation:", formattedTime, savedHoldTime ? "(from hold operation)" : "(from form data)");
+            
             // Format time - ensure it's in HH:MM:SS format
-            let formattedTime = formData.time;
             if (!formattedTime.includes(':')) {
                 formattedTime = `${formattedTime}:00:00`;
             } else if (formattedTime.split(':').length === 2) {
@@ -1092,8 +1108,9 @@ const ReservationForm = () => {
                     clearInterval(timerRef.current);
                 }
 
-                // Clear holdId from localStorage only after successful reservation
+                // Clear holdId and time from localStorage only after successful reservation
                 localStorage.removeItem('reservation_hold_id');
+                localStorage.removeItem('reservation_selected_time');
                 
                 // Also clear component state for holdId
                 setHoldId(null);
@@ -1340,6 +1357,7 @@ const ReservationForm = () => {
             
             // Clear holdId from localStorage
             localStorage.removeItem('reservation_hold_id');
+            localStorage.removeItem('reservation_selected_time');
         }
         
         // Stop timer if active
@@ -1456,6 +1474,7 @@ const ReservationForm = () => {
     const clearLocalStorage = () => {
         localStorage.removeItem('reservation_hold_id');
         localStorage.removeItem('reservation_session_id_' + formData.outletId);
+        localStorage.removeItem('reservation_selected_time');
         console.log("Cleared localStorage reservation data");
         setHoldId(null);
         setSessionId(null);
