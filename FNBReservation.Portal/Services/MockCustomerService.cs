@@ -4,6 +4,7 @@ namespace FNBReservation.Portal.Services
 {
     public interface ICustomerService
     {
+        Task InitializeAsync();
         Task<List<CustomerDto>> GetCustomersAsync(string? searchTerm = null);
         Task<CustomerDto?> GetCustomerByIdAsync(string customerId);
         Task<CustomerDto?> GetCustomerByPhoneAsync(string phoneNumber);
@@ -21,6 +22,12 @@ namespace FNBReservation.Portal.Services
         public MockCustomerService()
         {
             _customers = GenerateMockCustomers();
+        }
+
+        public Task InitializeAsync()
+        {
+            // Nothing to initialize for mock service
+            return Task.CompletedTask;
         }
 
         public Task<List<CustomerDto>> GetCustomersAsync(string? searchTerm = null)

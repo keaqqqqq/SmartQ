@@ -202,11 +202,33 @@ builder.Services.AddScoped<IStaffService>(sp => {
         logger
     );
 });
-builder.Services.AddScoped<ICustomerService, MockCustomerService>();
+
+// Replace MockCustomerService with HttpClientCustomerService
+builder.Services.AddScoped<ICustomerService>(sp => {
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<HttpClientCustomerService>>();
+    
+    // Use the API client that has the auth handler configured
+    return new HttpClientCustomerService(
+        httpClientFactory.CreateClient("API"),
+        jwtTokenService,
+        jsRuntime,
+        configuration,
+        logger
+    );
+});
+
 builder.Services.AddScoped<IReservationService, MockReservationService>();
 builder.Services.AddMudServices();
 
 var app = builder.Build();
+
+// Output API settings
+var baseUrl = app.Configuration["ApiSettings:BaseUrl"];
+Console.WriteLine($"API Base URL from configuration: {baseUrl}");
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

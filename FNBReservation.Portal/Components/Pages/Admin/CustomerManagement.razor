@@ -269,10 +269,32 @@
     private bool isLoading = true;
     private string SearchTerm = "";
     private int activeTabIndex = 0;
+    private bool _isInitialized = false;
+    private Exception _loadException = null;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCustomers();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isInitialized = true;
+            
+            // Initialize the customer service for JS interop
+            if (CustomerService is HttpClientCustomerService httpClientService)
+            {
+                await httpClientService.InitializeAsync();
+            }
+            
+            // Log any error that occurred during initialization
+            if (_loadException != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", _loadException.Message, _loadException.StackTrace);
+            }
+        }
     }
 
     private async Task LoadCustomers()
@@ -287,7 +309,15 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading customers: {ex.Message}", Severity.Error);
-            await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex);
+            
+            // Store the exception to log after rendering
+            _loadException = ex;
+            
+            // Only log to console if we've already rendered
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex.Message, ex.StackTrace);
+            }
         }
         finally
         {
@@ -336,7 +366,10 @@
     {
         try
         {
-            await JSRuntime.InvokeVoidAsync("console.log", $"Searching for customers with term: '{SearchTerm}'");
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", $"Searching for customers with term: '{SearchTerm}'");
+            }
             
             if (string.IsNullOrWhiteSpace(SearchTerm))
             {
@@ -355,8 +388,12 @@
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
             Snackbar.Add($"Search error: {ex.Message}", Severity.Error);
+            
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
+            }
         }
         finally
         {
@@ -367,7 +404,12 @@
     private async Task ClearSearch()
     {
         SearchTerm = "";
-        await JSRuntime.InvokeVoidAsync("console.log", "Customer search cleared");
+        
+        if (_isInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", "Customer search cleared");
+        }
+        
         StateHasChanged();
     }
     
@@ -375,7 +417,11 @@
     {
         if (e.Key == "Enter")
         {
-            await JSRuntime.InvokeVoidAsync("console.log", "Customer search triggered by Enter key");
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", "Customer search triggered by Enter key");
+            }
+            
             await SearchCustomers();
         }
     }
