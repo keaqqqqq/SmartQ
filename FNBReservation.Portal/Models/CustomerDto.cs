@@ -55,6 +55,9 @@ namespace FNBReservation.Portal.Models
         [JsonPropertyName("reservationId")]
         public string ReservationId { get; set; } = string.Empty;
 
+        [JsonPropertyName("reservationCode")]
+        public string ReservationCode { get; set; } = string.Empty;
+
         [JsonPropertyName("reservationDate")]
         public DateTime ReservationDate { get; set; }
 

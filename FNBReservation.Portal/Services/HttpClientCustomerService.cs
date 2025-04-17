@@ -1116,24 +1116,139 @@ namespace FNBReservation.Portal.Services
                 }
                 
                 var responseContent = await response.Content.ReadAsStringAsync();
+                await LogToConsoleAsync("log", $"Customer details response received with length: {responseContent.Length}");
                 
-                // First, try to deserialize as a detailed customer (with reservation history)
-                var detailedCustomer = JsonSerializer.Deserialize<ApiCustomerDetail>(responseContent, _jsonOptions);
+                // Log the raw response for debugging
+                await LogToConsoleAsync("log", $"Raw customer details: {responseContent}");
                 
-                if (detailedCustomer != null)
+                // Try different approaches to parse the response
+                CustomerDto? customerDto = null;
+                
+                try
                 {
-                    return MapApiCustomerToDto(detailedCustomer);
+                    // First attempt: Try to parse as ApiCustomerDetail directly
+                    var detailedCustomer = JsonSerializer.Deserialize<ApiCustomerDetail>(responseContent, _jsonOptions);
+                    
+                    if (detailedCustomer != null)
+                    {
+                        customerDto = MapApiCustomerToDto(detailedCustomer);
+                        await LogToConsoleAsync("log", $"Successfully parsed as ApiCustomerDetail with {detailedCustomer.ReservationHistory?.Count ?? 0} reservations");
+                        return customerDto;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("warning", $"Could not parse as ApiCustomerDetail: {ex.Message}");
                 }
                 
-                // If that fails, try to deserialize as a regular customer
-                var apiCustomer = JsonSerializer.Deserialize<ApiCustomer>(responseContent, _jsonOptions);
-                
-                if (apiCustomer == null)
+                try
                 {
-                    return null;
+                    // Second attempt: Parse using JsonDocument for more flexibility
+                    using (var jsonDoc = JsonDocument.Parse(responseContent))
+                    {
+                        var root = jsonDoc.RootElement;
+                        
+                        // Extract customer information
+                        var customer = new CustomerDto
+                        {
+                            CustomerId = root.GetProperty("id").GetString() ?? string.Empty,
+                            Name = root.GetProperty("name").GetString() ?? string.Empty,
+                            PhoneNumber = root.GetProperty("phone").GetString() ?? string.Empty,
+                            Email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null,
+                            IsBanned = root.GetProperty("status").GetString()?.ToLower() == "banned",
+                            TotalReservations = root.TryGetProperty("totalReservations", out var totalResProp) ? totalResProp.GetInt32() : 0,
+                            NoShows = root.TryGetProperty("noShows", out var noShowsProp) ? noShowsProp.GetInt32() : 0,
+                            LastVisit = root.TryGetProperty("lastVisit", out var lastVisitProp) && lastVisitProp.ValueKind != JsonValueKind.Null ? lastVisitProp.GetDateTime() : null,
+                            FirstVisit = root.TryGetProperty("firstVisit", out var firstVisitProp) && firstVisitProp.ValueKind != JsonValueKind.Null ? firstVisitProp.GetDateTime() : null,
+                        };
+                        
+                        // Extract ban information if available
+                        if (root.TryGetProperty("banInfo", out var banInfoProp) && banInfoProp.ValueKind != JsonValueKind.Null)
+                        {
+                            customer.BanReason = banInfoProp.TryGetProperty("reason", out var reasonProp) ? reasonProp.GetString() : null;
+                            customer.BannedDate = banInfoProp.TryGetProperty("bannedAt", out var bannedAtProp) ? bannedAtProp.GetDateTime() : null;
+                            customer.BannedBy = banInfoProp.TryGetProperty("bannedByName", out var bannedByProp) ? bannedByProp.GetString() : null;
+                            customer.BanExpiryDate = banInfoProp.TryGetProperty("endsAt", out var endsAtProp) && endsAtProp.ValueKind != JsonValueKind.Null ? endsAtProp.GetDateTime() : null;
+                            customer.IsBanned = true;
+                        }
+                        
+                        // Extract reservation history if available
+                        if (root.TryGetProperty("reservationHistory", out var reservationHistoryProp) && 
+                            reservationHistoryProp.ValueKind == JsonValueKind.Array)
+                        {
+                            var reservationHistory = new List<ReservationHistoryItem>();
+                            
+                            foreach (var reservationElement in reservationHistoryProp.EnumerateArray())
+                            {
+                                var reservation = new ReservationHistoryItem
+                                {
+                                    ReservationId = reservationElement.TryGetProperty("reservationId", out var idProp) ? idProp.GetString() : string.Empty,
+                                    ReservationCode = reservationElement.TryGetProperty("reservationCode", out var codeProp) ? codeProp.GetString() : string.Empty,
+                                    ReservationDate = reservationElement.TryGetProperty("date", out var dateProp) ? dateProp.GetDateTime() : DateTime.MinValue,
+                                    OutletId = reservationElement.TryGetProperty("outletId", out var outletIdProp) ? outletIdProp.GetString() : string.Empty,
+                                    OutletName = reservationElement.TryGetProperty("outletName", out var outletNameProp) ? outletNameProp.GetString() : string.Empty,
+                                    GuestCount = reservationElement.TryGetProperty("partySize", out var partySizeProp) ? partySizeProp.GetInt32() : 0,
+                                    Status = reservationElement.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : string.Empty,
+                                    Notes = reservationElement.TryGetProperty("specialRequests", out var notesProp) ? notesProp.GetString() : string.Empty
+                                };
+                                
+                                reservationHistory.Add(reservation);
+                            }
+                            
+                            customer.ReservationHistory = reservationHistory;
+                            await LogToConsoleAsync("log", $"Successfully extracted {reservationHistory.Count} reservations from JSON");
+                        }
+                        
+                        await LogToConsoleAsync("log", $"Successfully parsed customer using JsonDocument: {customer.Name}, IsBanned: {customer.IsBanned}, Reservations: {customer.ReservationHistory.Count}");
+                        return customer;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("error", $"Error parsing customer with JsonDocument: {ex.Message}");
                 }
                 
-                return MapApiCustomerToDto(apiCustomer);
+                // If all parsing attempts fail, fall back to original approach
+                try
+                {
+                    var apiCustomer = JsonSerializer.Deserialize<ApiCustomer>(responseContent, _jsonOptions);
+                    
+                    if (apiCustomer != null)
+                    {
+                        customerDto = MapApiCustomerToDto(apiCustomer);
+                        
+                        // If we have the customer but not the reservations, try to get them separately
+                        if (customerDto.ReservationHistory.Count == 0 && responseContent.Contains("reservationHistory"))
+                        {
+                            var reservations = await GetOutletCustomerReservationsAsync(outletId, customerId);
+                            
+                            if (reservations != null && reservations.Any())
+                            {
+                                customerDto.ReservationHistory = reservations.Select(r => new ReservationHistoryItem
+                                {
+                                    ReservationId = r.ReservationId.ToString(),
+                                    ReservationDate = r.Date,
+                                    OutletId = r.OutletId.ToString(),
+                                    OutletName = r.OutletName,
+                                    GuestCount = r.PartySize,
+                                    Status = r.Status,
+                                    Notes = r.SpecialRequests
+                                }).ToList();
+                                
+                                await LogToConsoleAsync("log", $"Added {customerDto.ReservationHistory.Count} reservations to customer from separate API call");
+                            }
+                        }
+                        
+                        return customerDto;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync("error", $"Error parsing as ApiCustomer: {ex.Message}");
+                }
+                
+                await LogToConsoleAsync("error", "All parsing attempts failed for customer details");
+                return null;
             }
             catch (Exception ex)
             {
