@@ -66,83 +66,78 @@ namespace FNBReservation.Portal.Services
         {
             try
             {
-                // Map the filter to query parameters
-                var queryParams = new List<string>();
-                string url;
+                List<ReservationDto> allReservations = new List<ReservationDto>();
                 
-                if (!string.IsNullOrEmpty(filter.OutletId) && filter.OutletId != "all")
+                // If "all" outlets or null is specified, we need to fetch from each outlet
+                if (string.IsNullOrEmpty(filter.OutletId) || filter.OutletId == "all")
                 {
-                    // Get the outlet UUID for the request path
-                    string outletUUID = await GetOutletUUIDAsync(filter.OutletId);
+                    await LogToConsoleAsync("Fetching reservations from all outlets");
                     
-                    // Create URL with the outlet UUID in the path, not as a query parameter
-                    url = $"api/v1/outlets/{outletUUID}/reservations";
+                    // Ensure outlets are loaded
+                    if (!_outletsLoaded)
+                    {
+                        await LoadAllOutletsAsync();
+                    }
+                    
+                    // If we have outlet cache, fetch reservations for each outlet
+                    if (_outletUuidCache.Count > 0)
+                    {
+                        foreach (var outletPair in _outletUuidCache)
+                        {
+                            try
+                            {
+                                string outletUUID = outletPair.Value;
+                                var singleOutletReservations = await FetchReservationsForOutlet(outletUUID, filter);
+                                await LogToConsoleAsync($"Found {singleOutletReservations.Count} reservations for outlet {outletPair.Key}");
+                                allReservations.AddRange(singleOutletReservations);
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log and continue with other outlets if one fails
+                                await LogToConsoleAsync($"Error fetching reservations for outlet {outletPair.Key}: {ex.Message}");
+                                _logger.LogError(ex, "Error fetching reservations for outlet {OutletId}", outletPair.Key);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback if no outlets in cache - try the admin API
+                        await LogToConsoleAsync("No outlets in cache, trying admin API");
+                        string url = "api/v1/admin/reservations";
+                        
+                        // Add query parameters
+                        var queryParams = BuildQueryParams(filter);
+                        if (queryParams.Count > 0)
+                        {
+                            url += $"?{string.Join("&", queryParams)}";
+                        }
+                        
+                        var response = await _httpClient.GetAsync(url);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var reservations = await response.Content.ReadFromJsonAsync<List<ReservationDto>>();
+                            if (reservations != null)
+                            {
+                                allReservations.AddRange(reservations);
+                            }
+                        }
+                        else
+                        {
+                            await LogToConsoleAsync($"Error fetching from admin API: {response.StatusCode}");
+                            // If admin API fails, we have to return empty list
+                        }
+                    }
                 }
                 else
                 {
-                    // For "all" outlets, use a different endpoint (if available) or handle as needed
-                    // This endpoint might not exist - you may need to adjust based on your actual API
-                    url = "api/v1/reservations";
-                    await LogToConsoleAsync("Warning: requesting 'all' outlets, which may not be supported by the API");
+                    // For specific outlet, use the regular approach
+                    string outletUUID = await GetOutletUUIDAsync(filter.OutletId);
+                    allReservations = await FetchReservationsForOutlet(outletUUID, filter);
                 }
-                
-                // Add other query parameters
-                if (filter.StartDate.HasValue)
-                {
-                    queryParams.Add($"startDate={Uri.EscapeDataString(filter.StartDate.Value.ToString("yyyy-MM-dd"))}");
-                }
-                
-                if (filter.EndDate.HasValue)
-                {
-                    queryParams.Add($"endDate={Uri.EscapeDataString(filter.EndDate.Value.ToString("yyyy-MM-dd"))}");
-                }
-                
-                if (!string.IsNullOrEmpty(filter.Status))
-                {
-                    queryParams.Add($"status={Uri.EscapeDataString(filter.Status)}");
-                }
-                
-                if (!string.IsNullOrEmpty(filter.SearchTerm))
-                {
-                    queryParams.Add($"searchTerm={Uri.EscapeDataString(filter.SearchTerm)}");
-                }
-                
-                // Add query string if we have parameters
-                if (queryParams.Count > 0)
-                {
-                    url += $"?{string.Join("&", queryParams)}";
-                }
-                
-                await LogToConsoleAsync($"Fetching reservations from: {url}");
-                
-                var response = await _httpClient.GetAsync(url);
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    try
-                    {
-                        var reservations = await response.Content.ReadFromJsonAsync<List<ReservationDto>>();
-                        await LogToConsoleAsync($"Successfully deserialized {reservations?.Count ?? 0} reservations");
-                        return reservations ?? new List<ReservationDto>();
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        // Handle JSON deserialization errors
-                        _logger.LogError(jsonEx, "JSON deserialization error for reservations");
-                        await LogToConsoleAsync($"JSON deserialization error: {jsonEx.Message}");
-                        
-                        // Log the raw JSON to help debug
-                        string content = await response.Content.ReadAsStringAsync();
-                        await LogToConsoleAsync($"Raw JSON content (first 200 chars): {content.Substring(0, Math.Min(200, content.Length))}...");
-                        
-                        return new List<ReservationDto>();
-                    }
-                }
-                
-                await LogToConsoleAsync($"Error fetching reservations: {response.StatusCode}");
-                string errorContent = await response.Content.ReadAsStringAsync();
-                await LogToConsoleAsync($"Error details: {errorContent}");
-                return new List<ReservationDto>();
+
+                // Apply any client-side filtering that may be necessary
+                // This ensures consistent filtering even if some API endpoints don't support all filters
+                return ApplyClientSideFilters(allReservations, filter);
             }
             catch (Exception ex)
             {
@@ -150,6 +145,117 @@ namespace FNBReservation.Portal.Services
                 await LogToConsoleAsync($"Exception getting reservations: {ex.Message}");
                 return new List<ReservationDto>();
             }
+        }
+
+        // Helper method to build query parameters
+        private List<string> BuildQueryParams(ReservationFilterDto filter)
+        {
+            var queryParams = new List<string>();
+            
+            if (filter.StartDate.HasValue)
+            {
+                queryParams.Add($"startDate={Uri.EscapeDataString(filter.StartDate.Value.ToString("yyyy-MM-dd"))}");
+            }
+            
+            if (filter.EndDate.HasValue)
+            {
+                queryParams.Add($"endDate={Uri.EscapeDataString(filter.EndDate.Value.ToString("yyyy-MM-dd"))}");
+            }
+            
+            if (!string.IsNullOrEmpty(filter.Status))
+            {
+                queryParams.Add($"status={Uri.EscapeDataString(filter.Status)}");
+            }
+            
+            if (!string.IsNullOrEmpty(filter.SearchTerm))
+            {
+                queryParams.Add($"searchTerm={Uri.EscapeDataString(filter.SearchTerm)}");
+            }
+            
+            return queryParams;
+        }
+        
+        // Helper method to fetch reservations for a specific outlet
+        private async Task<List<ReservationDto>> FetchReservationsForOutlet(string outletUUID, ReservationFilterDto filter)
+        {
+            string url = $"api/v1/outlets/{outletUUID}/reservations";
+            
+            // Add query parameters
+            var queryParams = BuildQueryParams(filter);
+            if (queryParams.Count > 0)
+            {
+                url += $"?{string.Join("&", queryParams)}";
+            }
+            
+            await LogToConsoleAsync($"Fetching reservations from: {url}");
+            
+            var response = await _httpClient.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var reservations = await response.Content.ReadFromJsonAsync<List<ReservationDto>>();
+                    return reservations ?? new List<ReservationDto>();
+                }
+                catch (JsonException jsonEx)
+                {
+                    // Handle JSON deserialization errors
+                    _logger.LogError(jsonEx, "JSON deserialization error for reservations");
+                    await LogToConsoleAsync($"JSON deserialization error: {jsonEx.Message}");
+                    
+                    // Log the raw JSON to help debug
+                    string content = await response.Content.ReadAsStringAsync();
+                    await LogToConsoleAsync($"Raw JSON content (first 200 chars): {content.Substring(0, Math.Min(200, content.Length))}...");
+                    
+                    return new List<ReservationDto>();
+                }
+            }
+            
+            await LogToConsoleAsync($"Error fetching reservations: {response.StatusCode}");
+            string errorContent = await response.Content.ReadAsStringAsync();
+            await LogToConsoleAsync($"Error details: {errorContent}");
+            return new List<ReservationDto>();
+        }
+        
+        // Helper method to apply additional client-side filters if needed
+        private List<ReservationDto> ApplyClientSideFilters(List<ReservationDto> reservations, ReservationFilterDto filter)
+        {
+            var filtered = reservations;
+            
+            // Apply date filters if they weren't applied by the server
+            if (filter.StartDate.HasValue)
+            {
+                var startDate = filter.StartDate.Value.Date;
+                filtered = filtered.Where(r => r.ReservationDate.Date >= startDate).ToList();
+            }
+            
+            if (filter.EndDate.HasValue)
+            {
+                var endDate = filter.EndDate.Value.Date.AddDays(1).AddSeconds(-1);
+                filtered = filtered.Where(r => r.ReservationDate.Date <= endDate.Date).ToList();
+            }
+            
+            // Apply status filter if it wasn't applied by the server
+            if (!string.IsNullOrEmpty(filter.Status))
+            {
+                filtered = filtered.Where(r => r.Status == filter.Status).ToList();
+            }
+            
+            // Apply search filter if it wasn't applied by the server
+            if (!string.IsNullOrEmpty(filter.SearchTerm))
+            {
+                var searchTerm = filter.SearchTerm.ToLower();
+                filtered = filtered.Where(r =>
+                    r.CustomerName.ToLower().Contains(searchTerm) ||
+                    r.CustomerPhone.ToLower().Contains(searchTerm) ||
+                    (r.CustomerEmail != null && r.CustomerEmail.ToLower().Contains(searchTerm)) ||
+                    r.ReservationId.ToLower().Contains(searchTerm) ||
+                    (r.Notes != null && r.Notes.ToLower().Contains(searchTerm))
+                ).ToList();
+            }
+            
+            return filtered;
         }
 
         // Helper method to get outlet UUID from outlet ID
