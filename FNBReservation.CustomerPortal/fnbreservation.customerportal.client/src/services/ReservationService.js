@@ -158,12 +158,38 @@ class ReservationService {
     }
 
     // Release a table hold
-    async releaseHold(holdId) {
+    async releaseHold(holdId, options = {}) {
         try {
-            const response = await api.post(`${API_BASE_URL}/release-hold/${holdId}`);
+            // Log the release hold attempt for debugging
+            console.log(`Attempting to release hold with ID: ${holdId}`);
+            
+            // Check if we're already running in development mode with localhost
+            let url = `${API_BASE_URL}/release-hold/${holdId}`;
+            
+            // Use the correct HTTP method based on your API
+            const response = await api.post(url);
+            
+            console.log("Release hold response:", response.data || "No data in response");
+            
+            // If the caller wants a delay after release (to allow backend to process)
+            if (options.delayAfterRelease) {
+                console.log(`Waiting ${options.delayAfterRelease}ms for backend to process the release...`);
+                await new Promise(resolve => setTimeout(resolve, options.delayAfterRelease));
+                console.log("Delay completed after hold release");
+            }
+            
             return response;
         } catch (error) {
+            console.error(`Failed to release hold ${holdId}:`, error);
             this.handleError(error);
+            
+            // Even with error, if delay is requested, we should honor it
+            if (options.delayAfterRelease) {
+                console.log(`Waiting ${options.delayAfterRelease}ms after failed release attempt...`);
+                await new Promise(resolve => setTimeout(resolve, options.delayAfterRelease));
+                console.log("Delay completed after failed hold release");
+            }
+            
             throw error;
         }
     }

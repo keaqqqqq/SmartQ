@@ -8,6 +8,7 @@ using FNBReservation.Portal.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FNBReservation.Portal.Services
 {
@@ -19,6 +20,7 @@ namespace FNBReservation.Portal.Services
         Task<TableInfo> CreateTableAsync(Guid outletId, CreateTableRequest request);
         Task<TableInfo> UpdateTableAsync(Guid outletId, Guid tableId, UpdateTableRequest request);
         Task DeleteTableAsync(Guid outletId, Guid tableId);
+        Task<List<TableTypeInfo>> GetTableTypesByOutletIdAsync(string outletId, string tableType);
     }
     
     public class TableService : ITableService
@@ -232,5 +234,152 @@ namespace FNBReservation.Portal.Services
                 throw new Exception($"Failed to delete table {tableId}: {ex.Message}", ex);
             }
         }
+        
+        public async Task<List<TableTypeInfo>> GetTableTypesByOutletIdAsync(string outletId, string tableType)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                // Build URL for the API call
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/table-types/{tableType}";
+                _logger?.LogInformation($"Fetching table types from: {url}");
+                
+                // Make the HTTP request and capture the response
+                _logger?.LogInformation($"Making HTTP GET request to: {url}");
+                var response = await _httpClient.GetAsync(url);
+                
+                // Log response status code
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                // If the response was not successful, log the error and return an empty list
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    
+                    // If the endpoint with outletId doesn't work, try fallback to get tables via admin API
+                    if ((int)response.StatusCode == 404 || (int)response.StatusCode == 400)
+                    {
+                        _logger?.LogInformation("Trying fallback to admin tables API endpoint");
+                        // Try to interpret outletId as Guid
+                        if (Guid.TryParse(outletId, out Guid outletGuid))
+                        {
+                            try
+                            {
+                                var adminUrl = $"{_baseApiUrl}/api/v1/admin/outlets/{outletGuid}/tables";
+                                _logger?.LogInformation($"Making fallback HTTP GET request to: {adminUrl}");
+                                var adminResponse = await _httpClient.GetAsync(adminUrl);
+                                
+                                if (adminResponse.IsSuccessStatusCode)
+                                {
+                                    var adminContent = await adminResponse.Content.ReadAsStringAsync();
+                                    _logger?.LogInformation($"Fallback API successful. Response content length: {adminContent.Length}");
+                                    
+                                    var tables = await adminResponse.Content.ReadFromJsonAsync<List<TableInfo>>() ?? new List<TableInfo>();
+                                    // Convert TableInfo to TableTypeInfo
+                                    var tableTypeInfos = tables.Select(t => new TableTypeInfo
+                                    {
+                                        Id = t.Id.ToString(),
+                                        TableNumber = t.TableNumber,
+                                        Capacity = t.Capacity,
+                                        Status = "available", // Default status
+                                        Section = t.Section,
+                                        IsActive = t.IsActive
+                                    }).ToList();
+                                    
+                                    _logger?.LogInformation($"Converted {tableTypeInfos.Count} tables from admin API");
+                                    return tableTypeInfos;
+                                }
+                                else
+                                {
+                                    var adminErrorContent = await adminResponse.Content.ReadAsStringAsync();
+                                    _logger?.LogError($"Admin API fallback returned error: {adminErrorContent}");
+                                }
+                            }
+                            catch (Exception fallbackEx)
+                            {
+                                _logger?.LogError(fallbackEx, "Error in fallback admin API call");
+                            }
+                        }
+                    }
+                    
+                    return new List<TableTypeInfo>();
+                }
+                
+                // Read the response content as a string
+                var content = await response.Content.ReadAsStringAsync();
+                _logger?.LogInformation($"API response content length: {content.Length}");
+                
+                if (string.IsNullOrEmpty(content) || content == "[]")
+                {
+                    _logger?.LogWarning("API returned empty response for tables");
+                    return new List<TableTypeInfo>();
+                }
+                
+                try
+                {
+                    // Try to deserialize the response content into a list of TableTypeInfo objects
+                    var tableTypes = await response.Content.ReadFromJsonAsync<List<TableTypeInfo>>() ?? new List<TableTypeInfo>();
+                    _logger?.LogInformation($"Successfully deserialized {tableTypes.Count} table types");
+                    
+                    // Log the first table if there are any
+                    if (tableTypes.Count > 0)
+                    {
+                        _logger?.LogInformation($"First table: ID={tableTypes[0].Id}, Number={tableTypes[0].TableNumber}, Status={tableTypes[0].Status}, Capacity={tableTypes[0].Capacity}");
+                    }
+                    
+                    return tableTypes;
+                }
+                catch (JsonException jsonEx)
+                {
+                    _logger?.LogError(jsonEx, $"JSON deserialization error: {jsonEx.Message}");
+                    _logger?.LogError($"Response content that failed to deserialize: {content}");
+                    
+                    // Try to deserialize with different property names
+                    try
+                    {
+                        var options = new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        };
+                        var tableTypes = JsonSerializer.Deserialize<List<TableTypeInfo>>(content, options) ?? new List<TableTypeInfo>();
+                        _logger?.LogInformation($"Successfully deserialized {tableTypes.Count} table types with case-insensitive option");
+                        return tableTypes;
+                    }
+                    catch (Exception ex2)
+                    {
+                        _logger?.LogError(ex2, "Failed to deserialize with case-insensitive option");
+                        return new List<TableTypeInfo>();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to get table types for outlet {outletId}");
+                return new List<TableTypeInfo>();
+            }
+        }
+    }
+    
+    public class TableTypeInfo
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+        
+        [JsonPropertyName("tableNumber")]
+        public string TableNumber { get; set; }
+        
+        [JsonPropertyName("capacity")]
+        public int Capacity { get; set; }
+        
+        [JsonPropertyName("status")]
+        public string Status { get; set; }
+        
+        [JsonPropertyName("section")]
+        public string Section { get; set; }
+        
+        [JsonPropertyName("isActive")]
+        public bool IsActive { get; set; }
     }
 } 

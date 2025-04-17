@@ -8,7 +8,11 @@
 @inject IJSRuntime JS
 @inject JwtTokenService TokenService
 @inject IReservationService ReservationService
+@inject CurrentUserService CurrentUserService
+@inject IOutletService OutletService
+@inject ITableService TableService
 @rendermode InteractiveServer
+
 
 <PageTitle>Outlet Dashboard - F&B Reservation System</PageTitle>
 
@@ -49,78 +53,9 @@
         font-weight: 500;
     }
 
-        .time-indicator.primary {
-            background-color: var(--mud-palette-primary);
-        }
-
-        .time-indicator.secondary {
-            background-color: var(--mud-palette-secondary);
-        }
-
-        .time-indicator.warning {
-            background-color: var(--mud-palette-warning);
-        }
-
     .customer-info {
         padding: 16px;
         position: relative;
-    }
-
-    .table-tabs .mud-tabs-toolbar {
-        background-color: var(--mud-palette-primary);
-        border-radius: 4px 4px 0 0;
-    }
-
-    .table-tabs .mud-tab {
-        color: white;
-    }
-
-        .table-tabs .mud-tab.mud-selected {
-            color: white;
-            font-weight: 500;
-        }
-
-    .status-indicator {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1;
-    }
-
-    .queue-card {
-        border-radius: 10px;
-        background-color: #ffe6c2;
-        color: rgba(0,0,0,0.8);
-        margin-bottom: 1rem;
-        transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
-    }
-
-        .queue-card:hover {
-            transform: translateX(3px);
-        }
-
-    .waiting-time {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background-color: rgba(255,255,255,0.3);
-        color: rgba(0,0,0,0.7);
-        padding: 2px 10px;
-        border-radius: 30px;
-        font-weight: 500;
-        font-size: 0.8rem;
-    }
-
-    .action-buttons {
-        position: absolute;
-        bottom: 10px;
-        right: 10px;
-    }
-
-    .mud-tabs-panels {
-        padding: 0 !important;
     }
 
     .table-number {
@@ -143,15 +78,12 @@
         background-color: var(--mud-palette-success);
     }
 
-    .table-secondary {
-        background-color: var(--mud-palette-secondary);
-    }
-
-    .quick-action-btn {
-        border-radius: 20px;
+    .action-btn {
+        border-radius: 4px;
         text-transform: none;
+        margin-top: 8px;
     }
-
+    
     .header-icon {
         padding: 8px;
         border-radius: 8px;
@@ -160,1179 +92,543 @@
 </style>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-0">
-    @if (_isLoading)
+    @if(IsLoading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
-        <MudText Align="Align.Center" Typo="Typo.body1">Loading outlet dashboard...</MudText>
-    }
-    else if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="my-4">@_errorMessage</MudAlert>
     }
     else
     {
-        <!-- Header Section -->
-        <div class="d-flex align-center justify-space-between mb-4">
-            <div class="d-flex align-center">
-                <MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
-                <div>
-                    <MudText Typo="Typo.h4">Outlet Dashboard</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        @DateTime.Now.ToString("dddd, MMMM d, yyyy") | Beachside Outlet
-                    </MudText>
-                </div>
+    <!-- Header Section -->
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+            <div>
+                <MudText Typo="Typo.h4">Outlet Dashboard</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @DateTime.Now.ToString("dddd, MMMM d, yyyy") | @_outletName
+                </MudText>
             </div>
         </div>
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.Refresh" 
+                      OnClick="RefreshData">
+                Refresh
+            </MudButton>
+    </div>
 
-        <!-- Summary Cards -->
-        <MudGrid Class="mb-4">
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="summary-card pa-4">
-                    <div class="d-flex justify-space-between">
-                        <div>
-                            <MudText Typo="Typo.overline">ACTIVE TABLES</MudText>
-                            <MudText Typo="Typo.h2" Style="color: mediumpurple;">
-                                @(_reservationTables.Count(t => t.CurrentReservation != null) + _queueTables.Count(t => t.Status == "seated"))
-                            </MudText>
-                            <MudText Typo="Typo.body2">
-                                Occupancy Rate: @((_reservationTables.Count(t => t.CurrentReservation != null) + _queueTables.Count(t => t.Status == "seated")) * 100 / (_reservationTables.Count + _queueTables.Count))%
-                            </MudText>
-                        </div>
-                        <MudIcon Icon="@Icons.Material.Filled.TableBar" Color="Color.Surface" Size="Size.Large" />
+    <!-- Summary Cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="summary-card pa-4">
+                <div class="d-flex justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.overline">ACTIVE TABLES</MudText>
+                        <MudText Typo="Typo.h2" Color="Color.Secondary">
+                                @(_todayReservations.Count(r => r.Status == "Seated"))
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                                Occupancy Rate: @GetOccupancyRate()%
+                        </MudText>
                     </div>
-                </MudPaper>
-            </MudItem>
+                    <MudIcon Icon="@Icons.Material.Filled.TableBar" Color="Color.Surface" Size="Size.Large" />
+                </div>
+            </MudPaper>
+        </MudItem>
 
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="summary-card pa-4">
-                    <div class="d-flex justify-space-between">
-                        <div>
-                            <MudText Typo="Typo.overline">IN QUEUE</MudText>
-                            <MudText Typo="Typo.h2" Style="color: orangered;">@(_waitingQueue.Count)</MudText>
-                            <MudText Typo="Typo.body2">
-                                Avg. Wait Time: @(GetAverageWaitTime())
-                            </MudText>
-                        </div>
-                        <MudIcon Icon="@Icons.Material.Filled.AccessTime" Color="Color.Surface" Size="Size.Large" />
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="summary-card pa-4">
+                <div class="d-flex justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.overline">IN QUEUE</MudText>
+                        <MudText Typo="Typo.h2" Color="Color.Warning">3</MudText>
+                        <MudText Typo="Typo.body2">
+                            Avg. Wait Time: 15m
+                        </MudText>
                     </div>
-                </MudPaper>
-            </MudItem>
+                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Color="Color.Surface" Size="Size.Large" />
+                </div>
+            </MudPaper>
+        </MudItem>
 
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="summary-card pa-4">
-                    <div class="d-flex justify-space-between">
-                        <div>
-                            <MudText Typo="Typo.overline">AVAILABLE TABLES</MudText>
-                            <MudText Typo="Typo.h2" Style="color: green;">
-                                @(_reservationTables.Count(t => t.CurrentReservation == null) + _queueTables.Count(t => t.Status == "available"))
-                            </MudText>
-                            <MudText Typo="Typo.body2">
-                                Ready for Seating
-                            </MudText>
-                        </div>
-                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Surface" Size="Size.Large" />
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="summary-card pa-4">
+                <div class="d-flex justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.overline">AVAILABLE TABLES</MudText>
+                        <MudText Typo="Typo.h2" Color="Color.Success">
+                                @(_reservationTables.Count(t => t.Status?.ToLower() == "available"))
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Ready for Seating
+                        </MudText>
                     </div>
-                </MudPaper>
-            </MudItem>
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Surface" Size="Size.Large" />
+                </div>
+            </MudPaper>
+        </MudItem>
 
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="summary-card pa-4">
-                    <div class="d-flex justify-space-between">
-                        <div>
-                            <MudText Typo="Typo.overline">TODAY'S RESERVATIONS</MudText>
-                            <MudText Typo="Typo.h2" Style="color: deepskyblue;">@(_totalReservations)</MudText>
-                            <MudText Typo="Typo.body2">
-                                @(_reservationTables.Sum(t => t.UpcomingReservations.Count)) Upcoming
-                            </MudText>
-                        </div>
-                        <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Surface" Size="Size.Large" />
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="summary-card pa-4">
+                <div class="d-flex justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.overline">UPCOMING</MudText>
+                        <MudText Typo="Typo.h2" Color="Color.Info">
+                                @(_todayReservations.Count(r => r.Status == "Confirmed"))
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                                @(_todayReservations.Count(r => r.Status == "Confirmed")) Upcoming
+                        </MudText>
                     </div>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+                    <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Surface" Size="Size.Large" />
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-        <MudGrid>
-            <!-- Floor Layout Section -->
-            <MudItem xs="12" lg="9">
-                <MudCard Elevation="2" Class="mb-4">
-                    <MudCardHeader>
-                        <CardHeaderAvatar>
-                            <div class="header-icon bg-light-primary">
-                                <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Primary" />
-                            </div>
-                        </CardHeaderAvatar>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Floor Layout</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                Manage tables and reservations
-                            </MudText>
-                        </CardHeaderContent>
-                        <CardHeaderActions>
-                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" Size="Size.Small" OnClick="RefreshDashboard" />
-                        </CardHeaderActions>
-                    </MudCardHeader>
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderAvatar>
+                <div class="header-icon bg-light-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.TableRestaurant" Color="Color.Primary" />
+                </div>
+            </CardHeaderAvatar>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Floor Layout</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Manage tables and reservations
+                </MudText>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" Size="Size.Small" OnClick="RefreshData" />
+            </CardHeaderActions>
+        </MudCardHeader>
 
-                    <MudCardContent Class="pa-0">
-                        <MudTabs Elevation="0" Color="Color.Primary" Class="table-tabs">
-                            <MudTabPanel Text="RESERVATION TABLES" Icon="@Icons.Material.Filled.CalendarToday">
-                                <div class="pa-4">
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                                        Displaying @_reservationTables.Count tables |
-                                        @_reservationTables.Count(t => t.CurrentReservation != null) occupied,
-                                        @_reservationTables.Count(t => t.CurrentReservation == null) available
-                                    </MudText>
+        <MudCardContent Class="px-4 py-2">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Displaying @_reservationTables.Count tables | 
+                        @_reservationTables.Count(t => t.Status?.ToLower() == "occupied") occupied, 
+                        @_reservationTables.Count(t => t.Status?.ToLower() == "available") available
+                    </MudText>
+                </MudItem>
+            </MudGrid>
 
-                                    <MudGrid>
-                                        @foreach (var table in _reservationTables)
-                                        {
-                                            <MudItem xs="12" md="6">
-                                                <MudPaper Elevation="3" Class="table-card">
-                                                    @if (table.CurrentReservation != null)
-                                                    {
-                                                        <div class="time-indicator primary">
-                                                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                                            @table.CurrentReservation.TimeRemaining
-                                                        </div>
-                                                    }
-                                                    else if (table.UpcomingReservations.Count > 0)
-                                                    {
-                                                        <div class="status-indicator">
-                                                            <MudChip Color="Color.Success" Size="Size.Small" Label="true" T="string">Available</MudChip>
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        <div class="status-indicator">
-                                                            <MudChip Color="Color.Success" Size="Size.Small" Label="true" T="string">Available</MudChip>
-                                                        </div>
-                                                    }
-
-                                                    <div class="table-header d-flex align-center">
-                                                        <span class="table-number @(table.CurrentReservation != null ? "table-primary" : "table-success")">
-                                                            @table.Name.Substring(table.Name.Length - 2)
-                                                        </span>
-                                                        <div>
-                                                            <MudText Typo="Typo.subtitle1">Table @table.Name</MudText>
-                                                            <MudText Typo="Typo.caption" Class="d-flex align-center">
-                                                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                                Capacity: @table.Capacity
-                                                            </MudText>
-                                                        </div>
-                                                    </div>
-
-                                                    @if (table.CurrentReservation != null)
-                                                    {
-                                                        <div class="customer-info bg-light-primary">
-                                                            <MudText Typo="Typo.subtitle1">@table.CurrentReservation.CustomerName</MudText>
-                                                            <div class="d-flex align-center mt-2">
-                                                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2" Class="mr-3">@table.CurrentReservation.PartySize guests</MudText>
-
-                                                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2">@table.CurrentReservation.ReservationTime</MudText>
-                                                            </div>
-                                                            <div class="d-flex align-center mt-1">
-                                                                <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2">@table.CurrentReservation.PhoneNumber</MudText>
-                                                            </div>
-
-                                                            <div class="d-flex gap-2 mt-3">
-                                                                <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
-                                                                           Class="quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => HandleCheckOut(table.Id))">Check-out</MudButton>
-                                                                <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
-                                                                           Class="quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => HandleNoShow(table.Id))">No-show</MudButton>
-                                                            </div>
-                                                        </div>
-                                                    }
-
-                                                    <MudDivider />
-
-                                                    <div class="customer-info">
-                                                        <MudText Typo="Typo.subtitle2">Upcoming Reservation</MudText>
-
-                                                        @if (table.UpcomingReservations.Count > 0)
-                                                        {
-                                                            <div class="mt-3">
-                                                                <MudText Typo="Typo.subtitle2">@table.UpcomingReservations[0].CustomerName</MudText>
-                                                                <div class="d-flex align-center mt-1">
-                                                                    <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                                    <MudText Typo="Typo.caption" Class="mr-3">@table.UpcomingReservations[0].PartySize guests</MudText>
-
-                                                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
-                                                                    <MudText Typo="Typo.caption">@table.UpcomingReservations[0].ReservationTime</MudText>
-                                                                </div>
-                                                                <div class="d-flex align-center mt-1">
-                                                                    <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
-                                                                    <MudText Typo="Typo.body2">@table.UpcomingReservations[0].PhoneNumber</MudText>
-                                                                </div>
-                                                                <div class="d-flex gap-2 mt-3">
-                                                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
-                                                                               Class="quick-action-btn" Size="Size.Small"
-                                                                               OnClick="@(() => HandleCheckIn(table.Id))">Check-in</MudButton>
-                                                                    <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
-                                                                               Class="quick-action-btn" Size="Size.Small"
-                                                                               OnClick="@(() => HandleNoShow(table.Id))">No-show</MudButton>
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                        else
-                                                        {
-                                                            <MudText Typo="Typo.caption" Class="text-disabled font-italic mt-2">
-                                                                No upcoming reservations
-                                                            </MudText>
-                                                        }
-                                                    </div>
-                                                </MudPaper>
-                                            </MudItem>
-                                        }
-                                    </MudGrid>
-                                </div>
-                            </MudTabPanel>
-
-                            <MudTabPanel Text="QUEUE TABLES" Icon="@Icons.Material.Filled.RestaurantMenu">
-                                <div class="pa-4">
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                                        Displaying @_queueTables.Count tables |
-                                        @_queueTables.Count(t => t.Status == "seated") occupied,
-                                        @_queueTables.Count(t => t.Status == "available") available
-                                    </MudText>
-
-                                    <MudGrid>
-                                        @foreach (var table in _queueTables)
-                                        {
-                                            <MudItem xs="12" md="6">
-                                                <MudPaper Elevation="3" Class="table-card">
-                                                    @if (table.Status == "seated")
-                                                    {
-                                                        <div class="time-indicator secondary">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" Class="mr-1" />
-                                                            Seated: @table.CurrentCustomer?.SeatedTime
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        <div class="status-indicator">
-                                                            <MudChip Color="Color.Success" Size="Size.Small" Label="true" T="string">Available</MudChip>
-                                                        </div>
-                                                    }
-
-                                                    <div class="table-header d-flex align-center">
-                                                        <span class="table-number @(table.Status == "seated" ? "table-secondary" : "table-success")">
-                                                            @table.Name.Substring(table.Name.Length - 2)
-                                                        </span>
-                                                        <div>
-                                                            <MudText Typo="Typo.subtitle1">Table @table.Name</MudText>
-                                                            <MudText Typo="Typo.caption" Class="d-flex align-center">
-                                                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                                Capacity: @table.Capacity
-                                                            </MudText>
-                                                        </div>
-                                                    </div>
-
-                                                    @if (table.Status == "seated" && table.CurrentCustomer != null)
-                                                    {
-                                                        <div class="customer-info bg-light-secondary">
-                                                            <div class="d-flex justify-space-between">
-                                                                <MudText Typo="Typo.subtitle1">@table.CurrentCustomer.CustomerName</MudText>
-                                                                <MudChip Color="Color.Secondary" Size="Size.Small" T="string">@table.CurrentCustomer.QueueNumber</MudChip>
-                                                            </div>
-                                                            <div class="d-flex align-center mt-2">
-                                                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2" Class="mr-3">@table.CurrentCustomer.PartySize guests</MudText>
-                                                            </div>
-                                                            <div class="d-flex align-center mt-1">
-                                                                <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2">@table.CurrentCustomer.PhoneNumber</MudText>
-                                                            </div>
-
-                                                            <div class="d-flex gap-2 mt-3">
-                                                                <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
-                                                                           Class="quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => HandleCompleteService(table.Id))">Complete</MudButton>
-                                                                <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
-                                                                           Class="quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => HandleQueueNoShow(table.Id))">No-show</MudButton>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        <div class="customer-info bg-light-success">
-                                                            <MudText Typo="Typo.h6" Align="Align.Center">Table Available</MudText>
-
-                                                            @if (_waitingQueue.Count > 0)
-                                                            {
-                                                                <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true"
-                                                                           Class="mt-3 quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => HandleCallNext(table.Id))">
-                                                                    Call Next Customer
-                                                                </MudButton>
-
-                                                                @if (_waitingQueue.Count > 1 && table.Capacity > 2)
-                                                                {
-                                                                    <MudExpansionPanel Class="mt-2">
-                                                                        <TitleContent>
-                                                                            <MudText Typo="Typo.body2">Choose Specific Customer</MudText>
-                                                                        </TitleContent>
-                                                                        <ChildContent>
-                                                                            @for (int i = 0; i < Math.Min(_waitingQueue.Count, 3); i++)
-                                                                            {
-                                                                                var customerIndex = i;
-                                                                                var customer = _waitingQueue[customerIndex];
-                                                                                <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
-                                                                                           FullWidth="true" Class="mb-1 quick-action-btn" Size="Size.Small"
-                                                                                           OnClick="@(() => HandleCallNext(table.Id, customerIndex))">
-                                                                                    @customer.QueueNumber - @customer.CustomerName (@customer.PartySize)
-                                                                                </MudButton>
-                                                                            }
-                                                                        </ChildContent>
-                                                                    </MudExpansionPanel>
-
-                                                                    @if (FindOptimalGroup(table.Capacity) > 0)
-                                                                    {
-                                                                        var optimalIndex = FindOptimalGroup(table.Capacity);
-                                                                        <MudAlert Severity="Severity.Info" Class="mt-2" Dense="true">
-                                                                            Optimal match: @_waitingQueue[optimalIndex].QueueNumber (@_waitingQueue[optimalIndex].PartySize people)
-                                                                            <MudButton Variant="Variant.Text" Color="Color.Primary"
-                                                                                       Size="Size.Small" Class="ml-2"
-                                                                                       OnClick="@(() => HandleCallNext(table.Id, optimalIndex))">
-                                                                                Assign
-                                                                            </MudButton>
-                                                                        </MudAlert>
-                                                                    }
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-2 text-disabled">
-                                                                    No customers in queue
-                                                                </MudText>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </MudPaper>
-                                            </MudItem>
-                                        }
-                                    </MudGrid>
-                                </div>
-                            </MudTabPanel>
-                        </MudTabs>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            <!-- Right Sidebar - Waiting Queue Panel -->
-            <MudItem xs="12" lg="3">
-                <MudCard Elevation="2" Class="mb-4">
-                    <MudCardHeader>
-                        <CardHeaderAvatar>
-                            <MudBadge Content="@_waitingQueue.Count" Color="Color.Warning" Overlap="true" Bordered="true">
-                                <MudIcon Icon="@Icons.Material.Filled.Queue" Color="Color.Warning" Size="Size.Medium" />
-                            </MudBadge>
-                        </CardHeaderAvatar>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Waiting Queue</MudText>
-                        </CardHeaderContent>
-                        <CardHeaderActions>
-                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" Size="Size.Small" OnClick="RefreshDashboard" />
-                        </CardHeaderActions>
-                    </MudCardHeader>
-
-                    <MudCardContent Style="max-height: 550px; overflow-y: auto;" Class="px-2 py-2">
-                        @if (_waitingQueue.Count > 0)
-                        {
-                            @for (int i = 0; i < _waitingQueue.Count; i++)
+            <MudGrid>
+                @foreach (var table in _reservationTables)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="3" Class="table-card">
+                            @if (table.Status?.ToLower() == "occupied")
                             {
-                                var customer = _waitingQueue[i];
-                                var index = i; // Capture for lambda
-
-                                <MudPaper Elevation="3" Class="mb-3 rounded-lg overflow-hidden" Style="background-color: #FFF6E5;">
-                                    <div class="position-relative">
-                                        <!-- Queue Number and Tag -->
-                                        <div class="d-flex align-center px-3 py-2" Style="background-color: #FFA726;">
-                                            <MudText Typo="Typo.h6" Style="color: white;">@customer.CustomerName</MudText>
-                                            <MudSpacer />
-                                            <div class="d-flex align-center">
-                                                <MudChip Size="Size.Small" T="string" Color="Color.Default" Style="background-color: white; color: #212121; font-weight: bold;">
-                                                    @customer.QueueNumber
-                                                </MudChip>
-                                                @if (i == 0)
-                                                {
-                                                    <MudChip Size="Size.Small" T="string" Label="true" Color="Color.Success" Class="ml-1">Next</MudChip>
-                                                }
-                                            </div>
-                                        </div>
-
-                                        <!-- Customer information -->
-                                        <div class="px-3 py-3">
-                                            <div class="d-flex justify-space-between align-center mb-2">
-                                                <div class="d-flex align-center">
-                                                    <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                    <MudText Typo="Typo.body1">@customer.PartySize guests</MudText>
-                                                </div>
-                                                <div class="d-flex align-center">
-                                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                                    <MudText Typo="Typo.body1" Style="font-weight: bold; color: #E65100;">@customer.WaitTime</MudText>
-                                                </div>
-                                            </div>
-
-                                            <div class="d-flex align-center">
-                                                <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
-                                                <MudText Typo="Typo.body2">@customer.PhoneNumber</MudText>
-                                            </div>
-
-                                            @if (i == 0 && _queueTables.Any(t => t.Status == "available"))
-                                            {
-                                                <MudDivider Class="my-2" />
-                                                <MudText Typo="Typo.caption" Class="mt-2 mb-1">Available tables: @_queueTables.Count(t => t.Status == "available")</MudText>
-                                                <div class="d-flex flex-wrap gap-1">
-                                                    @foreach (var table in _queueTables.Where(t => t.Status == "available"))
-                                                    {
-                                                        Color chipColor = table.Capacity < customer.PartySize ? Color.Error :
-                                                        table.Capacity - customer.PartySize <= 1 ? Color.Success : Color.Warning;
-                                                        <MudChip T="string" Size="Size.Small" Color="chipColor">@table.Name (@table.Capacity)</MudChip>
-                                                    }
-                                                </div>
-                                            }
-
-                                            <div class="d-flex justify-end gap-2 mt-2">
-                                                <MudIconButton Icon="@Icons.Material.Filled.Message" Color="Color.Primary" Size="Size.Small"
-                                                               OnClick="@(() => SendMessage(index))" />
-                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                                               OnClick="@(() => RemoveFromQueue(index))" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </MudPaper>
+                                var reservation = _todayReservations.FirstOrDefault(r => 
+                                    r.Status == "Seated" && 
+                                    r.TableNumbers != null &&
+                                    r.TableNumbers.Any(t => t == table.TableNumber));
+                                
+                                <div class="time-indicator primary">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                    @(reservation != null && reservation.CheckInTime.HasValue ? GetTimeElapsed(reservation.CheckInTime) : "45m")
+                                </div>
                             }
-                        }
-                        else
-                        {
-                            <MudAlert Severity="Severity.Info" Class="mb-4">No customers are currently waiting in queue</MudAlert>
-                        }
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+
+                            <div class="table-header d-flex align-center">
+                                <span class="table-number @(table.Status?.ToLower() == "occupied" ? "table-primary" : "table-success")">
+                                    @(!string.IsNullOrEmpty(table.TableNumber) ? table.TableNumber.Substring(Math.Max(0, table.TableNumber.Length - 2)) : "")
+                                </span>
+                                <div>
+                                    <MudText Typo="Typo.subtitle1">Table @table.TableNumber</MudText>
+                                    <MudText Typo="Typo.caption" Class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                        Capacity: @table.Capacity
+                                    </MudText>
+                                </div>
+                            </div>
+
+                            <div class="customer-info @(table.Status?.ToLower() == "occupied" ? "bg-light-primary" : "bg-light-success")">
+                                @if (table.Status?.ToLower() == "occupied")
+                                {
+                                    var reservation = _todayReservations.FirstOrDefault(r => 
+                                        r.Status == "Seated" && 
+                                        r.TableNumbers != null &&
+                                        r.TableNumbers.Any(t => t == table.TableNumber));
+                                        
+                                    if (reservation != null)
+                                    {
+                                        <MudText Typo="Typo.subtitle1">@reservation.CustomerName</MudText>
+                                        <div class="d-flex align-center mt-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                            <MudText Typo="Typo.body2" Class="mr-3">@reservation.PartySize guests</MudText>
+                                        </div>
+                                        <div class="d-flex align-center mt-1">
+                                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
+                                            <MudText Typo="Typo.body2">@reservation.CustomerPhone</MudText>
+                                        </div>
+                                        
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success" 
+                                                  FullWidth="true" Class="action-btn"
+                                                  OnClick="@(() => HandleCompletedReservation(reservation.ReservationId))">
+                                            Check-out
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Error" 
+                                                  FullWidth="true" Class="action-btn"
+                                                  OnClick="@(() => HandleNoShow(reservation.ReservationId))">
+                                            No-show
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.subtitle1" Align="Align.Center">Occupied</MudText>
+                                        <MudText Typo="Typo.caption" Align="Align.Center">No reservation details found</MudText>
+                                    }
+                                }
+                                else
+                                {
+                                    var upcomingReservation = _todayReservations.FirstOrDefault(r => 
+                                        r.Status == "Confirmed" && 
+                                        r.TableNumbers != null &&
+                                        r.TableNumbers.Any(t => t == table.TableNumber));
+                                        
+                                    if (upcomingReservation != null)
+                                    {
+                                        <MudText Typo="Typo.subtitle2">Upcoming Reservation</MudText>
+                                        <MudText Typo="Typo.subtitle1">@upcomingReservation.CustomerName</MudText>
+                                        <div class="d-flex align-center mt-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                            <MudText Typo="Typo.body2" Class="mr-3">@upcomingReservation.PartySize guests</MudText>
+                                        </div>
+                                        <div class="d-flex align-center mt-1">
+                                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
+                                            <MudText Typo="Typo.body2">@upcomingReservation.ReservationDate.ToString("h:mm tt")</MudText>
+                                        </div>
+                                        <div class="d-flex align-center mt-1">
+                                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
+                                            <MudText Typo="Typo.body2">@upcomingReservation.CustomerPhone</MudText>
+                                        </div>
+                                        
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                                  FullWidth="true" Class="action-btn"
+                                                  OnClick="@(() => HandleCheckIn(upcomingReservation.ReservationId))">
+                                            Check-in
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Error" 
+                                                  FullWidth="true" Class="action-btn"
+                                                  OnClick="@(() => HandleNoShow(upcomingReservation.ReservationId))">
+                                            No-show
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.h6" Align="Align.Center">Available</MudText>
+                                    }
+                                }
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+                
+                @if (_reservationTables.Count == 0)
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Class="my-2">No tables found.</MudAlert>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
     }
 </MudContainer>
 
 @code {
-    private int _totalReservations = 0;
+    private bool IsLoading = true;
     private string _outletId = string.Empty;
-    private List<ReservationDto> _reservations = new List<ReservationDto>();
-
-    private List<ReservationTable> _reservationTables = new List<ReservationTable>();
-    private List<QueueTable> _queueTables = new List<QueueTable>();
-    private List<QueueCustomer> _waitingQueue = new List<QueueCustomer>();
-    private bool _isLoading = true;
-    private string _errorMessage = string.Empty;
-
+    private string _outletName = "Loading...";
+    private string _outletUUID = string.Empty;
+    private int _totalTables = 20; // Default value
+    private List<ReservationDto> _todayReservations = new List<ReservationDto>();
+    private List<TableTypeInfo> _reservationTables = new List<TableTypeInfo>();
+    private bool _isFirstRender = true;
+    private Exception _loadingError = null;
+    
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            _isLoading = true;
-            await JS.InvokeVoidAsync("console.log", "Staff Dashboard initialized");
+            // Get current user's outlet ID
+            _outletId = await CurrentUserService.GetCurrentOutletIdAsync() ?? string.Empty;
             
-            // Get the outlet ID from the logged in staff member
-            var userClaims = await TokenService.GetUserClaimsAsync();
-            var outletIdClaim = userClaims.FirstOrDefault(c => c.Type == "outletId");
-            if (outletIdClaim != null)
+            // If no outlet ID is found, set a default
+            if (string.IsNullOrEmpty(_outletId))
             {
-                _outletId = outletIdClaim.Value;
-                await JS.InvokeVoidAsync("console.log", $"Staff belongs to outlet ID: {_outletId}");
-                
-                // Load the reservations for today
-                await LoadTodayReservations();
+                // Use a default outlet ID for testing if needed
+                _outletId = "1"; 
             }
-            else
-            {
-                _errorMessage = "Could not determine your outlet. Please contact support.";
-                await JS.InvokeVoidAsync("console.log", "No outlet ID found in claims");
-            }
-
-            // Initialize sample data for now
-            // This will be replaced with actual data in subsequent steps
-            await InitializeSampleData();
         }
         catch (Exception ex)
         {
-            _errorMessage = $"Error initializing dashboard: {ex.Message}";
-            await JS.InvokeVoidAsync("console.log", $"Error in OnInitializedAsync: {ex.Message}");
+            _loadingError = ex;
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Now we can safely make JS interop calls
+                await JS.InvokeVoidAsync("console.log", "Hello from C#! 🚀 Dashboard initialized, loading data");
+                
+                if (_loadingError != null)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Error during initialization: {_loadingError.Message}");
+                    Snackbar.Add($"Error loading dashboard: {_loadingError.Message}", Severity.Error);
+                    return;
+                }
+                
+                if (string.IsNullOrEmpty(_outletId))
+                {
+                    await JS.InvokeVoidAsync("console.log", "No outlet ID found for current user. Using default outlet ID: 1");
+                }
+                
+                IsLoading = true;
+                StateHasChanged();
+                
+                await LoadOutletInfo();
+                await LoadTables();
+                await RefreshData();
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error initializing dashboard: {ex.Message}");
+                Snackbar.Add($"Error loading dashboard: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                IsLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+    
+    private async Task LoadOutletInfo()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("console.log", $"API CALL: GetOutletByIdAsync with ID: {_outletId}");
+            var outlet = await OutletService.GetOutletByIdAsync(_outletId);
+            
+            if (outlet != null)
+            {
+                _outletName = outlet.Name;
+                _outletUUID = outlet.OutletId; // This should be the UUID needed for API calls
+                _totalTables = outlet.Tables?.Count ?? 20;
+                
+                await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Loaded outlet: {_outletName}, UUID: {_outletUUID}, Tables: {_totalTables}");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Could not find outlet with ID: {_outletId}");
+                Snackbar.Add("Could not find outlet information.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading outlet info: {ex.Message}");
+            Snackbar.Add("Error loading outlet information.", Severity.Error);
+        }
+    }
+
+    private async Task LoadTables()
+    {
+        try
+        {
+            // Use outletId instead of outletUUID
+            if (string.IsNullOrEmpty(_outletId))
+            {
+                await JS.InvokeVoidAsync("console.log", "Outlet ID is null or empty, cannot load tables.");
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: GetTableTypesByOutletIdAsync with outletId: {_outletId}, tableType: reservation");
+            
+            // Call the API to get reservation tables using outletId
+            _reservationTables = await TableService.GetTableTypesByOutletIdAsync(_outletId, "reservation");
+            
+            // Log the table data for debugging
+            await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {_reservationTables.Count} tables");
+            
+            // Update total tables
+            _totalTables = _reservationTables.Count > 0 ? _reservationTables.Count : 20;
+            
+            // Match reservations with tables
+            await MatchReservationsWithTables();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading tables: {ex.Message}");
+            Snackbar.Add($"Error loading tables: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task MatchReservationsWithTables()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("console.log", "Matching reservations with tables...");
+            
+            int matchCount = 0;
+            
+            // Update table status based on reservations
+            foreach (var table in _reservationTables)
+            {
+                // Look for a seated reservation using this table
+                var seatedReservation = _todayReservations.FirstOrDefault(r => 
+                    r.Status == "Seated" && 
+                    r.TableNumbers != null &&
+                    r.TableNumbers.Any(t => t == table.TableNumber));
+                    
+                if (seatedReservation != null)
+                {
+                    table.Status = "occupied";
+                    matchCount++;
+                    await JS.InvokeVoidAsync("console.log", $"Matched table {table.TableNumber} with seated reservation for {seatedReservation.CustomerName}");
+                }
+                else
+                {
+                    table.Status = "available";
+                }
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"Matched {matchCount} tables with active reservations");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error matching reservations with tables: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        IsLoading = true;
+        
+        try
+        {
+            if (!string.IsNullOrEmpty(_outletId))
+            {
+                // Get today's reservations for the outlet
+                var today = DateTime.Today;
+                await JS.InvokeVoidAsync("console.log", $"API CALL: GetReservationsByOutletAndDateAsync with outletId: {_outletId}, date: {today:yyyy-MM-dd}");
+                
+                _todayReservations = await ReservationService.GetReservationsByOutletAndDateAsync(_outletId, today);
+                
+                await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Loaded {_todayReservations.Count} reservations for today");
+                
+                // Refresh table data
+                await LoadTables();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error refreshing data: {ex.Message}");
+            Snackbar.Add($"Error loading reservation data: {ex.Message}", Severity.Error);
         }
         finally
         {
-            _isLoading = false;
+            IsLoading = false;
             StateHasChanged();
         }
     }
-    
-    private async Task LoadTodayReservations()
+
+    private string GetTimeElapsed(DateTime? checkInTime)
     {
-        try 
-        {
-            if (string.IsNullOrEmpty(_outletId))
-            {
-                await JS.InvokeVoidAsync("console.log", "No outlet ID available, can't load reservations");
-                return;
-            }
-
-            // Load today's reservations using ReservationService
-            var filter = new ReservationFilterDto
-            {
-                OutletId = _outletId
-            };
-            
-            await JS.InvokeVoidAsync("console.log", $"Loading reservations for outlet {_outletId}");
-            _reservations = await ReservationService.GetReservationsAsync(filter);
-            
-            // Get only today's reservations
-            var today = DateTime.Today;
-            _reservations = _reservations.Where(r => r.ReservationDate.Date == today).ToList();
-            
-            _totalReservations = _reservations.Count;
-            await JS.InvokeVoidAsync("console.log", $"Loaded {_totalReservations} reservations for today");
-
-            // We'll update the rest of the application data in subsequent edits
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Error loading reservations: {ex.Message}";
-            await JS.InvokeVoidAsync("console.log", $"Error loading reservations: {ex.Message}");
-        }
-    }
-
-    private string GetAverageWaitTime()
-    {
-        if (_waitingQueue.Count == 0) return "0m";
-
-        int totalMinutes = 0;
-        foreach (var customer in _waitingQueue)
-        {
-            totalMinutes += int.Parse(customer.WaitTime.TrimEnd('m'));
-        }
-
-        return $"{totalMinutes / _waitingQueue.Count}m";
-    }
-
-    private async Task InitializeSampleData()
-    {
-        try
-        {
-            // Map real reservations to display models 
-            await JS.InvokeVoidAsync("console.log", "Mapping reservations to display models");
-            _reservationTables = new List<ReservationTable>();
-            _queueTables = new List<QueueTable>();
-            
-            if (_reservations != null && _reservations.Any())
-            {
-                // Group reservations by the tables they're assigned to
-                // This allows us to see which tables have current and upcoming reservations
-                var tableAssignments = new Dictionary<string, List<ReservationDto>>();
-                
-                foreach (var reservation in _reservations)
-                {
-                    foreach (var table in reservation.TableAssignments)
-                    {
-                        if (!tableAssignments.ContainsKey(table.TableId))
-                        {
-                            tableAssignments[table.TableId] = new List<ReservationDto>();
-                        }
-                        tableAssignments[table.TableId].Add(reservation);
-                    }
-                }
-                
-                // Create reservation tables based on the actual assigned tables
-                foreach (var tableEntry in tableAssignments)
-                {
-                    string tableId = tableEntry.Key;
-                    var tableReservations = tableEntry.Value.OrderBy(r => r.ReservationDate).ToList();
-                    
-                    if (tableReservations.Any())
-                    {
-                        // Get table details from the first reservation
-                        var firstRes = tableReservations.First();
-                        var tableDetails = firstRes.TableAssignments.FirstOrDefault(t => t.TableId == tableId);
-                        
-                        if (tableDetails != null)
-                        {
-                            var reservationTable = new ReservationTable
-                            {
-                                Id = int.TryParse(tableId, out int id) ? id : 0,
-                                Name = tableDetails.TableNumber,
-                                Capacity = tableDetails.Capacity
-                            };
-                            
-                            // Determine current reservation (if any)
-                            var currentReservation = tableReservations.FirstOrDefault(r => 
-                                r.Status == "Confirmed" && 
-                                r.ReservationDate <= DateTime.Now && 
-                                r.EndTime >= DateTime.Now);
-                                
-                            if (currentReservation != null)
-                            {
-                                reservationTable.CurrentReservation = MapReservationToCustomerReservation(currentReservation);
-                            }
-                            
-                            // Add upcoming reservations (excluding the current one)
-                            var upcomingReservations = tableReservations
-                                .Where(r => r.Status == "Confirmed" && r.ReservationDate > DateTime.Now)
-                                .OrderBy(r => r.ReservationDate)
-                                .Take(3)
-                                .ToList();
-                                
-                            foreach (var upcoming in upcomingReservations)
-                            {
-                                reservationTable.UpcomingReservations.Add(MapReservationToCustomerReservation(upcoming));
-                            }
-                            
-                            _reservationTables.Add(reservationTable);
-                        }
-                    }
-                }
-            }
-            
-            // If we don't have enough real data, add some sample data to demonstrate UI 
-            if (_reservationTables.Count < 3)
-            {
-                // Use the original sample data
-                _reservationTables = new List<ReservationTable>
-                {
-                    new ReservationTable
-                    {
-                        Id = 1,
-                        Name = "Table A1",
-                        Capacity = 4,
-                        CurrentReservation = new CustomerReservation
-                        {
-                            CustomerName = "John Smith",
-                            PhoneNumber = "+1234567890",
-                            PartySize = 4,
-                            ReservationTime = "12:00 PM",
-                            Status = "checked-in",
-                            TimeRemaining = "45m"
-                        },
-                        UpcomingReservations = new List<CustomerReservation>
-                        {
-                            new CustomerReservation
-                            {
-                                CustomerName = "Emily Johnson",
-                                PhoneNumber = "+1234567891",
-                                PartySize = 2,
-                                ReservationTime = "2:30 PM",
-                                Status = "confirmed"
-                            }
-                        }
-                    },
-                    new ReservationTable
-                    {
-                        Id = 2,
-                        Name = "Table A2",
-                        Capacity = 6,
-                        CurrentReservation = null,
-                        UpcomingReservations = new List<CustomerReservation>
-                        {
-                            new CustomerReservation
-                            {
-                                CustomerName = "Michael Davis",
-                                PhoneNumber = "+1234567892",
-                                PartySize = 5,
-                                ReservationTime = "1:00 PM",
-                                Status = "confirmed"
-                            }
-                        }
-                    },
-                    new ReservationTable
-                    {
-                        Id = 3,
-                        Name = "Table A3",
-                        Capacity = 2,
-                        CurrentReservation = new CustomerReservation
-                        {
-                            CustomerName = "Sarah Williams",
-                            PhoneNumber = "+1234567893",
-                            PartySize = 2,
-                            ReservationTime = "11:30 AM",
-                            Status = "checked-in",
-                            TimeRemaining = "15m"
-                        },
-                        UpcomingReservations = new List<CustomerReservation>()
-                    }
-                };
-            }
-            
-            // Sample queue tables
-            _queueTables = new List<QueueTable>
-            {
-                new QueueTable
-                {
-                    Id = 4,
-                    Name = "Table B1",
-                    Capacity = 4,
-                    Status = "seated",
-                    CurrentCustomer = new QueueCustomer
-                    {
-                        CustomerName = "Robert Brown",
-                        PhoneNumber = "+1234567894",
-                        PartySize = 3,
-                        QueueNumber = "Q001",
-                        SeatedTime = "12:15 PM"
-                    }
-                },
-                new QueueTable
-                {
-                    Id = 5,
-                    Name = "Table B2",
-                    Capacity = 2,
-                    Status = "available",
-                    CurrentCustomer = null
-                },
-                new QueueTable
-                {
-                    Id = 6,
-                    Name = "Table B3",
-                    Capacity = 8,
-                    Status = "seated",
-                    CurrentCustomer = new QueueCustomer
-                    {
-                        CustomerName = "Jennifer Lee",
-                        PhoneNumber = "+1234567895",
-                        PartySize = 6,
-                        QueueNumber = "Q003",
-                        SeatedTime = "12:05 PM"
-                    }
-                }
-            };
-
-            // Sample waiting queue
-            _waitingQueue = new List<QueueCustomer>
-            {
-                new QueueCustomer
-                {
-                    CustomerName = "David Wilson",
-                    PhoneNumber = "+1234567896",
-                    PartySize = 4,
-                    QueueNumber = "Q004",
-                    WaitTime = "10m"
-                },
-                new QueueCustomer
-                {
-                    CustomerName = "Lisa Martinez",
-                    PhoneNumber = "+1234567897",
-                    PartySize = 2,
-                    QueueNumber = "Q005",
-                    WaitTime = "15m"
-                },
-                new QueueCustomer
-                {
-                    CustomerName = "Thomas Garcia",
-                    PhoneNumber = "+1234567898",
-                    PartySize = 3,
-                    QueueNumber = "Q006",
-                    WaitTime = "20m"
-                }
-            };
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.log", $"Error in InitializeSampleData: {ex.Message}");
-        }
+        if (checkInTime == null) return "Unknown";
+        
+        var elapsed = DateTime.Now - checkInTime.Value;
+        return $"{elapsed.Hours}h {elapsed.Minutes}m";
     }
     
-    // Helper method to map ReservationDto to CustomerReservation
-    private CustomerReservation MapReservationToCustomerReservation(ReservationDto reservation)
+    private int GetOccupancyRate()
     {
-        if (reservation == null) return null;
+        if (_totalTables <= 0) return 0;
         
-        string timeRemaining = string.Empty;
-        if (reservation.Status == "Confirmed" && reservation.CheckInTime.HasValue)
-        {
-            // Calculate time remaining based on duration
-            var endTime = reservation.EndTime;
-            var timeSpan = endTime - DateTime.Now;
-            timeRemaining = timeSpan.TotalMinutes > 0 ? $"{(int)timeSpan.TotalMinutes}m" : "0m";
-        }
-        
-        return new CustomerReservation
-        {
-            ReservationId = reservation.ReservationId,
-            CustomerName = reservation.CustomerName,
-            PhoneNumber = reservation.CustomerPhone,
-            PartySize = reservation.PartySize,
-            ReservationTime = reservation.ReservationDate.ToString("h:mm tt"),
-            Status = MapStatusToDisplayStatus(reservation.Status),
-            TimeRemaining = timeRemaining
-        };
-    }
-    
-    // Helper method to map API status to display status
-    private string MapStatusToDisplayStatus(string apiStatus)
-    {
-        return apiStatus switch
-        {
-            "Confirmed" => "confirmed",
-            "CheckedIn" => "checked-in",
-            "Completed" => "completed",
-            "NoShow" => "no-show",
-            "Canceled" => "canceled",
-            _ => apiStatus.ToLower()
-        };
+        var occupiedTables = _todayReservations.Count(r => r.Status == "Seated");
+        return (occupiedTables * 100) / _totalTables;
     }
 
-    // Functions for reservation tables
-    private async Task HandleCheckIn(int tableId)
+    private async Task HandleNoShow(string reservationId)
     {
         try
         {
-            var table = _reservationTables.FirstOrDefault(t => t.Id == tableId);
-            if (table == null || table.UpcomingReservations.Count == 0) 
-            {
-                Snackbar.Add("No upcoming reservation found", Severity.Warning);
-                return;
-            }
-
-            await JS.InvokeVoidAsync("console.log", $"Checking in reservation for table {table.Name}");
+            await JS.InvokeVoidAsync("console.log", $"API CALL: MarkAsNoShowAsync with reservationId: {reservationId}");
             
-            // Get the first upcoming reservation
-            var reservationToCheckIn = table.UpcomingReservations[0];
-            if (string.IsNullOrEmpty(reservationToCheckIn.ReservationId))
-            {
-                Snackbar.Add("Cannot check in: Reservation ID is missing", Severity.Error);
-                return;
-            }
-            
-            // Call the API to check in the reservation
-            bool success = await ReservationService.CheckInReservationAsync(reservationToCheckIn.ReservationId);
-            
-            if (success)
-            {
-                await JS.InvokeVoidAsync("console.log", "Check-in successful");
-                
-                // Update the UI
-                table.CurrentReservation = new CustomerReservation
-                {
-                    ReservationId = reservationToCheckIn.ReservationId,
-                    CustomerName = reservationToCheckIn.CustomerName,
-                    PhoneNumber = reservationToCheckIn.PhoneNumber,
-                    PartySize = reservationToCheckIn.PartySize,
-                    ReservationTime = reservationToCheckIn.ReservationTime,
-                    Status = "checked-in",
-                    TimeRemaining = "90m" // Default time remaining
-                };
-
-                table.UpcomingReservations.RemoveAt(0);
-                
-                Snackbar.Add("Customer checked in successfully", Severity.Success);
-                
-                // Refresh reservation data
-                await LoadTodayReservations();
-                await InitializeSampleData();
-            }
-            else
-            {
-                Snackbar.Add("Failed to check in the customer", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.log", $"Error in HandleCheckIn: {ex.Message}");
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        
-        StateHasChanged();
-    }
-
-    private async Task HandleCheckOut(int tableId)
-    {
-        try
-        {
-            var table = _reservationTables.FirstOrDefault(t => t.Id == tableId);
-            if (table == null || table.CurrentReservation == null) 
-            {
-                Snackbar.Add("No active reservation found", Severity.Warning);
-                return;
-            }
-            
-            await JS.InvokeVoidAsync("console.log", $"Checking out reservation for table {table.Name}");
-            
-            // Get current reservation
-            var reservationToCheckOut = table.CurrentReservation;
-            if (string.IsNullOrEmpty(reservationToCheckOut.ReservationId))
-            {
-                Snackbar.Add("Cannot check out: Reservation ID is missing", Severity.Error);
-                return;
-            }
-            
-            // Call the API to check out the reservation
-            bool success = await ReservationService.CheckOutReservationAsync(reservationToCheckOut.ReservationId);
-            
-            if (success)
-            {
-                await JS.InvokeVoidAsync("console.log", "Check-out successful");
-                
-                // Clear the current reservation
-                table.CurrentReservation = null;
-                
-                Snackbar.Add("Customer checked out successfully", Severity.Success);
-                
-                // Refresh reservation data
-                await LoadTodayReservations();
-                await InitializeSampleData();
-            }
-            else
-            {
-                Snackbar.Add("Failed to check out the customer", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("console.log", $"Error in HandleCheckOut: {ex.Message}");
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        
-        StateHasChanged();
-    }
-
-    private async Task HandleNoShow(int tableId)
-    {
-        try
-        {
-            var table = _reservationTables.FirstOrDefault(t => t.Id == tableId);
-            if (table == null) 
-            {
-                Snackbar.Add("Table not found", Severity.Warning);
-                return;
-            }
-            
-            string reservationId = null;
-            string customerName = null;
-            
-            if (table.CurrentReservation != null && table.CurrentReservation.Status == "confirmed")
-            {
-                reservationId = table.CurrentReservation.ReservationId;
-                customerName = table.CurrentReservation.CustomerName;
-            }
-            else if (table.UpcomingReservations.Count > 0)
-            {
-                reservationId = table.UpcomingReservations[0].ReservationId;
-                customerName = table.UpcomingReservations[0].CustomerName;
-            }
-            
-            if (string.IsNullOrEmpty(reservationId))
-            {
-                Snackbar.Add("No reservation found to mark as no-show", Severity.Warning);
-                return;
-            }
-            
-            // Confirm with user
-            var result = await DialogService.ShowMessageBox(
-                "Mark as No-Show",
-                $"Are you sure you want to mark the reservation for {customerName} as a no-show?",
-                "Yes", "Cancel");
-                
-            if (result != true) return;
-            
-            await JS.InvokeVoidAsync("console.log", $"Marking reservation {reservationId} as no-show");
-            
-            // Call the API to mark as no-show
             bool success = await ReservationService.MarkAsNoShowAsync(reservationId);
             
             if (success)
             {
-                await JS.InvokeVoidAsync("console.log", "No-show marking successful");
-                
-                // Update the UI based on which reservation was marked
-                if (table.CurrentReservation != null && table.CurrentReservation.ReservationId == reservationId)
-                {
-                    table.CurrentReservation = null;
-                }
-                else if (table.UpcomingReservations.Count > 0 && table.UpcomingReservations[0].ReservationId == reservationId)
-                {
-                    table.UpcomingReservations.RemoveAt(0);
-                }
-                
-                Snackbar.Add("Marked as no-show", Severity.Warning);
-                
-                // Refresh reservation data
-                await LoadTodayReservations();
-                await InitializeSampleData();
+                Snackbar.Add("Reservation marked as no-show", Severity.Success);
+                await RefreshData();
             }
             else
             {
-                Snackbar.Add("Failed to mark as no-show", Severity.Error);
+                Snackbar.Add("Failed to mark reservation as no-show", Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.log", $"Error in HandleNoShow: {ex.Message}");
+            await JS.InvokeVoidAsync("console.log", $"Error marking no-show: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
-        
-        StateHasChanged();
     }
 
-    // Functions for completing reservation service
-    private async Task HandleCompleteService(int tableId)
+    private async Task HandleCompletedReservation(string reservationId)
     {
         try
         {
-            var table = _queueTables.FirstOrDefault(t => t.Id == tableId);
-            if (table == null || table.CurrentCustomer == null) 
+            await JS.InvokeVoidAsync("console.log", $"API CALL: MarkAsCompletedAsync with reservationId: {reservationId}");
+            
+            bool success = await ReservationService.MarkAsCompletedAsync(reservationId);
+            
+            if (success)
             {
-                Snackbar.Add("No active customer found", Severity.Warning);
-                return;
+                Snackbar.Add("Reservation completed", Severity.Success);
+                await RefreshData();
             }
-            
-            // For queue tables, we don't have a direct API integration yet
-            // Just update the UI for now
-            table.Status = "available";
-            table.CurrentCustomer = null;
-
-            Snackbar.Add("Service completed", Severity.Success);
+            else
+            {
+                Snackbar.Add("Failed to complete reservation", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.log", $"Error in HandleCompleteService: {ex.Message}");
+            await JS.InvokeVoidAsync("console.log", $"Error completing reservation: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
-        
-        StateHasChanged();
     }
-
-    // Functions for marking queue customer as no-show
-    private async Task HandleQueueNoShow(int tableId)
+    
+    private async Task HandleCheckIn(string reservationId)
     {
         try
         {
-            var table = _queueTables.FirstOrDefault(t => t.Id == tableId);
-            if (table == null) return;
-
-            // For queue tables, we don't have a direct API integration yet
-            // Just update the UI for now
-            table.Status = "available";
-            table.CurrentCustomer = null;
-
-            Snackbar.Add("Marked as no-show", Severity.Warning);
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CheckInReservationAsync with reservationId: {reservationId}");
+            
+            bool success = await ReservationService.CheckInReservationAsync(reservationId);
+            
+            if (success)
+            {
+                Snackbar.Add("Guest checked in successfully", Severity.Success);
+                await RefreshData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to check in guest", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("console.log", $"Error in HandleQueueNoShow: {ex.Message}");
+            await JS.InvokeVoidAsync("console.log", $"Error checking in guest: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
-        
-        StateHasChanged();
-    }
-
-    // Queue management functions
-    private void SendMessage(int index)
-    {
-        if (index < 0 || index >= _waitingQueue.Count) return;
-
-        var customer = _waitingQueue[index];
-        Snackbar.Add($"Message sent to {customer.CustomerName}", Severity.Success);
-    }
-
-    private void RemoveFromQueue(int index)
-    {
-        if (index < 0 || index >= _waitingQueue.Count) return;
-
-        var customer = _waitingQueue[index];
-        _waitingQueue.RemoveAt(index);
-        Snackbar.Add($"Removed {customer.CustomerName} from queue", Severity.Warning);
-        StateHasChanged();
-    }
-
-    // Find optimal group for table capacity
-    private int FindOptimalGroup(int tableCapacity)
-    {
-        if (_waitingQueue.Count == 0) return -1;
-
-        // First check for perfect matches or close matches (within 1 seat difference)
-        var perfectMatch = _waitingQueue.FindIndex(customer =>
-            customer.PartySize == tableCapacity ||
-            customer.PartySize == tableCapacity - 1);
-
-        if (perfectMatch != -1) return perfectMatch;
-
-        // Then look for largest group that fits the table
-        var sortedGroups = _waitingQueue
-            .Select((customer, index) => new { Customer = customer, Index = index })
-            .Where(item => item.Customer.PartySize <= tableCapacity)
-            .OrderByDescending(item => item.Customer.PartySize)
-            .ToList();
-
-        if (sortedGroups.Count > 0) return sortedGroups[0].Index;
-
-        // Default to first in queue if no matches
-        return 0;
-    }
-
-    private async Task RefreshDashboard()
-    {
-        try
-        {
-            _isLoading = true;
-            StateHasChanged();
-            
-            await JS.InvokeVoidAsync("console.log", "Refreshing dashboard data");
-            
-            await LoadTodayReservations();
-            await InitializeSampleData();
-            
-            Snackbar.Add("Dashboard refreshed", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Error refreshing dashboard: {ex.Message}";
-            await JS.InvokeVoidAsync("console.log", $"Error refreshing dashboard: {ex.Message}");
-            Snackbar.Add($"Error refreshing data: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    // Model classes for the dashboard
-    public class ReservationTable
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public int Capacity { get; set; }
-        public CustomerReservation? CurrentReservation { get; set; }
-        public List<CustomerReservation> UpcomingReservations { get; set; } = new List<CustomerReservation>();
-    }
-
-    public class CustomerReservation
-    {
-        public string CustomerName { get; set; } = string.Empty;
-        public string PhoneNumber { get; set; } = string.Empty;
-        public int PartySize { get; set; }
-        public string ReservationTime { get; set; } = string.Empty;
-        public string Status { get; set; } = string.Empty;
-        public string? TimeRemaining { get; set; }
-    }
-
-    public class QueueTable
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public int Capacity { get; set; }
-        public string Status { get; set; } = "available";
-        public QueueCustomer? CurrentCustomer { get; set; }
-    }
-
-    public class QueueCustomer
-    {
-        public string CustomerName { get; set; } = string.Empty;
-        public string PhoneNumber { get; set; } = string.Empty;
-        public int PartySize { get; set; }
-        public string QueueNumber { get; set; } = string.Empty;
-        public string? SeatedTime { get; set; }
-        public string WaitTime { get; set; } = string.Empty;
     }
 }

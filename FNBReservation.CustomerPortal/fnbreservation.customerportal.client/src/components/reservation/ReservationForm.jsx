@@ -126,6 +126,9 @@ const ReservationForm = () => {
         customerEmail: "",
         specialRequests: ""
     });
+    
+    // Ref to track previous step for detecting backward navigation
+    const stepRef = useRef(1);
 
     // Special effect to ensure UI sync with outlet selection
     useEffect(() => {
@@ -390,7 +393,7 @@ const ReservationForm = () => {
             } catch (error) {
                 console.error("Error releasing hold:", error);
             }
-            setHoldId(null);
+
             setError("Your reservation time has expired. Please start again.");
             setStep(1);
         }
@@ -1038,7 +1041,7 @@ const ReservationForm = () => {
                 console.error("No valid sessionId found for this reservation - cannot proceed");
                 setError("Session error: Your session has expired. Please try again from the beginning.");
                 setLoading(false);
-                setStep(1); // Go back to step 1
+                await goToStep1(); // Use helper function to ensure hold is released
                 return;
             }
             
@@ -1049,7 +1052,7 @@ const ReservationForm = () => {
                 console.log("No holdId found - this shouldn't happen if hold was successful");
                 setError("There was an issue with your reservation. Please try again from the beginning.");
                 setLoading(false);
-                setStep(1); // Go back to step 1
+                await goToStep1(); // Use helper function to ensure hold is released
                 return;
             }
 
@@ -1113,7 +1116,7 @@ const ReservationForm = () => {
                 localStorage.removeItem('reservation_selected_time');
                 
                 // Also clear component state for holdId
-                setHoldId(null);
+            
                 
                 // DO NOT clear sessionId - this breaks future reservations
                 // Keep the sessionId value in localStorage and state to maintain consistent sessions
@@ -1139,13 +1142,13 @@ const ReservationForm = () => {
             // Check if it's the session mismatch error
             if (error.response?.data?.message === 'This hold belongs to another session.') {
                 setError("Session error: The hold has expired or belongs to another session. Please try again.");
-                setStep(1); // Go back to step 1
+                await goToStep1(); // Use helper function to ensure hold is released
             }
             // Check for missing sessionId validation error
             else if (error.response?.data?.errors?.SessionId) {
                 console.error("SessionId validation error:", error.response.data.errors.SessionId);
                 setError("Session error: A valid session ID is required. Please try again from the beginning.");
-                setStep(1); // Go back to step 1
+                await goToStep1(); // Use helper function to ensure hold is released
             }
             // Check if it's a validation error that we can show to the user
             else if (error.response?.data?.errors) {
@@ -1198,7 +1201,7 @@ const ReservationForm = () => {
     // Handle timeout dialog close
     const handleTimeoutDialogClose = () => {
         setShowTimeoutDialog(false);
-        setStep(1); // Go back to availability check page
+        goToStep1(); // Use helper function to ensure hold is released
     };
 
     // Select a time slot at current outlet
@@ -1345,19 +1348,40 @@ const ReservationForm = () => {
     const handleCancel = async () => {
         // Use outlet-specific sessionKey
         const sessionKey = 'reservation_session_id_' + formData.outletId;
-        
+        console.log(`Releasing hold ${holdId} when canceling`);
         // Release hold if exists
         if (holdId) {
             try {
-                await ReservationService.releaseHold(holdId);
+                console.log(`Releasing hold ${holdId} when canceling`);
+                
+                // Try to release the hold with error handling and add a delay
+                const response = await ReservationService.releaseHold(holdId, {
+                    delayAfterRelease: 1500 // Add a 1.5 second delay to ensure backend processes the release
+                });
+                
+                if (response && response.data) {
+                    console.log(`Successfully released hold ${holdId}`, response.data);
+                } else {
+                    console.log(`Hold release API called for ${holdId}, but no data returned`);
+                }
             } catch (error) {
-                console.error("Error releasing hold:", error);
+                // Log different error types for better debugging
+                if (error.response) {
+                    console.error(`Error releasing hold ${holdId} - Status: ${error.response.status}`, 
+                        error.response.data || 'No error data');
+                } else if (error.request) {
+                    console.error(`Error releasing hold ${holdId} - No response received:`, error.request);
+                } else {
+                    console.error(`Error releasing hold ${holdId}:`, error.message);
+                }
+                console.log("Continuing despite release hold error - clearing local state");
+            } finally {
+                // Always clear holdId from state and localStorage, regardless of API success
+
+                localStorage.removeItem('reservation_hold_id');
+                localStorage.removeItem('reservation_selected_time');
+                console.log("Local hold data cleared after cancel");
             }
-            setHoldId(null);
-            
-            // Clear holdId from localStorage
-            localStorage.removeItem('reservation_hold_id');
-            localStorage.removeItem('reservation_selected_time');
         }
         
         // Stop timer if active
@@ -1423,7 +1447,7 @@ const ReservationForm = () => {
             // Clear holdId from localStorage only if not in the reservation process
             if (step !== 2) {
                 localStorage.removeItem('reservation_hold_id');
-                setHoldId(null);
+
             }
             
             // Don't clear sessionId as it breaks the hold-to-reservation flow
@@ -1476,7 +1500,7 @@ const ReservationForm = () => {
         localStorage.removeItem('reservation_session_id_' + formData.outletId);
         localStorage.removeItem('reservation_selected_time');
         console.log("Cleared localStorage reservation data");
-        setHoldId(null);
+
         setSessionId(null);
     };
 
@@ -1500,6 +1524,103 @@ const ReservationForm = () => {
             console.log(`Stored sessionId ${sessionId} in localStorage with key ${sessionKey}`);
         }
     }, [sessionId, formData.outletId]);
+
+    // Add a new useEffect to monitor step changes and release hold properly
+    useEffect(() => {
+        // When a user goes back from step 2 (details form) to step 1 (availability check)
+        // we need to release the hold immediately
+        const prevStep = stepRef.current;
+        
+        // Save current step for tracking direction of changes
+        stepRef.current = step;
+        
+        // Check if we're going backwards from step 2 to step 1
+        if (prevStep === 2 && step === 1) {
+            console.log("Going back from step 2 to step 1, releasing hold");
+            
+            // Release hold if exists
+            if (holdId) {
+                // Call the API to release the hold
+                (async () => {
+                    try {
+                        console.log(`Releasing hold ${holdId} when going back to step 1`);
+                        
+                        // Try to release the hold with error handling and add a delay
+                        const response = await ReservationService.releaseHold(holdId, {
+                            delayAfterRelease: 1500 // Add a 1.5 second delay to ensure backend processes the release
+                        });
+                        
+                        if (response && response.data) {
+                            console.log(`Successfully released hold ${holdId}`, response.data);
+                        } else {
+                            console.log(`Hold release API called for ${holdId}, but no data returned`);
+                        }
+                    } catch (error) {
+                        // Log different error types for better debugging
+                        if (error.response) {
+                            console.error(`Error releasing hold ${holdId} - Status: ${error.response.status}`, 
+                                error.response.data || 'No error data');
+                        } else if (error.request) {
+                            console.error(`Error releasing hold ${holdId} - No response received:`, error.request);
+                        } else {
+                            console.error(`Error releasing hold ${holdId}:`, error.message);
+                        }
+                        console.log("Continuing despite release hold error - clearing local state");
+                    } finally {
+                        // Always clear holdId from state and localStorage, regardless of API success
+                
+                        localStorage.removeItem('reservation_hold_id');
+                        localStorage.removeItem('reservation_selected_time');
+                        console.log("Local hold data cleared");
+                    }
+                })();
+            }
+        }
+    }, [step, holdId]);
+
+    // Helper function to safely go back to step 1 and release any hold
+    const goToStep1 = async () => {
+        // Release hold if exists
+        if (holdId) {
+            try {
+                console.log(`Releasing hold ${holdId} when going back to step 1`);
+                
+                // Try to release the hold with error handling and add a delay
+                const response = await ReservationService.releaseHold(holdId, { 
+                    delayAfterRelease: 1500 // Add a 1.5 second delay to ensure backend processes the release
+                });
+                
+                if (response && response.data) {
+                    console.log(`Successfully released hold ${holdId}`, response.data);
+                } else {
+                    console.log(`Hold release API called for ${holdId}, but no data returned`);
+                }
+            } catch (error) {
+                // Log different error types for better debugging
+                if (error.response) {
+                    console.error(`Error releasing hold ${holdId} - Status: ${error.response.status}`, 
+                        error.response.data || 'No error data');
+                } else if (error.request) {
+                    console.error(`Error releasing hold ${holdId} - No response received:`, error.request);
+                } else {
+                    console.error(`Error releasing hold ${holdId}:`, error.message);
+                }
+                // Continuing despite errors - we'll still clear local state
+                console.log("Continuing despite release hold error - clearing local state");
+            } finally {
+                // Always clear holdId from state and localStorage, regardless of API success
+
+                localStorage.removeItem('reservation_hold_id');
+                localStorage.removeItem('reservation_selected_time');
+                console.log("Local hold data cleared");
+            }
+        } else {
+            console.log("No holdId to release, simply going back to step 1");
+        }
+        
+        // Go back to step 1
+        setStep(1);
+    };
 
     return (
         <div className="w-full">
@@ -2158,7 +2279,7 @@ const ReservationForm = () => {
                                         customerEmail: "",
                                         specialRequests: ""
                                     });
-                                    setStep(1);
+                                    goToStep1(); // Use helper function to ensure hold is released
                                     setSelectedSlot(null);
                                     setReservationCode(null);
                                     setNoAvailability(false);
