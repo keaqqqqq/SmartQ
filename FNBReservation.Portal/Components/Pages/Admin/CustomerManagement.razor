@@ -4,6 +4,7 @@
 @using FNBReservation.Portal.Components.Dialogs
 @using Microsoft.AspNetCore.Components.Web
 @inject ICustomerService CustomerService
+@inject CurrentUserService UserService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
@@ -274,10 +275,18 @@
     private int activeTabIndex = 0;
     private bool _isInitialized = false;
     private Exception _loadException = null;
+    private string _currentUsername = "Admin"; // Default fallback value
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCustomers();
+        
+        // Get the current username from the auth service
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the default value if there's an error
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -290,6 +299,20 @@
             if (CustomerService is HttpClientCustomerService httpClientService)
             {
                 await httpClientService.InitializeAsync();
+            }
+            
+            // Try to get username from localStorage
+            try
+            {
+                var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentUser");
+                if (!string.IsNullOrEmpty(username))
+                {
+                    _currentUsername = username;
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error getting username from localStorage:", ex.Message);
             }
             
             // Log any error that occurred during initialization
@@ -431,10 +454,17 @@
 
     private async Task OpenBanCustomerDialog(CustomerDto customer)
     {
+        // Refresh username in case it changed
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the current value if there's an error
+        }
+        
         var parameters = new DialogParameters
             {
                 ["Customer"] = customer,
-                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+                ["CurrentUser"] = _currentUsername 
             };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
@@ -484,10 +514,17 @@
 
     private async Task ViewCustomerDetails(CustomerDto customer)
     {
+        // Refresh username in case it changed
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the current value if there's an error
+        }
+        
         var parameters = new DialogParameters
             {
                 ["CustomerId"] = customer.CustomerId,
-                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+                ["CurrentUser"] = _currentUsername
             };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };

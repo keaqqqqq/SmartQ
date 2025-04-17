@@ -203,6 +203,9 @@ builder.Services.AddScoped<IStaffService>(sp => {
     );
 });
 
+// Register CurrentUserService
+builder.Services.AddScoped<CurrentUserService>();
+
 // Replace MockCustomerService with HttpClientCustomerService
 builder.Services.AddScoped<ICustomerService>(sp => {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();

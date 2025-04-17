@@ -423,7 +423,7 @@ namespace FNBReservation.Portal.Services
             {
                 dto.BanReason = apiCustomer.BanInfo.Reason;
                 dto.BannedDate = apiCustomer.BanInfo.BannedAt;
-                dto.BannedBy = apiCustomer.BanInfo.BannedByName;
+                dto.BannedBy = "Admin"; // Always use "Admin" regardless of what comes from the API
                 dto.BanExpiryDate = apiCustomer.BanInfo.EndsAt;
             }
             

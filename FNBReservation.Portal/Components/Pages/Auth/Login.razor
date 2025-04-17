@@ -122,6 +122,9 @@
             {
                 Snackbar.Add($"Welcome back, {result.Username}!", Severity.Success);
                 
+                // Store the username in localStorage for use in other components
+                await JS.InvokeVoidAsync("localStorage.setItem", "currentUser", result.Username);
+                
                 // Small delay to ensure authentication state is updated
                 await Task.Delay(300);
                 

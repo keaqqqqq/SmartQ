@@ -190,7 +190,7 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Services
                         BannedAt = ban.BannedAt,
                         DurationDays = ban.DurationDays,
                         EndsAt = endsAt,
-                        BannedByName = $"User-{ban.BannedById}" // Would need admin adapter to get actual name
+                        BannedByName = "Admin" // Will be overridden by the frontend
                     });
                 }
 
@@ -427,7 +427,7 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Services
                 DurationDays = ban.DurationDays,
                 EndsAt = endsAt,
                 BannedById = ban.BannedById,
-                BannedByName = $"User-{ban.BannedById}" // Would need admin adapter to get actual name
+                BannedByName = "Admin"
             };
         }
     }

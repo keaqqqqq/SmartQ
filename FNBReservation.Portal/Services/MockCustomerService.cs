@@ -71,7 +71,7 @@ namespace FNBReservation.Portal.Services
             customer.IsBanned = true;
             customer.BanReason = reason;
             customer.BannedDate = DateTime.Now;
-            customer.BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System";
+            customer.BannedBy = "Admin";
             customer.BanExpiryDate = expiryDate;
 
             if (!string.IsNullOrWhiteSpace(notes))
@@ -104,7 +104,7 @@ namespace FNBReservation.Portal.Services
                 IsBanned = true,
                 BanReason = reason,
                 BannedDate = DateTime.Now,
-                BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System",
+                BannedBy = "Admin",
                 BanExpiryDate = expiryDate,
                 TotalReservations = 0,
                 NoShows = 0
@@ -131,7 +131,7 @@ namespace FNBReservation.Portal.Services
             customer.BanExpiryDate = null;
 
             var currentNotes = string.IsNullOrEmpty(customer.Notes) ? "" : customer.Notes + "\n\n";
-            customer.Notes = currentNotes + $"[{DateTime.Now:G}] Ban removed by Admin User";
+            customer.Notes = currentNotes + $"[{DateTime.Now:G}] Ban removed by Admin";
 
             return Task.FromResult(true);
         }
@@ -253,7 +253,7 @@ namespace FNBReservation.Portal.Services
                     IsBanned = true,
                     BanReason = "Repeated No-Shows",
                     BannedDate = new DateTime(2025, 1, 14),
-                    BannedBy = "Admin User",
+                    BannedBy = "Admin",
                     TotalReservations = 3,
                     NoShows = 2,
                     LastVisit = new DateTime(2025, 1, 16),
