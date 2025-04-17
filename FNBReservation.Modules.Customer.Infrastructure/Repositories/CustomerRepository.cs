@@ -7,19 +7,19 @@ using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Customer.Core.Entities;
 using FNBReservation.Modules.Customer.Core.Interfaces;
 using FNBReservation.Modules.Customer.Infrastructure.Data;
+using FNBReservation.SharedKernel.Data;
 
 namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
 {
-    public class CustomerRepository : ICustomerRepository
+    public class CustomerRepository : BaseRepository<CustomerEntity, CustomerDbContext>, ICustomerRepository
     {
-        private readonly CustomerDbContext _dbContext;
         private readonly ILogger<CustomerRepository> _logger;
 
         public CustomerRepository(
-            CustomerDbContext dbContext,
+            DbContextFactory<CustomerDbContext> contextFactory,
             ILogger<CustomerRepository> logger)
+            : base(contextFactory, logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -31,9 +31,10 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
             int pageSize = 20)
         {
             _logger.LogInformation("Searching customers with term: {SearchTerm}, status: {Status}, outlet: {OutletId}",
-                searchTerm, status, outletId);
+            searchTerm, status, outletId);
 
-            IQueryable<CustomerEntity> query = _dbContext.Customers;
+            using var context = _contextFactory.CreateReadContext();
+            IQueryable<CustomerEntity> query = context.Customers;
 
             // Filter by status if provided
             if (!string.IsNullOrEmpty(status))
@@ -73,76 +74,104 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting customer by ID: {CustomerId}", id);
 
-            return await _dbContext.Customers
-                .Include(c => c.BanHistory)
-                .FirstOrDefaultAsync(c => c.Id == id);
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet
+                    .Include(c => c.BanHistory)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+            });
         }
 
         public async Task<CustomerEntity> GetByPhoneAsync(string phone)
         {
             _logger.LogInformation("Getting customer by phone: {Phone}", phone);
 
-            return await _dbContext.Customers
-                .Include(c => c.BanHistory)
-                .FirstOrDefaultAsync(c => c.Phone == phone);
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet
+                    .Include(c => c.BanHistory)
+                    .FirstOrDefaultAsync(c => c.Phone == phone);
+            });
         }
 
         public async Task<List<CustomerEntity>> GetByIdsAsync(List<Guid> ids)
         {
             _logger.LogInformation("Getting customers by IDs: {Count} customers", ids.Count);
 
-            return await _dbContext.Customers
-                .Include(c => c.BanHistory)
-                .Where(c => ids.Contains(c.Id))
-                .ToListAsync();
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet
+                    .Include(c => c.BanHistory)
+                    .Where(c => ids.Contains(c.Id))
+                    .ToListAsync();
+            });
         }
 
         public async Task<CustomerEntity> UpdateAsync(CustomerEntity customer)
         {
             _logger.LogInformation("Updating customer: {CustomerId}", customer.Id);
 
-            customer.UpdatedAt = DateTime.UtcNow;
-            _dbContext.Customers.Update(customer);
-            await _dbContext.SaveChangesAsync();
-
-            return customer;
+            return await ExecuteWriteQueryAsync(async dbSet =>
+            {
+                customer.UpdatedAt = DateTime.UtcNow;
+                dbSet.Update(customer);
+                return customer;
+            });
         }
 
         public async Task<CustomerBanEntity> AddBanAsync(CustomerBanEntity ban)
         {
             _logger.LogInformation("Adding ban for customer: {CustomerId}", ban.CustomerId);
 
-            // First, deactivate any existing active bans
-            var existingActiveBan = await GetActiveBanAsync(ban.CustomerId);
-            if (existingActiveBan != null)
+            // Use a regular write context instead of a transaction
+            using var context = _contextFactory.CreateWriteContext();
+
+            try
             {
-                existingActiveBan.IsActive = false;
-                existingActiveBan.RemovedAt = DateTime.UtcNow;
-                existingActiveBan.RemovedById = ban.BannedById; // Use the same admin who's creating the new ban
-                _dbContext.CustomerBans.Update(existingActiveBan);
+                // First, deactivate any existing active bans
+                var existingActiveBan = await context.CustomerBans
+                    .Where(b => b.CustomerId == ban.CustomerId && b.IsActive)
+                    .OrderByDescending(b => b.BannedAt)
+                    .FirstOrDefaultAsync();
+
+                if (existingActiveBan != null)
+                {
+                    existingActiveBan.IsActive = false;
+                    existingActiveBan.RemovedAt = DateTime.UtcNow;
+                    existingActiveBan.RemovedById = ban.BannedById; // Use the same admin who's creating the new ban
+                    context.CustomerBans.Update(existingActiveBan);
+                }
+
+                // Add the new ban
+                await context.CustomerBans.AddAsync(ban);
+
+                // Update customer status
+                var customer = await context.Customers.FindAsync(ban.CustomerId);
+                if (customer != null)
+                {
+                    customer.Status = "Banned";
+                    customer.UpdatedAt = DateTime.UtcNow;
+                    context.Customers.Update(customer);
+                }
+
+                // Save all changes in a single operation
+                await context.SaveChangesAsync();
+
+                return ban;
             }
-
-            // Add the new ban
-            await _dbContext.CustomerBans.AddAsync(ban);
-
-            // Update customer status
-            var customer = await _dbContext.Customers.FindAsync(ban.CustomerId);
-            if (customer != null)
+            catch (Exception ex)
             {
-                customer.Status = "Banned";
-                customer.UpdatedAt = DateTime.UtcNow;
-                _dbContext.Customers.Update(customer);
+                _logger.LogError(ex, "Error while adding ban for customer {CustomerId}", ban.CustomerId);
+                throw;
             }
-
-            await _dbContext.SaveChangesAsync();
-            return ban;
         }
 
         public async Task<CustomerBanEntity> GetActiveBanAsync(Guid customerId)
         {
             _logger.LogInformation("Getting active ban for customer: {CustomerId}", customerId);
 
-            return await _dbContext.CustomerBans
+            using var context = _contextFactory.CreateReadContext();
+            return await context.CustomerBans
                 .Where(b => b.CustomerId == customerId && b.IsActive)
                 .OrderByDescending(b => b.BannedAt)
                 .FirstOrDefaultAsync();
@@ -152,7 +181,8 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting ban history for customer: {CustomerId}", customerId);
 
-            return await _dbContext.CustomerBans
+            using var context = _contextFactory.CreateReadContext();
+            return await context.CustomerBans
                 .Where(b => b.CustomerId == customerId)
                 .OrderByDescending(b => b.BannedAt)
                 .ToListAsync();
@@ -164,7 +194,8 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
 
             // This will return all active bans, we'll filter by outlet in the service layer
             // since we need reservation data to determine if a customer has visited that outlet
-            return await _dbContext.CustomerBans
+            using var context = _contextFactory.CreateReadContext();
+            return await context.CustomerBans
                 .Include(b => b.Customer)
                 .Where(b => b.IsActive)
                 .OrderByDescending(b => b.BannedAt)
@@ -175,21 +206,32 @@ namespace FNBReservation.Modules.Customer.Infrastructure.Repositories
         {
             _logger.LogInformation("Creating new customer: {Name}, phone: {Phone}", customer.Name, customer.Phone);
 
-            // Check if customer already exists with this phone number
-            var existingCustomer = await _dbContext.Customers
-                .FirstOrDefaultAsync(c => c.Phone == customer.Phone);
+            // Use a regular write context instead of a transaction
+            using var context = _contextFactory.CreateWriteContext();
 
-            if (existingCustomer != null)
+            try
             {
-                _logger.LogWarning("Customer with phone {Phone} already exists", customer.Phone);
-                return existingCustomer;
+                // Check if customer already exists with this phone number
+                var existingCustomer = await context.Customers
+                    .FirstOrDefaultAsync(c => c.Phone == customer.Phone);
+
+                if (existingCustomer != null)
+                {
+                    _logger.LogWarning("Customer with phone {Phone} already exists", customer.Phone);
+                    return existingCustomer;
+                }
+
+                // Add new customer to database
+                await context.Customers.AddAsync(customer);
+                await context.SaveChangesAsync();
+
+                return customer;
             }
-
-            // Add new customer to database
-            await _dbContext.Customers.AddAsync(customer);
-            await _dbContext.SaveChangesAsync();
-
-            return customer;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while creating customer with phone {Phone}", customer.Phone);
+                throw;
+            }
         }
     }
 }

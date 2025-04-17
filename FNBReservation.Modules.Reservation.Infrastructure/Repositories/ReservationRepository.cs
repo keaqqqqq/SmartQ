@@ -3,22 +3,28 @@ using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Reservation.Core.Entities;
 using FNBReservation.Modules.Reservation.Core.Interfaces;
 using FNBReservation.Modules.Reservation.Infrastructure.Data;
+using FNBReservation.SharedKernel.Data;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
 {
-    public class ReservationRepository : IReservationRepository
+    public class ReservationRepository : BaseRepository<ReservationEntity, ReservationDbContext>, IReservationRepository
     {
-        private readonly ReservationDbContext _dbContext;
         private readonly ILogger<ReservationRepository> _logger;
-        private readonly IOutletAdapter _outletAdapter; // New field
+        private readonly IOutletAdapter _outletAdapter;
 
-
-        public ReservationRepository(ReservationDbContext dbContext, ILogger<ReservationRepository> logger, IOutletAdapter outletAdapter)
+        public ReservationRepository(
+            DbContextFactory<ReservationDbContext> contextFactory,
+            ILogger<ReservationRepository> logger,
+            IOutletAdapter outletAdapter)
+            : base(contextFactory, logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _outletAdapter = outletAdapter ?? throw new ArgumentNullException(nameof(outletAdapter));
-
         }
 
         public async Task<ReservationEntity> CreateAsync(ReservationEntity reservation)
@@ -26,17 +32,26 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Creating new reservation for {CustomerName} on {ReservationDate}",
                 reservation.CustomerName, reservation.ReservationDate);
 
-            await _dbContext.Reservations.AddAsync(reservation);
-            await _dbContext.SaveChangesAsync();
-
-            return reservation;
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.Reservations.AddAsync(reservation);
+                await context.SaveChangesAsync();
+                return reservation;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating reservation for {CustomerName}", reservation.CustomerName);
+                throw;
+            }
         }
 
         public async Task<ReservationEntity> GetByIdAsync(Guid id)
         {
             _logger.LogInformation("Getting reservation by ID: {ReservationId}", id);
 
-            return await _dbContext.Reservations
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reservations
                 .Include(r => r.TableAssignments)
                 .FirstOrDefaultAsync(r => r.Id == id);
         }
@@ -45,7 +60,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting reservation by code: {ReservationCode}", reservationCode);
 
-            return await _dbContext.Reservations
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reservations
                 .Include(r => r.TableAssignments)
                 .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode);
         }
@@ -55,7 +71,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Getting reservations for outlet: {OutletId}, Date: {Date}, Status: {Status}",
                 outletId, date, status);
 
-            var query = _dbContext.Reservations
+            using var context = _contextFactory.CreateReadContext();
+            var query = context.Reservations
                 .Include(r => r.TableAssignments)
                 .Where(r => r.OutletId == outletId);
 
@@ -80,7 +97,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting reservations for phone: {Phone}", phone);
 
-            return await _dbContext.Reservations
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reservations
                 .Include(r => r.TableAssignments)
                 .Where(r => r.CustomerPhone == phone)
                 .OrderByDescending(r => r.ReservationDate)
@@ -92,7 +110,8 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Getting reservations for outlet: {OutletId} between {StartDate} and {EndDate}",
                 outletId, startDate, endDate);
 
-            return await _dbContext.Reservations
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reservations
                 .Include(r => r.TableAssignments)
                 .Where(r => r.OutletId == outletId &&
                             r.ReservationDate >= startDate &&
@@ -105,26 +124,62 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
         {
             _logger.LogInformation("Updating reservation: {ReservationId}", reservation.Id);
 
-            _dbContext.Reservations.Update(reservation);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                // Retrieve the entity with its related entities for tracking
+                var existingReservation = await context.Reservations
+                    .Include(r => r.TableAssignments)
+                    .FirstOrDefaultAsync(r => r.Id == reservation.Id);
 
-            return reservation;
+                if (existingReservation == null)
+                {
+                    _logger.LogWarning("Reservation not found for update: {ReservationId}", reservation.Id);
+                    throw new KeyNotFoundException($"Reservation with ID {reservation.Id} not found");
+                }
+
+                // Update properties
+                context.Entry(existingReservation).CurrentValues.SetValues(reservation);
+
+                // Save changes
+                await context.SaveChangesAsync();
+                return existingReservation;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating reservation: {ReservationId}", reservation.Id);
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAsync(Guid id)
         {
             _logger.LogInformation("Deleting reservation: {ReservationId}", id);
 
-            var reservation = await _dbContext.Reservations.FindAsync(id);
-            if (reservation == null)
+            using var context = _contextFactory.CreateWriteContext();
+            try
             {
-                _logger.LogWarning("Reservation not found for deletion: {ReservationId}", id);
-                return false;
-            }
+                var reservation = await context.Reservations.FindAsync(id);
+                if (reservation == null)
+                {
+                    _logger.LogWarning("Reservation not found for deletion: {ReservationId}", id);
+                    return false;
+                }
 
-            _dbContext.Reservations.Remove(reservation);
-            await _dbContext.SaveChangesAsync();
-            return true;
+                // Load related entities before deletion
+                await context.Entry(reservation)
+                    .Collection(r => r.TableAssignments)
+                    .LoadAsync();
+
+                context.Reservations.Remove(reservation);
+                await context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting reservation: {ReservationId}", id);
+                throw;
+            }
         }
 
         public async Task<int> GetReservationCountForTimeSlotAsync(Guid outletId, DateTime startTime, DateTime endTime)
@@ -132,8 +187,9 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Getting reservation count for outlet: {OutletId} between {StartTime} and {EndTime}",
                 outletId, startTime, endTime);
 
+            using var context = _contextFactory.CreateReadContext();
             // First, get the reservations that might overlap
-            var overlappingReservations = await _dbContext.Reservations
+            var overlappingReservations = await context.Reservations
                 .Where(r => r.OutletId == outletId &&
                            r.Status != "Canceled" &&
                            r.Status != "NoShow" &&
@@ -145,30 +201,35 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
                 .Count(r => r.ReservationDate.Add(r.Duration) > startTime);
         }
 
+        // Updated GetReservedCapacityForTimeSlotAsync method
         public async Task<int> GetReservedCapacityForTimeSlotAsync(Guid outletId, DateTime startTime, DateTime endTime)
         {
             _logger.LogInformation("Getting reserved capacity for outlet: {OutletId} between {StartTime} and {EndTime}",
                 outletId, startTime, endTime);
 
-            // Use a transaction for consistent reads
-            using var transaction = await _dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+            using var context = _contextFactory.CreateReadContext();
+            try
+            {
+                // Remove the explicit transaction since it's causing issues with MySqlRetryingExecutionStrategy
+                // Get all active reservations for this time slot with a more accurate overlap check
+                var overlappingReservations = await context.Reservations
+                    .Where(r => r.OutletId == outletId &&
+                              r.Status != "Canceled" &&
+                              r.Status != "NoShow" &&
+                              r.Status != "Completed" && // Add Completed to the excluded statuses
+                              r.ReservationDate < endTime)
+                    .ToListAsync();
 
-            // Get all active reservations for this time slot with a more accurate overlap check
-            var overlappingReservations = await _dbContext.Reservations
-                .Where(r => r.OutletId == outletId &&
-                          r.Status != "Canceled" &&
-                          r.Status != "NoShow" &&
-                          r.Status != "Completed" && // Add Completed to the excluded statuses
-                          r.ReservationDate < endTime)
-                .ToListAsync();
-
-            // Complete the transaction
-            await transaction.CommitAsync();
-
-            // Then apply more precise filtering client-side
-            return overlappingReservations
-                .Where(r => r.ReservationDate.Add(r.Duration) > startTime)
-                .Sum(r => r.PartySize);
+                // Then apply more precise filtering client-side
+                return overlappingReservations
+                    .Where(r => r.ReservationDate.Add(r.Duration) > startTime)
+                    .Sum(r => r.PartySize);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting reserved capacity for outlet: {OutletId}", outletId);
+                throw;
+            }
         }
 
         public async Task AddTableAssignmentAsync(ReservationTableAssignment tableAssignment)
@@ -176,8 +237,18 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Adding table assignment for reservation: {ReservationId}, table: {TableId}",
                 tableAssignment.ReservationId, tableAssignment.TableId);
 
-            await _dbContext.TableAssignments.AddAsync(tableAssignment);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.TableAssignments.AddAsync(tableAssignment);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding table assignment for reservation: {ReservationId}",
+                    tableAssignment.ReservationId);
+                throw;
+            }
         }
 
         public async Task RemoveTableAssignmentAsync(Guid reservationId, Guid tableId)
@@ -185,13 +256,23 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Removing table assignment for reservation: {ReservationId}, table: {TableId}",
                 reservationId, tableId);
 
-            var assignment = await _dbContext.TableAssignments
-                .FirstOrDefaultAsync(ta => ta.ReservationId == reservationId && ta.TableId == tableId);
-
-            if (assignment != null)
+            using var context = _contextFactory.CreateWriteContext();
+            try
             {
-                _dbContext.TableAssignments.Remove(assignment);
-                await _dbContext.SaveChangesAsync();
+                var assignment = await context.TableAssignments
+                    .FirstOrDefaultAsync(ta => ta.ReservationId == reservationId && ta.TableId == tableId);
+
+                if (assignment != null)
+                {
+                    context.TableAssignments.Remove(assignment);
+                    await context.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing table assignment for reservation: {ReservationId}",
+                    reservationId);
+                throw;
             }
         }
 
@@ -200,16 +281,42 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Adding reminder for reservation: {ReservationId}, type: {ReminderType}",
                 reminder.ReservationId, reminder.ReminderType);
 
-            await _dbContext.Reminders.AddAsync(reminder);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.Reminders.AddAsync(reminder);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding reminder for reservation: {ReservationId}",
+                    reminder.ReservationId);
+                throw;
+            }
         }
 
         public async Task UpdateReminderAsync(ReservationReminder reminder)
         {
             _logger.LogInformation("Updating reminder: {ReminderId}", reminder.Id);
 
-            _dbContext.Reminders.Update(reminder);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                var existingReminder = await context.Reminders.FindAsync(reminder.Id);
+                if (existingReminder == null)
+                {
+                    _logger.LogWarning("Reminder not found for update: {ReminderId}", reminder.Id);
+                    throw new KeyNotFoundException($"Reminder with ID {reminder.Id} not found");
+                }
+
+                context.Entry(existingReminder).CurrentValues.SetValues(reminder);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating reminder: {ReminderId}", reminder.Id);
+                throw;
+            }
         }
 
         public async Task AddStatusChangeAsync(ReservationStatusChange statusChange)
@@ -217,26 +324,40 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Adding status change for reservation: {ReservationId}, from {OldStatus} to {NewStatus}",
                 statusChange.ReservationId, statusChange.OldStatus, statusChange.NewStatus);
 
-            await _dbContext.StatusChanges.AddAsync(statusChange);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.StatusChanges.AddAsync(statusChange);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding status change for reservation: {ReservationId}",
+                    statusChange.ReservationId);
+                throw;
+            }
         }
 
         public async Task<IEnumerable<ReservationReminder>> GetPendingRemindersAsync(DateTime before)
         {
             _logger.LogInformation("Getting pending reminders scheduled before: {DateTime}", before);
 
-            return await _dbContext.Reminders
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reminders
                 .Include(r => r.Reservation)
                 .Where(r => r.Status == "Pending" && r.ScheduledFor <= before)
                 .ToListAsync();
         }
 
-        // Add this method to ReservationRepository
         public async Task<List<Guid>> GetReservedTableIdsForTimeSlotAsync(
             Guid outletId, DateTime startTime, DateTime endTime)
         {
+            _logger.LogInformation("Getting reserved table IDs for outlet: {OutletId} between {StartTime} and {EndTime}",
+                outletId, startTime, endTime);
+
+            using var context = _contextFactory.CreateReadContext();
             // First get the reservations with basic filtering that can be translated to SQL
-            var overlappingReservations = await _dbContext.Reservations
+            var overlappingReservations = await context.Reservations
                 .Include(r => r.TableAssignments)
                 .Where(r => r.OutletId == outletId &&
                           r.Status != "Canceled" &&
@@ -258,13 +379,14 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
         }
 
         public async Task<List<Guid>> GetHeldTableIdsForTimeSlotAsync(
-        Guid outletId, DateTime startTime, DateTime endTime, string excludeSessionId = null)
+            Guid outletId, DateTime startTime, DateTime endTime, string excludeSessionId = null)
         {
             _logger.LogInformation("Getting held table IDs for outlet: {OutletId} between {StartTime} and {EndTime}",
                 outletId, startTime, endTime);
 
+            using var context = _contextFactory.CreateReadContext();
             // Get active holds that overlap with the specified time range
-            var activeHolds = await _dbContext.TableHolds
+            var activeHolds = await context.TableHolds
                 .Where(h => h.OutletId == outletId &&
                            h.IsActive &&
                            h.ReservationDateTime < endTime &&
@@ -283,38 +405,72 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
 
         public async Task<TableHold> CreateTableHoldAsync(TableHold tableHold)
         {
-            await _dbContext.TableHolds.AddAsync(tableHold);
-            await _dbContext.SaveChangesAsync();
-            return tableHold;
+            _logger.LogInformation("Creating table hold for session: {SessionId}", tableHold.SessionId);
+
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.TableHolds.AddAsync(tableHold);
+                await context.SaveChangesAsync();
+                return tableHold;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating table hold for session: {SessionId}", tableHold.SessionId);
+                throw;
+            }
         }
 
         public async Task<TableHold> GetTableHoldBySessionIdAsync(string sessionId)
         {
-            return await _dbContext.TableHolds
+            _logger.LogInformation("Getting table hold by session ID: {SessionId}", sessionId);
+
+            using var context = _contextFactory.CreateReadContext();
+            return await context.TableHolds
                 .FirstOrDefaultAsync(h => h.SessionId == sessionId && h.IsActive);
         }
 
         public async Task<TableHold> GetTableHoldByIdAsync(Guid holdId)
         {
-            return await _dbContext.TableHolds
+            _logger.LogInformation("Getting table hold by ID: {HoldId}", holdId);
+
+            using var context = _contextFactory.CreateReadContext();
+            return await context.TableHolds
                 .FirstOrDefaultAsync(h => h.Id == holdId);
         }
 
         public async Task<bool> ReleaseTableHoldAsync(Guid holdId)
         {
-            var hold = await _dbContext.TableHolds.FindAsync(holdId);
-            if (hold == null)
-                return false;
+            _logger.LogInformation("Releasing table hold: {HoldId}", holdId);
 
-            hold.IsActive = false;
-            _dbContext.TableHolds.Update(hold);
-            await _dbContext.SaveChangesAsync();
-            return true;
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                var hold = await context.TableHolds.FindAsync(holdId);
+                if (hold == null)
+                {
+                    _logger.LogWarning("Table hold not found for release: {HoldId}", holdId);
+                    return false;
+                }
+
+                hold.IsActive = false;
+                context.TableHolds.Update(hold);
+                await context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error releasing table hold: {HoldId}", holdId);
+                throw;
+            }
         }
 
         public async Task<List<TableHold>> GetExpiredTableHoldsAsync()
         {
-            return await _dbContext.TableHolds
+            _logger.LogInformation("Getting expired table holds");
+
+            using var context = _contextFactory.CreateReadContext();
+            return await context.TableHolds
                 .Where(h => h.IsActive && h.HoldExpiresAt < DateTime.UtcNow)
                 .ToListAsync();
         }
@@ -330,10 +486,11 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
         {
             _logger.LogInformation("Executing reservation search query with filters");
 
+            using var context = _contextFactory.CreateReadContext();
             try
             {
                 // Start with all reservations
-                IQueryable<ReservationEntity> query = _dbContext.Reservations
+                IQueryable<ReservationEntity> query = context.Reservations
                     .Include(r => r.TableAssignments);
 
                 // Apply outlet filter if specified
@@ -398,10 +555,11 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
             _logger.LogInformation("Getting total capacity of reserved tables for outlet {OutletId} between {StartTime} and {EndTime}",
                 outletId, startTime, endTime);
 
+            using var context = _contextFactory.CreateReadContext();
             try
             {
                 // Get all reservations that overlap with the specified time range
-                var activeReservations = await _dbContext.Reservations
+                var activeReservations = await context.Reservations
                     .Include(r => r.TableAssignments)
                     .Where(r => r.OutletId == outletId &&
                               r.Status != "Canceled" &&
@@ -447,7 +605,10 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Repositories
 
         public async Task<List<ReservationReminder>> GetAllRemindersByReservationIdAsync(Guid reservationId)
         {
-            return await _dbContext.Reminders
+            _logger.LogInformation("Getting all reminders for reservation: {ReservationId}", reservationId);
+
+            using var context = _contextFactory.CreateReadContext();
+            return await context.Reminders
                 .Where(r => r.ReservationId == reservationId)
                 .ToListAsync();
         }
