@@ -15,17 +15,12 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
         <MudText Typo="Typo.h4">Reservation Management</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="OpenCreateReservationDialog">
-            NEW RESERVATION
-        </MudButton>
     </div>
 
     <MudCard>
         <MudCardContent Class="py-4">
             <MudGrid>
-                <MudItem xs="12" md="3">
+                <MudItem xs="12" md="4">
                     <MudSelect T="string" Value="@selectedOutletId" ValueChanged="@OutletChanged" Label="Outlet"
                                Variant="Variant.Outlined"
                                AdornmentIcon="@Icons.Material.Filled.Store"
@@ -39,7 +34,7 @@
                     </MudSelect>
                 </MudItem>
 
-                <MudItem xs="12" md="3">
+                <MudItem xs="12" md="4">
                     <MudSelect T="string" Value="@selectedStatus" ValueChanged="@StatusChanged" Label="Status"
                                Variant="Variant.Outlined"
                                AdornmentIcon="@Icons.Material.Filled.FilterList"
@@ -48,27 +43,12 @@
                         <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
                         <MudSelectItem Value="@("Confirmed")">Confirmed</MudSelectItem>
                         <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
-                        <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                        <MudSelectItem Value="@("Canceled")">Canceled</MudSelectItem>
                         <MudSelectItem Value="@("No-Show")">No-Show</MudSelectItem>
                     </MudSelect>
                 </MudItem>
 
-                <MudItem xs="12" md="3">
-                    <MudDateRangePicker @ref="dateRangePicker" Label="Date Range"
-                                        @bind-Value="dateRange"
-                                        Variant="Variant.Outlined"
-                                        Adornment="Adornment.None"
-                                        DateFormat="dd/MM/yyyy"
-                                        PickerVariant="PickerVariant.Dialog"
-                                        HelperText="Reservation date range">
-                        <PickerActions>
-                            <MudButton Class="mr-auto" Variant="Variant.Text" OnClick="@(() => ClearAndCloseDatePicker())">Clear</MudButton>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => ApplyAndCloseDatePicker())">Apply</MudButton>
-                        </PickerActions>
-                    </MudDateRangePicker>
-                </MudItem>
-
-                <MudItem xs="12" md="3">
+                <MudItem xs="12" md="4">
                     <MudTextField @bind-Value="searchTerm" Label="Search"
                                   Variant="Variant.Outlined"
                                   Placeholder="Name, phone, email..."
@@ -170,8 +150,6 @@
 
     private string selectedOutletId = "all";
     private string selectedStatus = "";
-    private DateRange dateRange = new DateRange(DateTime.Now.Date, DateTime.Now.Date.AddDays(7));
-    private MudDateRangePicker dateRangePicker;
     private string searchTerm = "";
 
     private bool isLoading = true;
@@ -215,8 +193,6 @@
             {
                 OutletId = selectedOutletId == "all" ? null : selectedOutletId,
                 Status = string.IsNullOrEmpty(selectedStatus) ? null : selectedStatus,
-                StartDate = dateRange.Start,
-                EndDate = dateRange.End,
                 SearchTerm = string.IsNullOrEmpty(searchTerm) ? null : searchTerm
             };
 
@@ -224,8 +200,6 @@
             await LogToConsoleAsync("Loading reservations with filter:");
             await LogToConsoleAsync($"  OutletId: {selectedOutletId}");
             await LogToConsoleAsync($"  Status: {selectedStatus}");
-            await LogToConsoleAsync($"  StartDate: {dateRange.Start}");
-            await LogToConsoleAsync($"  EndDate: {dateRange.End}");
             await LogToConsoleAsync($"  SearchTerm: {searchTerm}");
 
             reservations = await ReservationService.GetReservationsAsync(filter);
@@ -252,37 +226,21 @@
         {
             await _jsRuntime.InvokeVoidAsync("console.log", message);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("prerendering"))
+        catch
         {
-            // Silently ignore JS interop issues during prerendering
-        }
-        catch (Exception)
-        {
-            // Ignore other console logging errors - they shouldn't break the app
+            // Ignore errors during prerendering
         }
     }
 
-    private async Task OutletChanged(string outletId)
+    private async Task OutletChanged(string value)
     {
-        selectedOutletId = outletId;
+        selectedOutletId = value;
         await LoadReservations();
     }
 
-    private async Task StatusChanged(string status)
+    private async Task StatusChanged(string value)
     {
-        selectedStatus = status;
-        await LoadReservations();
-    }
-
-    private async Task ClearAndCloseDatePicker()
-    {
-        dateRange = new DateRange(null, null);
-        await dateRangePicker.CloseAsync(false);
-    }
-
-    private async Task ApplyAndCloseDatePicker()
-    {
-        await dateRangePicker.CloseAsync();
+        selectedStatus = value;
         await LoadReservations();
     }
 
@@ -291,18 +249,18 @@
         await LoadReservations();
     }
 
-    private bool QuickFilter(ReservationDto reservation)
+    private bool QuickFilter(ReservationDto element)
     {
         if (string.IsNullOrWhiteSpace(searchTerm))
             return true;
 
-        var searchTermLower = searchTerm.ToLower();
+        var searchTermLower = searchTerm.Trim().ToLower();
 
-        return reservation.CustomerName.ToLower().Contains(searchTermLower) ||
-               reservation.CustomerPhone.ToLower().Contains(searchTermLower) ||
-               (reservation.CustomerEmail != null && reservation.CustomerEmail.ToLower().Contains(searchTermLower)) ||
-               reservation.ReservationId.ToLower().Contains(searchTermLower) ||
-               (reservation.Notes != null && reservation.Notes.ToLower().Contains(searchTermLower));
+        return element.CustomerName.ToLower().Contains(searchTermLower) ||
+               element.CustomerPhone.ToLower().Contains(searchTermLower) ||
+               (element.CustomerEmail != null && element.CustomerEmail.ToLower().Contains(searchTermLower)) ||
+               element.ReservationId.ToLower().Contains(searchTermLower) ||
+               (element.SpecialRequests != null && element.SpecialRequests.ToLower().Contains(searchTermLower));
     }
 
     private Color GetStatusColor(string status)
@@ -312,6 +270,7 @@
             "confirmed" => Color.Info,
             "completed" => Color.Dark,
             "cancelled" => Color.Error,
+            "canceled" => Color.Error,
             "no-show" => Color.Warning,
             _ => Color.Default
         };

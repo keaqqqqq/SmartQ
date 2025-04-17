@@ -152,16 +152,6 @@ namespace FNBReservation.Portal.Services
         {
             var queryParams = new List<string>();
             
-            if (filter.StartDate.HasValue)
-            {
-                queryParams.Add($"startDate={Uri.EscapeDataString(filter.StartDate.Value.ToString("yyyy-MM-dd"))}");
-            }
-            
-            if (filter.EndDate.HasValue)
-            {
-                queryParams.Add($"endDate={Uri.EscapeDataString(filter.EndDate.Value.ToString("yyyy-MM-dd"))}");
-            }
-            
             if (!string.IsNullOrEmpty(filter.Status))
             {
                 queryParams.Add($"status={Uri.EscapeDataString(filter.Status)}");
@@ -222,19 +212,6 @@ namespace FNBReservation.Portal.Services
         private List<ReservationDto> ApplyClientSideFilters(List<ReservationDto> reservations, ReservationFilterDto filter)
         {
             var filtered = reservations;
-            
-            // Apply date filters if they weren't applied by the server
-            if (filter.StartDate.HasValue)
-            {
-                var startDate = filter.StartDate.Value.Date;
-                filtered = filtered.Where(r => r.ReservationDate.Date >= startDate).ToList();
-            }
-            
-            if (filter.EndDate.HasValue)
-            {
-                var endDate = filter.EndDate.Value.Date.AddDays(1).AddSeconds(-1);
-                filtered = filtered.Where(r => r.ReservationDate.Date <= endDate.Date).ToList();
-            }
             
             // Apply status filter if it wasn't applied by the server
             if (!string.IsNullOrEmpty(filter.Status))

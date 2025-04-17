@@ -45,18 +45,6 @@ namespace FNBReservation.Portal.Services
                 filteredReservations = filteredReservations.Where(r => r.OutletId == filter.OutletId);
             }
 
-            if (filter.StartDate.HasValue)
-            {
-                var startDate = filter.StartDate.Value.Date;
-                filteredReservations = filteredReservations.Where(r => r.ReservationDate.Date >= startDate);
-            }
-
-            if (filter.EndDate.HasValue)
-            {
-                var endDate = filter.EndDate.Value.Date.AddDays(1).AddSeconds(-1);
-                filteredReservations = filteredReservations.Where(r => r.ReservationDate.Date <= endDate.Date);
-            }
-
             if (!string.IsNullOrEmpty(filter.Status))
             {
                 filteredReservations = filteredReservations.Where(r => r.Status == filter.Status);
