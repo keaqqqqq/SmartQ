@@ -211,16 +211,6 @@
                         }
                     </div>
 
-                    <!-- Debug information -->
-                    @if (ViewModel.BannedCustomers.Count > 0)
-                    {
-                        <MudText Typo="Typo.caption" Class="mb-2">Found @ViewModel.BannedCustomers.Count banned customers</MudText>
-                    }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Info" Class="mb-2">No banned customers found in the data. Count: @ViewModel.BannedCustomers.Count</MudAlert>
-                    }
-
                     <MudTable Items="@ViewModel.BannedCustomers" Hover="true" Breakpoint="Breakpoint.Sm"
                               Loading="@ViewModel.IsLoading" LoadingProgressColor="Color.Primary"
                               T="CustomerDto" Class="mb-4" Dense="true">
@@ -260,10 +250,12 @@
                                 </div>
                             </MudTd>
                             <MudTd DataLabel="Actions">
-                                <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small"
-                                           OnClick="@(() => UnbanCustomer(customer))">
-                                    Remove Ban
-                                </MudButton>
+                                <MudTooltip Text="Staff members cannot remove bans. Please contact an administrator.">
+                                    <MudButton Color="Color.Default" Variant="Variant.Text" Size="Size.Small" Disabled="true">
+                                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mr-1" />
+                                        Requires Admin
+                                    </MudButton>
+                                </MudTooltip>
                             </MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
@@ -273,26 +265,6 @@
                             <MudTablePager PageSizeOptions="new int[] { 5, 10, 25 }" />
                         </PagerContent>
                     </MudTable>
-
-                    <!-- Additional debug info -->
-                    @if (ViewModel.BannedCustomers.Count > 0)
-                    {
-                        <MudExpansionPanels Style="margin-bottom: 16px;">
-                            <MudExpansionPanel Text="Debug Information (Banned Customers Data)">
-                                <MudText Typo="Typo.body2">Count: @ViewModel.BannedCustomers.Count</MudText>
-                                @foreach (var customer in ViewModel.BannedCustomers)
-                                {
-                                    <MudDivider Class="my-2" />
-                                    <MudText Typo="Typo.body2">Name: @customer.Name</MudText>
-                                    <MudText Typo="Typo.body2">ID: @customer.CustomerId</MudText>
-                                    <MudText Typo="Typo.body2">IsBanned: @customer.IsBanned</MudText>
-                                    <MudText Typo="Typo.body2">Reason: @(customer.BanReason ?? "N/A")</MudText>
-                                    <MudText Typo="Typo.body2">BannedDate: @(customer.BannedDate?.ToString() ?? "N/A")</MudText>
-                                    <MudText Typo="Typo.body2">BannedBy: @(customer.BannedBy ?? "N/A")</MudText>
-                                }
-                            </MudExpansionPanel>
-                        </MudExpansionPanels>
-                    }
                 </MudCardContent>
             </MudTabPanel>
         </MudTabs>
@@ -340,25 +312,6 @@
         if (!result.Canceled)
         {
             await ViewModel.LoadCustomersAsync();
-        }
-    }
-
-    private async Task UnbanCustomer(CustomerDto customer)
-    {
-        var parameters = new DialogParameters
-        {
-            ["ContentText"] = $"Are you sure you want to remove the ban for <b>{customer.Name}</b>? This will allow them to make reservations again.",
-            ["ButtonText"] = "Remove Ban",
-            ["Color"] = Color.Success
-        };
-
-        var options = new DialogOptions { CloseOnEscapeKey = true };
-        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Unban", parameters, options);
-        var result = await dialog.Result;
-
-        if (!result.Canceled)
-        {
-            await ViewModel.UnbanCustomerAsync(customer.CustomerId);
         }
     }
 
