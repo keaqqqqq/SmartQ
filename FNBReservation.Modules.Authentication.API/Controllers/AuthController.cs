@@ -25,31 +25,6 @@ namespace FNBReservation.Modules.Authentication.API.Controllers
         }
 
         [Authorize]
-        [HttpGet("test-auth")]
-        public IActionResult TestAuth()
-        {
-            _logger.LogInformation("TestAuth endpoint called");
-
-            var claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
-            _logger.LogInformation("Claims found: {ClaimsCount}", claims.Count);
-
-            foreach (var claim in claims)
-            {
-                _logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
-            }
-
-            return Ok(new
-            {
-                message = "Authentication is working correctly",
-                userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-                userIdClaim = User.FindFirst("nameid")?.Value,
-                customUserId = User.FindFirst("UserId")?.Value,
-                username = User.FindFirst(ClaimTypes.Name)?.Value,
-                role = User.FindFirst(ClaimTypes.Role)?.Value,
-                allClaims = claims
-            });
-        }
-
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {

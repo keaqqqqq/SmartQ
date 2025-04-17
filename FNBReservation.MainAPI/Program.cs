@@ -17,6 +17,12 @@ using FNBReservation.Modules.Queue.API.Extensions;
 using FNBReservation.Modules.Queue.Infrastructure.Data;
 using FNBReservation.Modules.Queue.Infrastructure.Hubs;
 using FNBReservation.Modules.Notification.Infrastructure.Extensions;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+// Remove reference to non-existent class
+// using FNBReservation.SharedKernel.Health;
+using Microsoft.Extensions.Diagnostics.HealthChecks; // Added for HealthCheckOptions
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -222,7 +228,72 @@ builder.Services.AddCustomerModule(builder.Configuration);
 builder.Services.AddQueueModule(builder.Configuration);
 builder.Services.AddNotificationModule(builder.Configuration);
 
+// Add health checks
+builder.Services.AddHealthChecks()
+    // Use a lambda check instead of a custom class that might not exist
+    .AddCheck("database", () =>
+    {
+        try
+        {
+            // Simple connection check using the DbContext factory
+            using var scope = builder.Services.BuildServiceProvider().CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<FNBDbContext>();
+            dbContext.Database.CanConnect();
+            return HealthCheckResult.Healthy("Database connection is healthy");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Database connection failed", ex);
+        }
+    },
+    tags: new[] { "ready", "db" });
+
+// Build the application
 var app = builder.Build();
+
+// Now configure health check endpoints AFTER app is built
+// Define a custom response writer since HealthCheckUIResponseWriter is not available
+static Task WriteHealthCheckResponse(HttpContext context, HealthReport result)
+{
+    context.Response.ContentType = "application/json";
+
+    var options = new JsonSerializerOptions
+    {
+        WriteIndented = true
+    };
+
+    var responseJson = JsonSerializer.Serialize(new
+    {
+        status = result.Status.ToString(),
+        results = result.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            description = e.Value.Description,
+            data = e.Value.Data
+        })
+    }, options);
+
+    return context.Response.WriteAsync(responseJson);
+}
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => !check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
 
 // Early log to confirm application built successfully
 app.Logger.LogInformation("Application built successfully");

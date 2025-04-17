@@ -1,18 +1,19 @@
 services:
-  # Database
+  # Primary Database
   mariadb:
     image: mariadb:latest
-    container_name: fb_reservation_db
+    container_name: fb_reservation_db_primary
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${DB_DATABASE:-fb_reservation}
+      MYSQL_DATABASE: ${DB_DATABASE:-fnbreservation}
       MYSQL_USER: ${DB_USERNAME:-fbuser}
       MYSQL_PASSWORD: ${DB_PASSWORD:-fbpassword}
     ports:
       - "${DB_PORT:-3310}:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
+      - ./db/primary:/etc/mysql/conf.d
       - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - fb_reservation_network
@@ -22,6 +23,37 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
+
+  # Read Replica Database
+  mariadb-replica:
+    image: mariadb:latest
+    container_name: fb_reservation_db_replica
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-fnbreservation}
+      MYSQL_USER: ${DB_USERNAME:-fbuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fbpassword}
+    ports:
+      - "${DB_REPLICA_PORT:-3311}:3306"
+    volumes:
+      - mariadb_replica_data:/var/lib/mysql
+      - ./db/replica:/etc/mysql/conf.d
+      - ./init-scripts/replica-init.sh:/docker-entrypoint-initdb.d/replica-init.sh
+      - ./init-scripts/restart-replication.sh:/docker-entrypoint-initdb.d/restart-replication.sh
+    networks:
+      - fb_reservation_network
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: --server-id=2 --log-bin=mysql-bin --binlog-format=ROW --read-only=1 --skip-slave-start=0
 
   # API
   api:
@@ -33,12 +65,15 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      mariadb-replica:
+        condition: service_healthy
     ports:
       - "${API_PORT:-5000}:80"
       - "${API_HTTPS_PORT:-5001}:443"
     environment:
       - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
+      - ConnectionStrings__ReadOnlyConnection=Server=mariadb-replica;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
       - ASPNETCORE_URLS=http://+:80; #in production, Obtain a valid SSL certificate
       - WhatsAppApi__Enabled=${WHATSAPP_API_ENABLED:-false}
       - WhatsAppApi__Token=${WHATSAPP_API_TOKEN:-}
@@ -70,4 +105,6 @@ networks:
 
 volumes:
   mariadb_data:
+    driver: local
+  mariadb_replica_data:
     driver: local

@@ -1,0 +1,14 @@
+[mysqld]
+server-id=2
+log-bin=mysql-bin
+binlog-format=ROW
+binlog-do-db=fnbreservation
+read-only=1
+skip-slave-start=0
+
+# Additional performance tuning for a read replica
+innodb_buffer_pool_size=512M
+innodb_buffer_pool_instances=2
+query_cache_size=32M
+query_cache_type=1
+query_cache_limit=1M

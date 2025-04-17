@@ -3,17 +3,23 @@ using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Queue.Core.Entities;
 using FNBReservation.Modules.Queue.Core.Interfaces;
 using FNBReservation.Modules.Queue.Infrastructure.Data;
+using FNBReservation.SharedKernel.Data;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
 {
-    public class QueueRepository : IQueueRepository
+    public class QueueRepository : BaseRepository<QueueEntry, QueueDbContext>, IQueueRepository
     {
-        private readonly QueueDbContext _dbContext;
         private readonly ILogger<QueueRepository> _logger;
 
-        public QueueRepository(QueueDbContext dbContext, ILogger<QueueRepository> logger)
+        public QueueRepository(
+            DbContextFactory<QueueDbContext> contextFactory,
+            ILogger<QueueRepository> logger)
+            : base(contextFactory, logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -22,29 +28,39 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Creating new queue entry for {CustomerName} at outlet {OutletId}",
                 queueEntry.CustomerName, queueEntry.OutletId);
 
-            // Ensure queue position is set correctly
-            int currentMaxPosition = await _dbContext.QueueEntries
-                .Where(q => q.OutletId == queueEntry.OutletId &&
-                           (q.Status == "Waiting" || q.Status == "Called" || q.Status == "Held"))
-                .OrderByDescending(q => q.QueuePosition)
-                .Select(q => q.QueuePosition)
-                .FirstOrDefaultAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                // Ensure queue position is set correctly
+                int currentMaxPosition = await context.QueueEntries
+                    .Where(q => q.OutletId == queueEntry.OutletId &&
+                               (q.Status == "Waiting" || q.Status == "Called" || q.Status == "Held"))
+                    .OrderByDescending(q => q.QueuePosition)
+                    .Select(q => q.QueuePosition)
+                    .FirstOrDefaultAsync();
 
-            queueEntry.QueuePosition = currentMaxPosition + 1;
-            queueEntry.CreatedAt = DateTime.UtcNow;
-            queueEntry.UpdatedAt = DateTime.UtcNow;
+                queueEntry.QueuePosition = currentMaxPosition + 1;
+                queueEntry.CreatedAt = DateTime.UtcNow;
+                queueEntry.UpdatedAt = DateTime.UtcNow;
 
-            await _dbContext.QueueEntries.AddAsync(queueEntry);
-            await _dbContext.SaveChangesAsync();
+                await context.QueueEntries.AddAsync(queueEntry);
+                await context.SaveChangesAsync();
 
-            return queueEntry;
+                return queueEntry;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating queue entry for {CustomerName}", queueEntry.CustomerName);
+                throw;
+            }
         }
 
         public async Task<QueueEntry> GetByIdAsync(Guid id)
         {
             _logger.LogInformation("Getting queue entry by ID: {QueueEntryId}", id);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .Include(q => q.TableAssignments)
                 .Include(q => q.StatusChanges)
                 .FirstOrDefaultAsync(q => q.Id == id);
@@ -54,7 +70,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting queue entry by code: {QueueCode}", queueCode);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .Include(q => q.TableAssignments)
                 .Include(q => q.StatusChanges)
                 .FirstOrDefaultAsync(q => q.QueueCode == queueCode);
@@ -65,7 +82,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Getting queue entries for outlet: {OutletId}, Status: {Status}",
                 outletId, status);
 
-            var query = _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            var query = context.QueueEntries
                 .Include(q => q.TableAssignments)
                 .Where(q => q.OutletId == outletId);
 
@@ -88,27 +106,94 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Updating queue entry: {QueueEntryId}", queueEntry.Id);
 
-            queueEntry.UpdatedAt = DateTime.UtcNow;
-            _dbContext.QueueEntries.Update(queueEntry);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                // Retrieve the entry with its related entities for tracking
+                var existingEntry = await context.QueueEntries
+                    .Include(q => q.TableAssignments)
+                    .Include(q => q.StatusChanges)
+                    .FirstOrDefaultAsync(q => q.Id == queueEntry.Id);
 
-            return queueEntry;
+                if (existingEntry == null)
+                {
+                    _logger.LogWarning("Queue entry not found for update: {QueueEntryId}", queueEntry.Id);
+                    throw new KeyNotFoundException($"Queue entry with ID {queueEntry.Id} not found");
+                }
+
+                // Update properties
+                context.Entry(existingEntry).CurrentValues.SetValues(queueEntry);
+                existingEntry.UpdatedAt = DateTime.UtcNow;
+
+                // Save changes
+                await context.SaveChangesAsync();
+
+                return existingEntry;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating queue entry: {QueueEntryId}", queueEntry.Id);
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAsync(Guid id)
         {
             _logger.LogInformation("Deleting queue entry: {QueueEntryId}", id);
 
-            var queueEntry = await _dbContext.QueueEntries.FindAsync(id);
-            if (queueEntry == null)
+            using var context = _contextFactory.CreateWriteContext();
+            try
             {
-                _logger.LogWarning("Queue entry not found for deletion: {QueueEntryId}", id);
-                return false;
-            }
+                // Use FindAsync for primary key lookup for efficiency
+                var queueEntry = await context.QueueEntries.FindAsync(id);
+                if (queueEntry == null)
+                {
+                    _logger.LogWarning("Queue entry not found for deletion: {QueueEntryId}", id);
+                    return false;
+                }
 
-            _dbContext.QueueEntries.Remove(queueEntry);
-            await _dbContext.SaveChangesAsync();
-            return true;
+                // Load related entities before deletion
+                await context.Entry(queueEntry)
+                    .Collection(q => q.TableAssignments)
+                    .LoadAsync();
+
+                await context.Entry(queueEntry)
+                    .Collection(q => q.StatusChanges)
+                    .LoadAsync();
+
+                // Before deleting, check if there are related entries that need to be handled
+                var tableAssignments = queueEntry.TableAssignments.ToList();
+                var statusChanges = queueEntry.StatusChanges.ToList();
+                var notifications = await context.QueueNotifications
+                    .Where(n => n.QueueEntryId == id)
+                    .ToListAsync();
+
+                // Remove related entities if they exist
+                if (notifications.Any())
+                {
+                    context.QueueNotifications.RemoveRange(notifications);
+                }
+
+                if (statusChanges.Any())
+                {
+                    context.QueueStatusChanges.RemoveRange(statusChanges);
+                }
+
+                if (tableAssignments.Any())
+                {
+                    context.QueueTableAssignments.RemoveRange(tableAssignments);
+                }
+
+                // Now remove the queue entry
+                context.QueueEntries.Remove(queueEntry);
+                await context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting queue entry: {QueueEntryId}", id);
+                throw;
+            }
         }
 
         public async Task AddStatusChangeAsync(QueueStatusChange statusChange)
@@ -116,8 +201,18 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Adding status change for queue entry: {QueueEntryId}, from {OldStatus} to {NewStatus}",
                 statusChange.QueueEntryId, statusChange.OldStatus, statusChange.NewStatus);
 
-            await _dbContext.QueueStatusChanges.AddAsync(statusChange);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.QueueStatusChanges.AddAsync(statusChange);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding status change for queue entry: {QueueEntryId}",
+                    statusChange.QueueEntryId);
+                throw;
+            }
         }
 
         public async Task AddTableAssignmentAsync(QueueTableAssignment tableAssignment)
@@ -125,16 +220,46 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Adding table assignment for queue entry: {QueueEntryId}, table: {TableId}",
                 tableAssignment.QueueEntryId, tableAssignment.TableId);
 
-            await _dbContext.QueueTableAssignments.AddAsync(tableAssignment);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.QueueTableAssignments.AddAsync(tableAssignment);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding table assignment for queue entry: {QueueEntryId}",
+                    tableAssignment.QueueEntryId);
+                throw;
+            }
         }
 
         public async Task UpdateTableAssignmentAsync(QueueTableAssignment tableAssignment)
         {
             _logger.LogInformation("Updating table assignment: {TableAssignmentId}", tableAssignment.Id);
 
-            _dbContext.QueueTableAssignments.Update(tableAssignment);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                // Fetch the existing assignment to ensure proper tracking
+                var existingAssignment = await context.QueueTableAssignments.FindAsync(tableAssignment.Id);
+                if (existingAssignment == null)
+                {
+                    _logger.LogWarning("Table assignment not found: {TableAssignmentId}", tableAssignment.Id);
+                    throw new KeyNotFoundException($"Table assignment with ID {tableAssignment.Id} not found");
+                }
+
+                // Update properties
+                context.Entry(existingAssignment).CurrentValues.SetValues(tableAssignment);
+
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating table assignment: {TableAssignmentId}",
+                    tableAssignment.Id);
+                throw;
+            }
         }
 
         public async Task AddNotificationAsync(QueueNotification notification)
@@ -142,16 +267,45 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Adding notification for queue entry: {QueueEntryId}, type: {NotificationType}",
                 notification.QueueEntryId, notification.NotificationType);
 
-            await _dbContext.QueueNotifications.AddAsync(notification);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                await context.QueueNotifications.AddAsync(notification);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding notification for queue entry: {QueueEntryId}",
+                    notification.QueueEntryId);
+                throw;
+            }
         }
 
         public async Task UpdateNotificationAsync(QueueNotification notification)
         {
             _logger.LogInformation("Updating notification: {NotificationId}", notification.Id);
 
-            _dbContext.QueueNotifications.Update(notification);
-            await _dbContext.SaveChangesAsync();
+            using var context = _contextFactory.CreateWriteContext();
+            try
+            {
+                // Fetch the existing notification to ensure proper tracking
+                var existingNotification = await context.QueueNotifications.FindAsync(notification.Id);
+                if (existingNotification == null)
+                {
+                    _logger.LogWarning("Notification not found: {NotificationId}", notification.Id);
+                    throw new KeyNotFoundException($"Notification with ID {notification.Id} not found");
+                }
+
+                // Update properties
+                context.Entry(existingNotification).CurrentValues.SetValues(notification);
+
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating notification: {NotificationId}", notification.Id);
+                throw;
+            }
         }
 
         public async Task<int> GetQueuePositionAsync(Guid outletId, Guid queueEntryId)
@@ -159,8 +313,9 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Getting queue position for entry: {QueueEntryId} at outlet: {OutletId}",
                 queueEntryId, outletId);
 
+            using var context = _contextFactory.CreateReadContext();
             // Get the queue entry to check its position
-            var queueEntry = await _dbContext.QueueEntries
+            var queueEntry = await context.QueueEntries
                 .FirstOrDefaultAsync(q => q.Id == queueEntryId && q.OutletId == outletId);
 
             if (queueEntry == null)
@@ -176,7 +331,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Counting active queue entries for outlet: {OutletId}", outletId);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .CountAsync(q => q.OutletId == outletId &&
                                (q.Status == "Waiting" || q.Status == "Called" || q.Status == "Held"));
         }
@@ -186,7 +342,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Counting queue entries for outlet: {OutletId} with status: {Status}",
                 outletId, status);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .CountAsync(q => q.OutletId == outletId && q.Status == status);
         }
 
@@ -194,7 +351,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting longest wait time for outlet: {OutletId}", outletId);
 
-            var oldestEntry = await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            var oldestEntry = await context.QueueEntries
                 .Where(q => q.OutletId == outletId && q.Status == "Waiting")
                 .OrderBy(q => q.QueuedAt)
                 .FirstOrDefaultAsync();
@@ -212,8 +370,9 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting average wait time for outlet: {OutletId}", outletId);
 
+            using var context = _contextFactory.CreateReadContext();
             // Calculate average wait time for entries that went from Waiting to Seated in the last 24 hours
-            var entries = await _dbContext.QueueEntries
+            var entries = await context.QueueEntries
                 .Where(q => q.OutletId == outletId && q.Status == "Completed" && q.SeatedAt.HasValue &&
                            q.CompletedAt.HasValue && q.CompletedAt.Value >= DateTime.UtcNow.AddHours(-24))
                 .ToListAsync();
@@ -232,7 +391,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Getting active queue entries with party size between {MinSize} and {MaxSize} for outlet: {OutletId}",
                 minPartySize, maxPartySize, outletId);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .Where(q => q.OutletId == outletId &&
                            (q.Status == "Waiting" || q.Status == "Held") &&
                            q.PartySize >= minPartySize && q.PartySize <= maxPartySize)
@@ -245,7 +405,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting held queue entries for outlet: {OutletId}", outletId);
 
-            return await _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueEntries
                 .Where(q => q.OutletId == outletId && q.Status == "Waiting" && q.IsHeld)
                 .OrderBy(q => q.HeldSince)
                 .ToListAsync();
@@ -256,11 +417,12 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
             _logger.LogInformation("Getting average seating duration for party size {PartySize} at outlet: {OutletId}",
                 partySize, outletId);
 
+            using var context = _contextFactory.CreateReadContext();
             // Calculate for similar party sizes (+/- 2)
             var minPartySize = Math.Max(1, partySize - 2);
             var maxPartySize = partySize + 2;
 
-            var entries = await _dbContext.QueueEntries
+            var entries = await context.QueueEntries
                 .Where(q => q.OutletId == outletId &&
                            q.Status == "Completed" &&
                            q.SeatedAt.HasValue &&
@@ -287,7 +449,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Searching queue entries for outlet: {OutletId}", outletId);
 
-            IQueryable<QueueEntry> query = _dbContext.QueueEntries
+            using var context = _contextFactory.CreateReadContext();
+            IQueryable<QueueEntry> query = context.QueueEntries
                 .Include(q => q.TableAssignments)
                 .Where(q => q.OutletId == outletId);
 
@@ -327,7 +490,8 @@ namespace FNBReservation.Modules.Queue.Infrastructure.Repositories
         {
             _logger.LogInformation("Checking active assignments for table: {TableId}", tableId);
 
-            return await _dbContext.QueueTableAssignments
+            using var context = _contextFactory.CreateReadContext();
+            return await context.QueueTableAssignments
                 .Include(ta => ta.QueueEntry)
                 .Where(ta => ta.TableId == tableId &&
                             (ta.QueueEntry.Status == "Waiting" ||

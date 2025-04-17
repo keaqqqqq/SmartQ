@@ -7,17 +7,20 @@ using FNBReservation.Modules.Outlet.Core.Entities;
 using FNBReservation.Modules.Outlet.Core.Interfaces;
 using FNBReservation.Modules.Outlet.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using FNBReservation.SharedKernel.Data;
+using Microsoft.EntityFrameworkCore.Internal;
 
 namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
 {
-    public class OutletRepository : IOutletRepository
+    public class OutletRepository : BaseRepository<OutletEntity, OutletDbContext>, IOutletRepository
     {
-        private readonly OutletDbContext _dbContext;
         private readonly ILogger<OutletRepository> _logger;
 
-        public OutletRepository(OutletDbContext dbContext, ILogger<OutletRepository> logger)
+        public OutletRepository(
+            FNBReservation.SharedKernel.Data.DbContextFactory<OutletDbContext> contextFactory,
+            ILogger<OutletRepository> logger)
+            : base(contextFactory, logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -25,70 +28,79 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
         {
             _logger.LogInformation("Creating new outlet: {Name}", outlet.Name);
 
-            await _dbContext.Outlets.AddAsync(outlet);
-            await _dbContext.SaveChangesAsync();
-
-            return outlet;
+            return await ExecuteWriteQueryAsync(async dbSet =>
+            {
+                var result = await dbSet.AddAsync(outlet);
+                return result.Entity;
+            });
         }
 
         public async Task<OutletEntity> GetByIdAsync(Guid id)
         {
             _logger.LogInformation("Getting outlet by ID: {Id}", id);
 
-            return await _dbContext.Outlets
-                .FirstOrDefaultAsync(o => o.Id == id);
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet.FirstOrDefaultAsync(o => o.Id == id);
+            });
         }
 
         public async Task<OutletEntity> GetByBusinessIdAsync(string outletId)
         {
             _logger.LogInformation("Getting outlet by business ID: {OutletId}", outletId);
 
-            return await _dbContext.Outlets
-                .FirstOrDefaultAsync(o => o.OutletId == outletId);
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet.FirstOrDefaultAsync(o => o.OutletId == outletId);
+            });
         }
 
         public async Task<IEnumerable<OutletEntity>> GetAllAsync()
         {
             _logger.LogInformation("Getting all outlets");
 
-            return await _dbContext.Outlets
-                .OrderBy(o => o.Name)
-                .ToListAsync();
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet.OrderBy(o => o.Name).ToListAsync();
+            });
         }
 
         public async Task<OutletEntity> UpdateAsync(OutletEntity outlet)
         {
             _logger.LogInformation("Updating outlet: {Id}", outlet.Id);
 
-            _dbContext.Outlets.Update(outlet);
-            await _dbContext.SaveChangesAsync();
-
-            return outlet;
+            return await ExecuteWriteQueryAsync(async dbSet =>
+            {
+                dbSet.Update(outlet);
+                return outlet;
+            });
         }
 
         public async Task<bool> DeleteAsync(Guid id)
         {
             _logger.LogInformation("Deleting outlet: {Id}", id);
 
-            var outlet = await _dbContext.Outlets.FindAsync(id);
-
-            if (outlet == null)
+            return await ExecuteWriteQueryAsync(async dbSet =>
             {
-                _logger.LogWarning("Outlet not found for deletion: {Id}", id);
-                return false;
-            }
+                var outlet = await dbSet.FindAsync(id);
 
-            _dbContext.Outlets.Remove(outlet);
-            await _dbContext.SaveChangesAsync();
+                if (outlet == null)
+                {
+                    _logger.LogWarning("Outlet not found for deletion: {Id}", id);
+                    return false;
+                }
 
-            return true;
+                dbSet.Remove(outlet);
+                return true;
+            });
         }
 
         public async Task<IEnumerable<OutletChange>> GetOutletChangesAsync(Guid outletId)
         {
             _logger.LogInformation("Getting changes for outlet: {OutletId}", outletId);
 
-            return await _dbContext.OutletChanges
+            using var context = _contextFactory.CreateReadContext();
+            return await context.OutletChanges
                 .Where(c => c.OutletId == outletId)
                 .OrderByDescending(c => c.RequestedAt)
                 .ToListAsync();
@@ -98,18 +110,20 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
         {
             _logger.LogInformation("Getting outlet change by ID: {ChangeId}", changeId);
 
-            return await _dbContext.OutletChanges
+            using var context = _contextFactory.CreateReadContext();
+            return await context.OutletChanges
                 .Include(c => c.Outlet)
                 .FirstOrDefaultAsync(c => c.Id == changeId);
         }
 
         public async Task<OutletChange> CreateOutletChangeAsync(OutletChange change)
         {
-            _logger.LogInformation("Creating outlet change for outlet: {OutletId}, field: {FieldName}", change.OutletId, change.FieldName);
+            _logger.LogInformation("Creating outlet change for outlet: {OutletId}, field: {FieldName}",
+            change.OutletId, change.FieldName);
 
-            await _dbContext.OutletChanges.AddAsync(change);
-            await _dbContext.SaveChangesAsync();
-
+            using var context = _contextFactory.CreateWriteContext();
+            await context.OutletChanges.AddAsync(change);
+            await context.SaveChangesAsync();
             return change;
         }
 
@@ -117,9 +131,9 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
         {
             _logger.LogInformation("Updating outlet change: {ChangeId}", change.Id);
 
-            _dbContext.OutletChanges.Update(change);
-            await _dbContext.SaveChangesAsync();
-
+            using var context = _contextFactory.CreateWriteContext();
+            context.OutletChanges.Update(change);
+            await context.SaveChangesAsync();
             return change;
         }
     }

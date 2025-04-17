@@ -1,39 +1,36 @@
 ﻿using System;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using FNBReservation.Modules.Authentication.Core.DTOs;
 using FNBReservation.Modules.Authentication.Core.Entities;
 using FNBReservation.Modules.Authentication.Core.Interfaces;
-using FNBReservation.Modules.Authentication.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
 
 namespace FNBReservation.Modules.Authentication.Infrastructure.Services
 {
     public class AuthService : IAuthService
     {
-        private readonly FNBDbContext _dbContext;
+        private readonly IAuthRepository _authRepository;
         private readonly ITokenService _tokenService;
         private readonly IEmailService _emailService;
         private readonly ILogger<AuthService> _logger;
 
-        public AuthService(FNBDbContext dbContext, ITokenService tokenService, IEmailService emailService, ILogger<AuthService> logger)
+        public AuthService(
+            IAuthRepository authRepository,
+            ITokenService tokenService,
+            IEmailService emailService,
+            ILogger<AuthService> logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+            _authRepository = authRepository ?? throw new ArgumentNullException(nameof(authRepository));
             _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
         }
 
         public async Task<AuthResult> AuthenticateAsync(LoginDto loginDto)
         {
             // Find the user by username, email, or userId
-            var user = await _dbContext.Users
-                .FirstOrDefaultAsync(s =>
-                    s.Username == loginDto.Username ||
-                    s.Email == loginDto.Username ||
-                    s.UserId == loginDto.Username);
+            var user = await _authRepository.GetUserByCredentialsAsync(loginDto.Username);
 
             if (user == null || !user.IsActive)
                 return new AuthResult { Success = false, ErrorMessage = "Invalid credentials" };
@@ -56,11 +53,10 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                 UserId = user.Id
             };
 
-            await _dbContext.RefreshTokens.AddAsync(refreshTokenEntity);
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.AddRefreshTokenAsync(refreshTokenEntity);
 
             // Calculate expiry time in seconds
-            var expiresIn = 86400; // 15 minutes in seconds for access token
+            var expiresIn = 86400; // 24 hours in seconds for access token
 
             return new AuthResult
             {
@@ -75,7 +71,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
 
         public async Task<PasswordResetResult> ForgotPasswordAsync(string email)
         {
-            var user = await _dbContext.Users.FirstOrDefaultAsync(s => s.Email == email && s.IsActive);
+            var user = await _authRepository.GetUserByEmailAsync(email);
 
             if (user == null)
                 return new PasswordResetResult { Success = true }; // Don't reveal if email exists
@@ -88,7 +84,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             user.PasswordResetToken = resetToken;
             user.PasswordResetTokenExpiry = tokenExpiry;
 
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.UpdateUserAsync(user);
 
             // Send email with reset token
             await _emailService.SendPasswordResetEmailAsync(email, resetToken);
@@ -98,10 +94,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
 
         public async Task<PasswordResetResult> ResetPasswordAsync(string token, string newPassword)
         {
-            var user = await _dbContext.Users.FirstOrDefaultAsync(s =>
-                s.PasswordResetToken == token &&
-                s.PasswordResetTokenExpiry > DateTime.UtcNow &&
-                s.IsActive);
+            var user = await _authRepository.GetUserByResetTokenAsync(token);
 
             if (user == null)
                 return new PasswordResetResult { Success = false, ErrorMessage = "Invalid or expired token" };
@@ -114,7 +107,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             user.PasswordResetTokenExpiry = null;
             user.UpdatedAt = DateTime.UtcNow;
 
-            await _dbContext.SaveChangesAsync();
+            await _authRepository.UpdateUserAsync(user);
 
             return new PasswordResetResult { Success = true };
         }
@@ -134,9 +127,7 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             try
             {
                 // Find all active refresh tokens for this user and revoke them
-                var refreshTokens = await _dbContext.RefreshTokens
-                    .Where(rt => rt.UserId == userGuid && !rt.IsRevoked)
-                    .ToListAsync();
+                var refreshTokens = await _authRepository.GetActiveRefreshTokensByUserIdAsync(userGuid);
 
                 _logger.LogInformation($"Found {refreshTokens.Count} active refresh tokens for user");
 
@@ -148,17 +139,16 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
                     return;
                 }
 
+                // Revoke all tokens and save changes
+                await _authRepository.RevokeRefreshTokensAsync(refreshTokens);
+
+                // Try to revoke the refresh token cookie
                 foreach (var token in refreshTokens)
                 {
-                    token.IsRevoked = true;
-                    _logger.LogDebug($"Marked token {token.Id} as revoked");
-
-                    // Try to revoke the refresh token cookie if it matches the current one
                     await _tokenService.RevokeRefreshTokenAsync(token.Token);
                 }
 
-                await _dbContext.SaveChangesAsync();
-                _logger.LogInformation("Successfully revoked tokens and saved changes");
+                _logger.LogInformation("Successfully revoked tokens");
             }
             catch (Exception ex)
             {
@@ -168,7 +158,6 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
         }
 
         #region Helper Methods
-        // Add this package: Microsoft.AspNetCore.Identity
         private bool VerifyPasswordHash(string password, string storedHash)
         {
             try
@@ -191,7 +180,6 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             var passwordHasher = new Microsoft.AspNetCore.Identity.PasswordHasher<User>();
             return passwordHasher.HashPassword(null, password);
         }
-
 
         private string GenerateRandomToken()
         {
