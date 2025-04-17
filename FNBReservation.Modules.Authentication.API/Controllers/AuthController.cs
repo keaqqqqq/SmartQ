@@ -35,24 +35,48 @@ namespace FNBReservation.Modules.Authentication.API.Controllers
             if (!authResult.Success)
                 return Unauthorized(new { message = authResult.ErrorMessage });
 
-            // Tokens are now set as HTTP-only cookies by the TokenService
-            // Return minimal information to the client
-            return Ok(new
+            // Return minimal information to the client, now including outletId when applicable
+            var response = new
             {
                 success = true,
                 role = authResult.Role,
                 username = authResult.Username
-            });
+            };
+
+            // If the user is staff, include the outletId
+            if (authResult.Role == "OutletStaff" && authResult.OutletId.HasValue)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    role = authResult.Role,
+                    username = authResult.Username,
+                    outletId = authResult.OutletId
+                });
+            }
+
+            return Ok(response);
         }
 
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
-            // No need to explicitly pass the refresh token as it's retrieved from the cookie
             var tokenResult = await _tokenService.RefreshTokenAsync();
 
             if (!tokenResult.Success)
                 return Unauthorized(new { message = tokenResult.ErrorMessage });
+
+            // If the user is staff, include the outletId
+            if (tokenResult.Role == "OutletStaff" && tokenResult.OutletId.HasValue)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    role = tokenResult.Role,
+                    username = tokenResult.Username,
+                    outletId = tokenResult.OutletId
+                });
+            }
 
             // Return minimal information as tokens are in cookies
             return Ok(new

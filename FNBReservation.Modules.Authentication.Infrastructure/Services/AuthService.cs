@@ -61,11 +61,10 @@ namespace FNBReservation.Modules.Authentication.Infrastructure.Services
             return new AuthResult
             {
                 Success = true,
-                AccessToken = accessToken,
-                RefreshToken = refreshToken,
                 ExpiresIn = expiresIn,
                 Role = user.Role,
-                Username = user.Username
+                Username = user.Username,
+                OutletId = user.Role == "OutletStaff" ? user.OutletId : null
             };
         }
 
