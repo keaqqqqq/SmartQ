@@ -375,7 +375,7 @@ namespace FNBReservation.Portal.Services
         {
             var reservation = _reservations.FirstOrDefault(r => r.ReservationId == reservationId);
 
-            if (reservation == null || reservation.Status != "Seated")
+            if (reservation == null || reservation.Status != "Confirmed")
             {
                 return false;
             }

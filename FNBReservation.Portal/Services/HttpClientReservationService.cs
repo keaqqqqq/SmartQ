@@ -253,28 +253,54 @@ namespace FNBReservation.Portal.Services
                     return null;
                 }
 
-                // Get the reservation to determine its outlet ID
-                // For now, we use the outletUUID from what we know
-                // In a production scenario, you might need to first query for the reservation to get its outlet
-                string outletUUID = "all"; // Default to "all" if we can't determine
-
-                // Create request URL
-                string url = $"api/v1/outlets/{outletUUID}/reservations/{reservationId}";
-                
-                await LogToConsoleAsync($"Fetching reservation details from: {url}");
-                
-                var response = await _httpClient.GetAsync(url);
-                
-                if (response.IsSuccessStatusCode)
+                try
                 {
-                    var reservation = await response.Content.ReadFromJsonAsync<ReservationDto>();
-                    return reservation;
+                    // First try to fetch the reservation from each available outlet
+                    // since we don't know which outlet this reservation belongs to
+                    if (!_outletsLoaded)
+                    {
+                        await LoadAllOutletsAsync();
+                    }
+
+                    foreach (var outletPair in _outletUuidCache)
+                    {
+                        string outletUUID = outletPair.Value;
+                        string url = $"api/v1/outlets/{outletUUID}/reservations/{reservationId}";
+                        
+                        await LogToConsoleAsync($"Trying reservation in outlet {outletPair.Key}: {url}");
+                        
+                        var response = await _httpClient.GetAsync(url);
+                        
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var reservation = await response.Content.ReadFromJsonAsync<ReservationDto>();
+                            await LogToConsoleAsync($"Found reservation in outlet {outletPair.Key}");
+                            return reservation;
+                        }
+                    }
+                    
+                    // If we couldn't find it in any outlet, try the central reservations API
+                    string centralUrl = $"api/v1/reservations/{reservationId}";
+                    await LogToConsoleAsync($"Trying central reservations API: {centralUrl}");
+                    
+                    var centralResponse = await _httpClient.GetAsync(centralUrl);
+                    
+                    if (centralResponse.IsSuccessStatusCode)
+                    {
+                        var reservation = await centralResponse.Content.ReadFromJsonAsync<ReservationDto>();
+                        await LogToConsoleAsync($"Found reservation in central API");
+                        return reservation;
+                    }
+                    
+                    await LogToConsoleAsync($"Reservation not found in any outlet or central API");
+                    return null;
                 }
-                
-                await LogToConsoleAsync($"Error fetching reservation: {response.StatusCode}");
-                string errorContent = await response.Content.ReadAsStringAsync();
-                await LogToConsoleAsync($"Error details: {errorContent}");
-                return null;
+                catch (Exception ex)
+                {
+                    await LogToConsoleAsync($"Error finding reservation: {ex.Message}");
+                    _logger.LogError(ex, "Error finding reservation across outlets");
+                    return null;
+                }
             }
             catch (Exception ex)
             {
