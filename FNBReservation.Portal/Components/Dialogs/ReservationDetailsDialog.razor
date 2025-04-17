@@ -31,7 +31,7 @@
                         <MudList Clickable="false" Dense="true" Padding="false" T="string">
                             <MudListItem T="string">
                                 <div class="d-flex flex-column">
-                                    <MudText Color="Color.Primary" Typo="Typo.subtitle2">Reservation ID</MudText>
+                                    <MudText Color="Color.Primary" Typo="Typo.subtitle2">Reservation ID#</MudText>
                                     <MudText>@reservation.ReservationId</MudText>
                                 </div>
                             </MudListItem>
@@ -54,23 +54,23 @@
                             <MudListItem T="string">
                                 <div class="d-flex flex-column">
                                     <MudText Color="Color.Primary" Typo="Typo.subtitle2">Status</MudText>
-                                    <MudChip Color="@GetStatusColor(reservation.Status)" Size="Size.Small" T="string">
-                                        @reservation.Status
-                                    </MudChip>
+                                    <MudChip Color="@GetStatusColor(reservation.Status)" Size="Size.Small">@reservation.Status</MudChip>
                                 </div>
                             </MudListItem>
 
                             <MudListItem T="string">
                                 <div class="d-flex flex-column">
                                     <MudText Color="Color.Primary" Typo="Typo.subtitle2">Tables</MudText>
-                                    <MudText>@(string.Join(", ", reservation.TableAssignments))</MudText>
-                                </div>
-                            </MudListItem>
-
-                            <MudListItem T="string">
-                                <div class="d-flex flex-column">
-                                    <MudText Color="Color.Primary" Typo="Typo.subtitle2">Source</MudText>
-                                    <MudText>@reservation.Source</MudText>
+                                    <MudText>
+                                        @if (reservation.TableAssignments != null && reservation.TableAssignments.Any())
+                                        {
+                                            @string.Join(", ", reservation.TableAssignments.Select(t => t.TableNumber))
+                                        }
+                                        else
+                                        {
+                                            <span>Not assigned</span>
+                                        }
+                                    </MudText>
                                 </div>
                             </MudListItem>
                         </MudList>
@@ -97,7 +97,7 @@
                             <MudListItem T="string">
                                 <div class="d-flex flex-column">
                                     <MudText Color="Color.Primary" Typo="Typo.subtitle2">Email</MudText>
-                                    <MudText>@(reservation.CustomerEmail ?? "Not provided")</MudText>
+                                    <MudText>@(string.IsNullOrEmpty(reservation.CustomerEmail) ? "Not provided" : reservation.CustomerEmail)</MudText>
                                 </div>
                             </MudListItem>
 
@@ -113,54 +113,41 @@
 
                 @if (!string.IsNullOrEmpty(reservation.SpecialRequests))
                 {
-                    <MudPaper Elevation="0" Class="mt-4 pt-2">
-                        <MudText Typo="Typo.subtitle1">Special Requests</MudText>
+                    <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Special Requests</MudText>
+                    <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
                         <MudText>@reservation.SpecialRequests</MudText>
                     </MudPaper>
                 }
 
                 @if (!string.IsNullOrEmpty(reservation.Notes))
                 {
-                    <MudPaper Elevation="0" Class="mt-4 pt-2">
-                        <MudText Typo="Typo.subtitle1">Notes</MudText>
+                    <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Notes</MudText>
+                    <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
                         <MudText>@reservation.Notes</MudText>
                     </MudPaper>
                 }
 
-                <MudPaper Elevation="0" Class="mt-4 pt-2">
-                    <MudText Typo="Typo.subtitle1">Additional Information</MudText>
-                    <MudGrid>
-                        <MudItem xs="12" sm="6">
-                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Created</MudText>
-                            <MudText>@reservation.CreatedAt.ToString("d MMM yyyy h:mm tt")</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6">
-                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Last Updated</MudText>
-                            <MudText>@reservation.UpdatedAt.ToString("d MMM yyyy h:mm tt")</MudText>
-                        </MudItem>
+                <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Additional Information</MudText>
+                <MudList Clickable="false" Dense="true" Padding="false" T="string">
+                    <MudListItem T="string">
+                        <div class="d-flex flex-column">
+                            <MudText Color="Color.Primary" Typo="Typo.subtitle2">Created</MudText>
+                            <MudText>@reservation.CreatedAt.ToString("dd MMM yyyy h:mm tt")</MudText>
+                        </div>
+                    </MudListItem>
 
-                        @if (reservation.CheckInTime.HasValue)
-                        {
-                            <MudItem xs="12" sm="6">
-                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Check-In Time</MudText>
-                                <MudText>@reservation.CheckInTime.Value.ToString("d MMM yyyy h:mm tt")</MudText>
-                            </MudItem>
-                        }
-
-                        @if (reservation.CheckOutTime.HasValue)
-                        {
-                            <MudItem xs="12" sm="6">
-                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Check-Out Time</MudText>
-                                <MudText>@reservation.CheckOutTime.Value.ToString("d MMM yyyy h:mm tt")</MudText>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                </MudPaper>
+                    <MudListItem T="string">
+                        <div class="d-flex flex-column">
+                            <MudText Color="Color.Primary" Typo="Typo.subtitle2">Last Updated</MudText>
+                            <MudText>@reservation.UpdatedAt.ToString("dd MMM yyyy h:mm tt")</MudText>
+                        </div>
+                    </MudListItem>
+                </MudList>
             </div>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="Close">CLOSE</MudButton>
     </DialogActions>
 </MudDialog>
 
