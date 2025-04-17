@@ -15,6 +15,8 @@
         public int MaxAdvanceReservationTime { get; set; }
         public int MinAdvanceReservationTime { get; set; }
         public bool IsActive { get; set; }
+
+        public string OperatingHours { get; set; }
     }
 
     public class TableInfo

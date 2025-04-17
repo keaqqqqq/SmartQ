@@ -76,19 +76,25 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                     AlternativeTimeSlots = new List<AvailableTimeslotDto>()
                 };
 
-                // Define operating hours (default or get from outlet)
-                TimeSpan openingTime = new TimeSpan(11, 0, 0); // 11:00 AM
-                TimeSpan closingTime = new TimeSpan(22, 0, 0); // 10:00 PM
+                var (openingTime, closingTime, isOvernight) = ParseOperatingHours(outlet.OperatingHours);
+
+                // Log the parsed operating hours for debugging
+                _logger.LogInformation("Parsed operating hours: {OpeningTime} to {ClosingTime}, Overnight: {IsOvernight}",
+                    FormatTimeSpan(openingTime), FormatTimeSpan(closingTime), isOvernight);
 
                 // If the preferred time is not provided, use opening time
                 TimeSpan preferredTime = request.PreferredTime ?? openingTime;
                 DateTime exactPreferredDateTime = request.Date.Date.Add(preferredTime);
 
-                // Check if the preferred time is within operating hours
-                if (preferredTime < openingTime || preferredTime > closingTime)
+                // Check if the preferred time is within operating hours using the improved method
+                if (!IsWithinOperatingHours(preferredTime, openingTime, closingTime, isOvernight))
                 {
-                    _logger.LogWarning("Preferred time {PreferredTime} is outside operating hours", preferredTime);
-                    throw new ArgumentException($"The selected time is outside our operating hours ({openingTime} - {closingTime})");
+                    string formattedOpeningTime = FormatTimeSpan(openingTime);
+                    string formattedClosingTime = FormatTimeSpan(closingTime);
+
+                    _logger.LogWarning("Preferred time {PreferredTime} is outside operating hours ({OpeningTime} - {ClosingTime})",
+                        FormatTimeSpan(preferredTime), formattedOpeningTime, formattedClosingTime);
+                    throw new ArgumentException($"The selected time is outside our operating hours ({formattedOpeningTime} - {formattedClosingTime})");
                 }
 
                 // First check availability at the preferred time
@@ -1755,7 +1761,93 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Services
                 partySize, remainingReservationCapacity);
             return new List<ReservationTableInfo>();
         }
+        private (TimeSpan openingTime, TimeSpan closingTime, bool isOvernight) ParseOperatingHours(string operatingHoursString)
+        {
+            // Default values in case parsing fails
+            TimeSpan defaultOpeningTime = new TimeSpan(11, 0, 0); // 11:00 AM
+            TimeSpan defaultClosingTime = new TimeSpan(22, 0, 0); // 10:00 PM
+            bool isOvernight = false;
 
+            if (string.IsNullOrEmpty(operatingHoursString))
+            {
+                _logger.LogWarning("Operating hours string is null or empty, using default values");
+                return (defaultOpeningTime, defaultClosingTime, isOvernight);
+            }
+
+            try
+            {
+                // Expected format: "10:00 AM - 10:00 PM"
+                var parts = operatingHoursString.Split('-');
+                if (parts.Length != 2)
+                {
+                    _logger.LogWarning("Invalid operating hours format: {OperatingHours}, using default values", operatingHoursString);
+                    return (defaultOpeningTime, defaultClosingTime, isOvernight);
+                }
+
+                string openingTimeStr = parts[0].Trim();
+                string closingTimeStr = parts[1].Trim();
+
+                // Parse the time strings to DateTime objects
+                DateTime openingDateTime;
+                DateTime closingDateTime;
+
+                if (DateTime.TryParse(openingTimeStr, out openingDateTime) &&
+                    DateTime.TryParse(closingTimeStr, out closingDateTime))
+                {
+                    // Extract TimeSpan values
+                    TimeSpan opening = openingDateTime.TimeOfDay;
+                    TimeSpan closing = closingDateTime.TimeOfDay;
+
+                    // Check if it's an overnight operation (closing time is smaller than opening time)
+                    if (closing < opening)
+                    {
+                        isOvernight = true;
+                        _logger.LogInformation("Detected overnight hours: {OpeningTime} to {ClosingTime}",
+                            FormatTimeSpan(opening), FormatTimeSpan(closing));
+                    }
+
+                    return (opening, closing, isOvernight);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to parse operating hours: {OperatingHours}, using default values", operatingHoursString);
+                    return (defaultOpeningTime, defaultClosingTime, isOvernight);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error parsing operating hours: {OperatingHours}, using default values", operatingHoursString);
+                return (defaultOpeningTime, defaultClosingTime, isOvernight);
+            }
+        }
+
+        private bool IsWithinOperatingHours(TimeSpan timeToCheck, TimeSpan opening, TimeSpan closing, bool isOvernight)
+        {
+            if (isOvernight)
+            {
+                // If overnight, either the time is after opening or before closing
+                return timeToCheck >= opening || timeToCheck <= closing;
+            }
+            else
+            {
+                // Standard case: time must be between opening and closing
+                return timeToCheck >= opening && timeToCheck <= closing;
+            }
+        }
+
+        private string FormatTimeSpan(TimeSpan time)
+        {
+            int hour = time.Hours;
+            string amPm = hour < 12 ? "AM" : "PM";
+
+            // Convert to 12-hour format
+            if (hour > 12)
+                hour -= 12;
+            else if (hour == 0)
+                hour = 12;
+
+            return $"{hour}:{time.Minutes:D2} {amPm}";
+        }
         #region Helper Methods
         private string GenerateReservationCode()
         {
