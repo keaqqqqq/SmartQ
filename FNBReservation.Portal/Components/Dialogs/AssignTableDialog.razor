@@ -1,0 +1,95 @@
+@inject IJSRuntime JS
+@using MudBlazor.Utilities
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Assign Table @TableNumber</MudText>
+        
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Select a customer from the waiting queue to assign to this table:
+        </MudText>
+        
+        <MudList Dense="true" DisableGutters="true" Class="pa-0" T="string">
+            @foreach (var queueEntry in WaitingQueue)
+            {
+                <MudListItem OnClick="@(() => SelectQueueEntry(queueEntry.QueueId))" Class="rounded-lg pa-2 mb-2" T="string"
+                            Style="@($"cursor: pointer; background-color: {(SelectedQueueId == queueEntry.QueueId ? "#f0f7ff" : "white")}")">
+                    <div class="d-flex align-center">
+                        <MudAvatar Color="Color.Secondary" Class="mr-2">
+                            @queueEntry.CustomerName?.Substring(0, 1)
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.subtitle1">@queueEntry.CustomerName</MudText>
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                <MudText Typo="Typo.caption" Class="mr-3">@queueEntry.PartySize guests</MudText>
+                                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                <MudText Typo="Typo.caption">
+                                    Waiting: @GetQueueWaitingTime(queueEntry.QueuedAt)
+                                </MudText>
+                            </div>
+                        </div>
+                    </div>
+                </MudListItem>
+            }
+        </MudList>
+        
+        @if (WaitingQueue.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="my-2">No customers in waiting queue</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit" Variant="Variant.Filled" Color="Color.Primary" 
+                   Disabled="@(string.IsNullOrEmpty(SelectedQueueId))">
+            Assign Table
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter] public List<QueueEntryDto> WaitingQueue { get; set; } = new List<QueueEntryDto>();
+    [Parameter] public string TableId { get; set; }
+    [Parameter] public string TableNumber { get; set; }
+    
+    private string SelectedQueueId { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("console.log", $"AssignTableDialog initialized. Table ID: {TableId}, Table Number: {TableNumber}");
+        await JS.InvokeVoidAsync("console.log", $"Waiting queue entries: {WaitingQueue.Count}");
+    }
+    
+    private void SelectQueueEntry(string queueId)
+    {
+        SelectedQueueId = queueId;
+    }
+    
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(SelectedQueueId));
+    }
+    
+    private string GetQueueWaitingTime(DateTime queuedAt)
+    {
+        // Adjust for time zone if needed
+        var adjustedCurrentTime = DateTime.Now.AddHours(-8);
+        var elapsed = adjustedCurrentTime - queuedAt;
+        
+        // Handle negative elapsed time
+        if (elapsed.TotalSeconds < 0)
+        {
+            return "0h 0m";
+        }
+        
+        return $"{elapsed.Hours}h {elapsed.Minutes}m";
+    }
+} 

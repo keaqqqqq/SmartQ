@@ -460,12 +460,132 @@
                         <MudTabPanel Text="QUEUE TABLES" Icon="@Icons.Material.Filled.RestaurantMenu">
                             <div class="pa-4">
                                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                                    Queue functionality is not fully implemented yet.
+                                    Displaying @_queueTables.Count queue tables |
+                                    @_queueTables.Count(t => t.Status?.ToLower() == "occupied") occupied,
+                                    @_queueTables.Count(t => t.Status?.ToLower() == "available") available
                                 </MudText>
 
-                                <MudAlert Severity="Severity.Info" Class="mb-4">
-                                    Queue tables will be displayed here once the queue management system is integrated.
-                                                                    </MudAlert>
+                                <MudGrid>
+                                    @foreach (var table in _queueTables)
+                                    {
+                                        <MudItem xs="12" md="6">
+                                            <MudPaper Elevation="3" Class="table-card">
+                                                @if (table.Status?.ToLower() == "occupied")
+                                                {
+                                                    <div class="time-indicator warning">
+                                                        <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                                        @(_queueTableOccupancy.TryGetValue(table.TableId, out var queueData) ? 
+                                                            GetTimeElapsed(queueData.SeatedAt) : "Unknown")
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="status-indicator">
+                                                        <MudChip Color="Color.Success" Size="Size.Small" Label="true" T="string">Available</MudChip>
+                                                    </div>
+                                                }
+
+                                                <div class="table-header d-flex align-center">
+                                                    <span class="table-number @(table.Status?.ToLower() == "occupied" ? "table-secondary" : "table-success")">
+                                                        @(!string.IsNullOrEmpty(table.TableNumber) ? table.TableNumber.Substring(Math.Max(0, table.TableNumber.Length - 2)) : "")
+                                                    </span>
+                                                    <div>
+                                                        <MudText Typo="Typo.subtitle1">Table @table.TableNumber</MudText>
+                                                        <MudText Typo="Typo.caption" Class="d-flex align-center">
+                                                            <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                                            Capacity: @table.Capacity
+                                                        </MudText>
+                                                    </div>
+                                                </div>
+
+                                                @if (table.Status?.ToLower() == "occupied")
+                                                {
+                                                    @if (_queueTableOccupancy.TryGetValue(table.TableId, out var queueInfo))
+                                                    {
+                                                        <div class="customer-info bg-light-secondary">
+                                                            <MudText Typo="Typo.subtitle1">@queueInfo.CustomerName</MudText>
+                                                            <div class="d-flex align-center mt-2">
+                                                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                                                <MudText Typo="Typo.body2" Class="mr-3">@queueInfo.PartySize guests</MudText>
+
+                                                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
+                                                                <MudText Typo="Typo.body2">@queueInfo.QueuedAt.ToString("h:mm tt")</MudText>
+                                                            </div>
+                                                            <div class="d-flex align-center mt-1">
+                                                                <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
+                                                                <MudText Typo="Typo.body2">@queueInfo.CustomerPhone</MudText>
+                                                            </div>
+
+                                                            <div class="d-flex gap-2 mt-3">
+                                                                @if (queueInfo.Status?.ToLower() == "seated")
+                                                                {
+                                                                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                                                                               Class="quick-action-btn" Size="Size.Small"
+                                                                               OnClick="@(() => HandleCompleteQueue(queueInfo.QueueId))">
+                                                                        Complete
+                                                                    </MudButton>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                                                                               Class="quick-action-btn" Size="Size.Small"
+                                                                               OnClick="@(() => MarkQueueAsSeated(queueInfo.QueueId))">
+                                                                        Seated
+                                                                    </MudButton>
+                                                                }
+                                                                <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
+                                                                           Class="quick-action-btn" Size="Size.Small"
+                                                                           OnClick="@(() => RemoveFromQueue(_waitingQueue.FindIndex(q => q.QueueId == queueInfo.QueueId)))">
+                                                                    Cancel
+                                                                </MudButton>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="customer-info bg-light-secondary">
+                                                            <MudText Typo="Typo.subtitle1" Align="Align.Center">Occupied</MudText>
+                                                            <MudText Typo="Typo.caption" Align="Align.Center">No queue details found</MudText>
+                                                        </div>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <div class="customer-info">
+                                                        <div class="d-flex gap-2 mt-1">
+                                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                                                    Class="quick-action-btn" Size="Size.Small"
+                                                                    OnClick="@(() => HandleCallNext(table.TableId))">
+                                                                Call Next
+                                                            </MudButton>
+                                                        </div>
+                                                        <div class="d-flex gap-2 mt-2">
+                                                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                                                                    Class="quick-action-btn" Size="Size.Small"
+                                                                    OnClick="@(() => HandleAssignTable(table.TableId))">
+                                                                Assign Table
+                                                            </MudButton>
+                                                        </div>
+                                                        <div class="d-flex gap-2 mt-2">
+                                                            <MudButton Variant="Variant.Text" Color="Color.Info" FullWidth="true"
+                                                                    Class="quick-action-btn" Size="Size.Small"
+                                                                    OnClick="@(() => HandleTableRecommendation(table.TableId))">
+                                                                Get Recommendations
+                                                            </MudButton>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </MudPaper>
+                                        </MudItem>
+                                    }
+                                    
+                                    @if (_queueTables.Count == 0)
+                                    {
+                                        <MudItem xs="12">
+                                            <MudAlert Severity="Severity.Info" Class="my-2">No queue tables found.</MudAlert>
+                                        </MudItem>
+                                    }
+                                </MudGrid>
                             </div>
                         </MudTabPanel>
                     </MudTabs>
@@ -573,8 +693,13 @@
     private string _outletUUID = string.Empty;
     private int _totalTables = 20; // Default value
     private List<ReservationDto> _todayReservations = new List<ReservationDto>();
-    private List<TableTypeInfo> _reservationTables = new List<TableTypeInfo>();
+    private List<FNBReservation.Portal.Models.TableTypeInfo> _reservationTables = new List<FNBReservation.Portal.Models.TableTypeInfo>();
     private List<QueueEntryDto> _waitingQueue = new List<QueueEntryDto>();
+    private List<FNBReservation.Portal.Models.TableTypeInfo> _queueTables = new List<FNBReservation.Portal.Models.TableTypeInfo>();
+    private Dictionary<string, QueueEntryDto> _queueTableOccupancy = new Dictionary<string, QueueEntryDto>();
+    private List<TableRecommendationDto> _currentRecommendations = new List<TableRecommendationDto>();
+    private QueueEntryDto _selectedQueueEntry = null;
+    private FNBReservation.Portal.Models.TableTypeInfo _selectedTable = null;
     private bool _isFirstRender = true;
     private Exception _loadingError = null;
     
@@ -624,6 +749,7 @@
                 
                 await LoadOutletInfo();
                 await LoadTables();
+                await LoadQueueTables();
                 await RefreshData();
             }
             catch (Exception ex)
@@ -681,7 +807,10 @@
             await JS.InvokeVoidAsync("console.log", $"API CALL: GetTableTypesByOutletIdAsync with outletId: {_outletId}, tableType: reservation");
             
             // Call the API to get reservation tables using outletId
-            _reservationTables = await TableService.GetTableTypesByOutletIdAsync(_outletId, "reservation");
+            var serviceTables = await TableService.GetTableTypesByOutletIdAsync(_outletId, "reservation");
+            
+            // Convert the service TableTypeInfo to model TableTypeInfo
+            _reservationTables = ConvertServiceToModelTableTypeInfo(serviceTables);
             
             // Log the table data for debugging
             await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {_reservationTables.Count} tables");
@@ -696,6 +825,124 @@
         {
             await JS.InvokeVoidAsync("console.log", $"Error loading tables: {ex.Message}");
             Snackbar.Add($"Error loading tables: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadQueueTables()
+    {
+        try
+        {
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            if (string.IsNullOrEmpty(effectiveOutletId))
+            {
+                await JS.InvokeVoidAsync("console.log", "Both Outlet UUID and outletId are null or empty, cannot load queue tables.");
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: GetQueueTablesAsync with outletId: {effectiveOutletId}");
+            
+            // Store existing table statuses before making API call
+            var existingTableStatuses = _queueTables
+                .Where(t => t.Status?.ToLower() == "occupied")
+                .ToDictionary(t => t.TableId, t => "occupied");
+                
+            // Call the API to get queue tables
+            var serviceTables = await QueueService.GetQueueTablesAsync(effectiveOutletId);
+            
+            // Convert the service TableTypeInfo to model TableTypeInfo
+            var updatedTables = ConvertServiceToModelTableTypeInfo(serviceTables);
+            
+            // Preserve occupied status for tables that were previously occupied
+            foreach (var table in updatedTables)
+            {
+                if (existingTableStatuses.ContainsKey(table.TableId))
+                {
+                    table.Status = "occupied";
+                }
+            }
+            
+            // Now update the reference
+            _queueTables = updatedTables;
+            
+            await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {_queueTables.Count} queue tables");
+            
+            // Log occupancy data before updating
+            if (_queueTableOccupancy.Count > 0)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Current queue table occupancy count: {_queueTableOccupancy.Count}");
+                foreach (var kvp in _queueTableOccupancy)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Occupancy data for table {kvp.Key}: {kvp.Value.CustomerName}");
+                    
+                    // Make sure each table with occupancy data is marked as occupied
+                    var occupiedTable = _queueTables.FirstOrDefault(t => t.TableId == kvp.Key);
+                    if (occupiedTable != null && occupiedTable.Status?.ToLower() != "occupied")
+                    {
+                        occupiedTable.Status = "occupied";
+                        await JS.InvokeVoidAsync("console.log", $"Fixed status for table {occupiedTable.TableNumber} to occupied");
+                    }
+                }
+            }
+            
+            // Check that each occupied table actually has occupancy data
+            foreach (var table in _queueTables)
+            {
+                if (table.Status?.ToLower() == "occupied" && !_queueTableOccupancy.ContainsKey(table.TableId))
+                {
+                    // This table is marked as occupied but doesn't have occupancy data
+                    await JS.InvokeVoidAsync("console.log", $"Table {table.TableNumber} is marked as occupied but has no occupancy data");
+                    
+                    // Look for queue entries with this table assigned
+                    var assignedQueueEntry = _waitingQueue.FirstOrDefault(q => 
+                        q.AssignedTableId == table.TableId && 
+                        (q.Status?.ToLower() == "called" || q.Status?.ToLower() == "seated"));
+                    
+                    if (assignedQueueEntry != null)
+                    {
+                        await JS.InvokeVoidAsync("console.log", $"Found assigned queue entry for table {table.TableNumber}: {assignedQueueEntry.CustomerName}");
+                        // Add to occupancy tracking
+                        _queueTableOccupancy[table.TableId] = assignedQueueEntry;
+                    }
+                }
+            }
+            
+            // Check queue entries for assigned tables that might be missing
+            foreach (var queueEntry in _waitingQueue)
+            {
+                if (!string.IsNullOrEmpty(queueEntry.AssignedTableId) && 
+                    (queueEntry.Status?.ToLower() == "called" || queueEntry.Status?.ToLower() == "seated"))
+                {
+                    // Find the table by ID
+                    var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == queueEntry.AssignedTableId);
+                    if (tableInfo != null)
+                    {
+                        tableInfo.Status = "occupied";
+                        // Add to occupancy tracking if not already there
+                        if (!_queueTableOccupancy.ContainsKey(tableInfo.TableId))
+                        {
+                            _queueTableOccupancy[tableInfo.TableId] = queueEntry;
+                            await JS.InvokeVoidAsync("console.log", $"Added missing occupancy data for table {tableInfo.TableNumber}: {queueEntry.CustomerName}");
+                        }
+                    }
+                }
+            }
+            
+            // Log occupancy data after updating
+            if (_queueTableOccupancy.Count > 0)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Updated queue table occupancy count: {_queueTableOccupancy.Count}");
+                foreach (var kvp in _queueTableOccupancy)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"Occupancy data for table {kvp.Key}: {kvp.Value.CustomerName}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading queue tables: {ex.Message}");
+            Snackbar.Add($"Error loading queue tables: {ex.Message}", Severity.Error);
         }
     }
 
@@ -742,21 +989,50 @@
         
         try
         {
+            // Store existing table status and occupancy data to prevent losing it during refresh
+            var existingOccupancy = new Dictionary<string, QueueEntryDto>(_queueTableOccupancy);
+            var existingTableStatus = _queueTables.Where(t => t.Status?.ToLower() == "occupied")
+                .ToDictionary(t => t.TableId, t => t.Status);
+            
+            await JS.InvokeVoidAsync("console.log", $"Storing {existingOccupancy.Count} occupancy records and {existingTableStatus.Count} table statuses before refresh");
+            
             if (!string.IsNullOrEmpty(_outletId))
             {
-                // Get today's reservations for the outlet
+                // Refresh queue data first to ensure we have the latest queue entries
+                await LoadQueueData();
+                
+                // Then refresh reservation data
                 var today = DateTime.Today;
                 await JS.InvokeVoidAsync("console.log", $"API CALL: GetReservationsByOutletAndDateAsync with outletId: {_outletId}, date: {today:yyyy-MM-dd}");
-                
                 _todayReservations = await ReservationService.GetReservationsByOutletAndDateAsync(_outletId, today);
                 
-                await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Loaded {_todayReservations.Count} reservations for today");
-                
-                // Refresh table data
+                // Then refresh table data
                 await LoadTables();
                 
-                // Refresh queue data
-                await LoadQueueData();
+                // Finally refresh queue tables, but don't reset occupancy data
+                await LoadQueueTables();
+                
+                // Restore any missing occupancy data and table status
+                foreach (var tableId in existingTableStatus.Keys)
+                {
+                    var table = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+                    if (table != null)
+                    {
+                        // Ensure the table is still marked as occupied
+                        if (table.Status?.ToLower() != "occupied")
+                        {
+                            table.Status = "occupied";
+                            await JS.InvokeVoidAsync("console.log", $"Restored occupied status for table {table.TableNumber}");
+                        }
+                        
+                        // Ensure occupancy data is preserved
+                        if (!_queueTableOccupancy.ContainsKey(tableId) && existingOccupancy.ContainsKey(tableId))
+                        {
+                            _queueTableOccupancy[tableId] = existingOccupancy[tableId];
+                            await JS.InvokeVoidAsync("console.log", $"Restored occupancy data for table {table.TableNumber}: {existingOccupancy[tableId].CustomerName}");
+                        }
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -867,17 +1143,20 @@
         
         try
         {
-            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {_outletId}, queueId: {queueEntry.QueueId}");
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
             
-            // Call API to cancel queue entry
-            bool success = await QueueService.CancelQueueEntryAsync(_outletId, queueEntry.QueueId);
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {effectiveOutletId}, queueId: {queueEntry.QueueId}, reason: No-show");
+            
+            // Call API to cancel queue entry with the "No-show" reason
+            bool success = await QueueService.CancelQueueEntryAsync(effectiveOutletId, queueEntry.QueueId, "No-show");
             
             if (success)
             {
                 // If API call successful, remove from local list and notify
                 _waitingQueue.RemoveAt(queueIndex);
                 Snackbar.Add($"{queueEntry.CustomerName} has been removed from the queue.", Severity.Success);
-        StateHasChanged();
+                StateHasChanged();
             }
             else
             {
@@ -896,17 +1175,19 @@
     {
         try
         {
-            // Use outletId instead of outletUUID for API calls to maintain consistency
-            if (string.IsNullOrEmpty(_outletId))
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            if (string.IsNullOrEmpty(effectiveOutletId))
             {
-                await JS.InvokeVoidAsync("console.log", "Outlet ID is null or empty, cannot load queue data.");
+                await JS.InvokeVoidAsync("console.log", "Both Outlet UUID and outletId are null or empty, cannot load queue data.");
                 return;
             }
             
-            await JS.InvokeVoidAsync("console.log", $"API CALL: GetWaitingQueueByOutletIdAsync with outletId: {_outletId}");
+            await JS.InvokeVoidAsync("console.log", $"API CALL: GetWaitingQueueByOutletIdAsync with outletId: {effectiveOutletId}");
             
-            // Call the API to get waiting queue using outletId
-            var queueEntries = await QueueService.GetWaitingQueueByOutletIdAsync(_outletId);
+            // Call the API to get waiting queue using effectiveOutletId
+            var queueEntries = await QueueService.GetWaitingQueueByOutletIdAsync(effectiveOutletId);
             
             await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {queueEntries.Count} queue entries");
             
@@ -944,5 +1225,486 @@
         }
         
         return $"{elapsed.Hours}h {elapsed.Minutes}m";
+    }
+
+    // New methods for queue table management
+    private async Task HandleCallNext(string tableId)
+    {
+        try
+        {
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            if (string.IsNullOrEmpty(effectiveOutletId))
+            {
+                await JS.InvokeVoidAsync("console.log", "Both Outlet UUID and outletId are null or empty, cannot call next in queue.");
+                Snackbar.Add("Outlet ID not available. Cannot proceed.", Severity.Error);
+                return;
+            }
+            
+            // Check if there are any customers in the queue first
+            if (_waitingQueue.Count == 0)
+            {
+                Snackbar.Add("No customers in waiting queue", Severity.Info);
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CallNextInQueueAsync with outletId: {effectiveOutletId}, tableId: {tableId}");
+            
+            var nextQueueEntry = await QueueService.CallNextInQueueAsync(effectiveOutletId, tableId);
+            
+            if (nextQueueEntry != null)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Next in queue: {nextQueueEntry.CustomerName}, Status: {nextQueueEntry.Status}");
+                
+                Snackbar.Add($"Called {nextQueueEntry.CustomerName} (Queue #{nextQueueEntry.QueueCode})", Severity.Success);
+                
+                // Get the first customer in queue as fallback (in case API doesn't return all data)
+                var firstInQueue = _waitingQueue.FirstOrDefault();
+                
+                // Combine API response data with existing queue data if needed
+                if (string.IsNullOrEmpty(nextQueueEntry.CustomerPhone) && firstInQueue != null)
+                {
+                    nextQueueEntry.CustomerPhone = firstInQueue.CustomerPhone;
+                    nextQueueEntry.PartySize = firstInQueue.PartySize;
+                    nextQueueEntry.QueuedAt = firstInQueue.QueuedAt;
+                }
+                
+                // Update queue entry status
+                nextQueueEntry.Status = "Called";
+                nextQueueEntry.AssignedTableId = tableId;
+                
+                // Get the table from _queueTables and update its status
+                var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+                if (tableInfo != null)
+                {
+                    tableInfo.Status = "occupied";
+                    
+                    // Add to occupancy tracking immediately
+                    _queueTableOccupancy[tableInfo.TableId] = nextQueueEntry;
+                    
+                    await JS.InvokeVoidAsync("console.log", $"Updated table status and added queue entry to occupancy tracking");
+                    await JS.InvokeVoidAsync("console.log", $"Queue entry in occupancy: {_queueTableOccupancy[tableInfo.TableId].CustomerName}");
+                }
+                
+                // Force UI update immediately
+                StateHasChanged();
+                
+                // Update waiting queue to remove or mark the called customer
+                int indexOfCalled = _waitingQueue.FindIndex(q => q.QueueId == nextQueueEntry.QueueId);
+                if (indexOfCalled >= 0)
+                {
+                    // Update the status in the waiting queue list
+                    _waitingQueue[indexOfCalled].Status = "Called";
+                    _waitingQueue[indexOfCalled].AssignedTableId = tableId;
+                }
+                
+                // Load only queue data to update status
+                await LoadQueueData();
+                
+                // No need to call full RefreshData which can overwrite our changes
+            }
+            else
+            {
+                // Manually handle the case when API doesn't return data but there are customers in queue
+                if (_waitingQueue.Count > 0)
+                {
+                    var firstCustomer = _waitingQueue[0];
+                    await JS.InvokeVoidAsync("console.log", $"API returned null, using first customer from queue: {firstCustomer.CustomerName}");
+                    
+                    // Assign first customer in queue to the table
+                    firstCustomer.Status = "Called";
+                    firstCustomer.AssignedTableId = tableId;
+                    
+                    var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+                    if (tableInfo != null)
+                    {
+                        tableInfo.Status = "occupied";
+                        _queueTableOccupancy[tableInfo.TableId] = firstCustomer;
+                        
+                        Snackbar.Add($"Called {firstCustomer.CustomerName} (Queue #{firstCustomer.QueueCode})", Severity.Success);
+                        
+                        // Force UI update
+                        StateHasChanged();
+                    }
+                    
+                    // Update waiting queue to mark the called customer
+                    _waitingQueue[0].Status = "Called";
+                    _waitingQueue[0].AssignedTableId = tableId;
+                    
+                    // Load only queue data
+                    await LoadQueueData();
+                }
+                else
+                {
+                    Snackbar.Add("No customers in queue", Severity.Info);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error calling next in queue: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleAssignTable(string tableId)
+    {
+        try
+        {
+            // Show dialog to select from waiting queue
+            if (_waitingQueue.Count == 0)
+            {
+                Snackbar.Add("No customers in waiting queue", Severity.Info);
+                return;
+            }
+            
+            _selectedTable = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+            if (_selectedTable == null)
+            {
+                Snackbar.Add("Selected table not found", Severity.Error);
+                return;
+            }
+            
+            // Show a dialog with dropdown to select a customer from queue
+            var parameters = new DialogParameters
+            {
+                ["TableNumber"] = _selectedTable.TableNumber,
+                ["WaitingQueue"] = _waitingQueue
+            };
+            
+            var dialog = await DialogService.ShowAsync<QueueSelectionDialog>("Assign Table", parameters);
+            var result = await dialog.Result;
+            
+            if (!result.Canceled && result.Data is string queueId && !string.IsNullOrEmpty(queueId))
+            {
+                await AssignTableToQueue(tableId, queueId);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error in HandleAssignTable: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleTableRecommendation(string tableId)
+    {
+        try
+        {
+            // Check if there are any customers in the queue
+            if (_waitingQueue.Count == 0)
+            {
+                Snackbar.Add("No customers in waiting queue", Severity.Info);
+                return;
+            }
+            
+            _selectedTable = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+            if (_selectedTable == null)
+            {
+                Snackbar.Add("Selected table not found", Severity.Error);
+                return;
+            }
+            
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            Snackbar.Add("Analyzing best match for this table...", Severity.Info);
+            
+            // Find the most suitable customer based on party size match to table capacity
+            // Sort by the absolute difference between party size and table capacity
+            var optimalCustomer = _waitingQueue
+                .OrderBy(q => Math.Abs(q.PartySize - _selectedTable.Capacity))
+                .FirstOrDefault();
+                
+            if (optimalCustomer == null)
+            {
+                Snackbar.Add("No suitable customers found in the queue", Severity.Warning);
+                return;
+            }
+            
+            // Create a recommendation object
+            var recommendation = new
+            {
+                queueEntryId = optimalCustomer.QueueId,
+                queueCode = optimalCustomer.QueueCode,
+                customerName = optimalCustomer.CustomerName,
+                partySize = optimalCustomer.PartySize,
+                tableId = _selectedTable.TableId,
+                tableNumber = _selectedTable.TableNumber,
+                tableCapacity = _selectedTable.Capacity,
+                recommendationType = GetRecommendationType(optimalCustomer.PartySize, _selectedTable.Capacity),
+                recommendationMessage = GetRecommendationMessage(optimalCustomer.CustomerName, optimalCustomer.PartySize, _selectedTable.TableNumber, _selectedTable.Capacity)
+            };
+            
+            // Log the recommendation
+            await JS.InvokeVoidAsync("console.log", "Best match recommendation:", recommendation);
+            
+            // Show a confirmation dialog with the recommendation
+            var parameters = new DialogParameters
+            {
+                ["ContentText"] = recommendation.recommendationMessage,
+                ["ButtonText"] = "Assign Table",
+                ["Color"] = Color.Primary
+            };
+            
+            var dialog = await DialogService.ShowAsync<ConfirmDialog>("Table Recommendation", parameters);
+            var result = await dialog.Result;
+            
+            if (!result.Canceled)
+            {
+                // User accepted the recommendation
+                await JS.InvokeVoidAsync("console.log", $"User accepted recommendation, assigning table {_selectedTable.TableId} to customer {optimalCustomer.CustomerName}");
+                
+                // Assign the selected table to the customer
+                await AssignTableToQueue(_selectedTable.TableId, optimalCustomer.QueueId);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", "User rejected recommendation");
+                Snackbar.Add("Table assignment canceled", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error in HandleTableRecommendation: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private string GetRecommendationType(int partySize, int tableCapacity)
+    {
+        int diff = Math.Abs(partySize - tableCapacity);
+        
+        if (diff == 0)
+            return "Optimal";
+        else if (partySize <= tableCapacity && diff <= 2)
+            return "Good";
+        else if (partySize > tableCapacity && diff <= 1)
+            return "Tight";
+        else
+            return "Suboptimal";
+    }
+    
+    private string GetRecommendationMessage(string customerName, int partySize, string tableNumber, int tableCapacity)
+    {
+        int diff = Math.Abs(partySize - tableCapacity);
+        
+        if (diff == 0)
+            return $"Perfect match: {customerName} (party of {partySize}) perfectly fits table {tableNumber} capacity ({tableCapacity})";
+        else if (partySize < tableCapacity)
+            return $"Good match: {customerName} (party of {partySize}) can be seated at table {tableNumber} (capacity {tableCapacity})";
+        else if (partySize > tableCapacity && diff <= 1)
+            return $"Tight fit: {customerName} (party of {partySize}) might be a tight fit for table {tableNumber} (capacity {tableCapacity})";
+        else
+            return $"Suboptimal match: {customerName} (party of {partySize}) doesn't match well with table {tableNumber} (capacity {tableCapacity})";
+    }
+    
+    private async Task AssignTableToQueue(string tableId, string queueId)
+    {
+        try
+        {
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: AssignTableToQueueAsync with outletId: {effectiveOutletId}, queueId: {queueId}, tableId: {tableId}");
+            
+            bool success = await QueueService.AssignTableToQueueAsync(effectiveOutletId, queueId, tableId);
+            
+            if (success)
+            {
+                await JS.InvokeVoidAsync("console.log", "Table assigned successfully");
+                
+                // Get the queue entry and customer name
+                var queueEntry = _waitingQueue.FirstOrDefault(q => q.QueueId == queueId);
+                string customerName = queueEntry?.CustomerName ?? "Customer";
+                
+                Snackbar.Add($"Table assigned to {customerName}", Severity.Success);
+                
+                // Update the UI directly instead of showing a dialog
+                if (queueEntry != null)
+                {
+                    queueEntry.Status = "Called";
+                    queueEntry.AssignedTableId = tableId;
+                    
+                    // Get the table to update its status
+                    var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+                    if (tableInfo != null)
+                    {
+                        tableInfo.Status = "occupied";
+                        // Add to occupancy tracking
+                        _queueTableOccupancy[tableInfo.TableId] = queueEntry;
+                        
+                        // Log the assignment for debugging
+                        await JS.InvokeVoidAsync("console.log", $"Assigned table {tableInfo.TableNumber} to {customerName}");
+                        await JS.InvokeVoidAsync("console.log", $"Table status: {tableInfo.Status}");
+                        await JS.InvokeVoidAsync("console.log", $"Occupancy tracking count: {_queueTableOccupancy.Count}");
+                    }
+                    
+                    // Find the queue entry in the waiting queue and update its status
+                    int queueIndex = _waitingQueue.FindIndex(q => q.QueueId == queueId);
+                    if (queueIndex >= 0)
+                    {
+                        _waitingQueue[queueIndex].Status = "Called";
+                        _waitingQueue[queueIndex].AssignedTableId = tableId;
+                    }
+                    
+                    // Force UI update immediately
+                    StateHasChanged();
+                    
+                    // Load only queue data to update status
+                    await LoadQueueData();
+                }
+                else
+                {
+                    await RefreshData();
+                }
+            }
+            else
+            {
+                Snackbar.Add("Failed to assign table", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error assigning table: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private async Task MarkQueueAsSeated(string queueId)
+    {
+        try
+        {
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: MarkQueueAsSeatedAsync with outletId: {effectiveOutletId}, queueId: {queueId}");
+            
+            bool success = await QueueService.MarkQueueAsSeatedAsync(effectiveOutletId, queueId);
+            
+            if (success)
+            {
+                Snackbar.Add("Customer marked as seated", Severity.Success);
+                
+                // Find the queue entry in the dictionary and update its status
+                foreach (var tableId in _queueTableOccupancy.Keys.ToList())
+                {
+                    if (_queueTableOccupancy[tableId].QueueId == queueId)
+                    {
+                        // Update status in the occupancy dictionary
+                        _queueTableOccupancy[tableId].Status = "Seated";
+                        await JS.InvokeVoidAsync("console.log", $"Updated status to Seated for customer {_queueTableOccupancy[tableId].CustomerName}");
+                        break;
+                    }
+                }
+                
+                // Find the queue entry in the waiting queue and update its status
+                int queueIndex = _waitingQueue.FindIndex(q => q.QueueId == queueId);
+                if (queueIndex >= 0)
+                {
+                    _waitingQueue[queueIndex].Status = "Seated";
+                    await JS.InvokeVoidAsync("console.log", $"Updated status in waiting queue for {_waitingQueue[queueIndex].CustomerName}");
+                }
+                
+                // Update UI immediately
+                StateHasChanged();
+                
+                // Load only queue data to update status
+                await LoadQueueData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to mark customer as seated", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error marking as seated: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private async Task HandleCompleteQueue(string queueId)
+    {
+        try
+        {
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: MarkQueueAsCompletedAsync with outletId: {effectiveOutletId}, queueId: {queueId}");
+            
+            bool success = await QueueService.MarkQueueAsCompletedAsync(effectiveOutletId, queueId);
+            
+            if (success)
+            {
+                Snackbar.Add("Customer visit completed", Severity.Success);
+                
+                // Find the table this customer was assigned to
+                string assignedTableId = null;
+                foreach (var kvp in _queueTableOccupancy)
+                {
+                    if (kvp.Value.QueueId == queueId)
+                    {
+                        assignedTableId = kvp.Key;
+                        break;
+                    }
+                }
+                
+                // Remove from occupancy tracking
+                if (assignedTableId != null)
+                {
+                    _queueTableOccupancy.Remove(assignedTableId);
+                    
+                    // Update table status to available
+                    var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == assignedTableId);
+                    if (tableInfo != null)
+                    {
+                        tableInfo.Status = "available";
+                        await JS.InvokeVoidAsync("console.log", $"Marked table {tableInfo.TableNumber} as available");
+                    }
+                }
+                
+                // Remove from waiting queue if still present
+                int queueIndex = _waitingQueue.FindIndex(q => q.QueueId == queueId);
+                if (queueIndex >= 0)
+                {
+                    _waitingQueue.RemoveAt(queueIndex);
+                    await JS.InvokeVoidAsync("console.log", $"Removed completed customer from waiting queue");
+                }
+                
+                // Update UI immediately
+                StateHasChanged();
+                
+                // Load only queue data to update status
+                await LoadQueueData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to complete customer visit", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error completing queue: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // Helper method to convert ServiceTableTypeInfo to ModelTableTypeInfo
+    private List<FNBReservation.Portal.Models.TableTypeInfo> ConvertServiceToModelTableTypeInfo(List<FNBReservation.Portal.Services.TableTypeInfo> serviceTables)
+    {
+        if (serviceTables == null)
+            return new List<FNBReservation.Portal.Models.TableTypeInfo>();
+        
+        return serviceTables.Select(t => new FNBReservation.Portal.Models.TableTypeInfo
+        {
+            TableId = t.Id,
+            TableNumber = t.TableNumber,
+            Capacity = t.Capacity,
+            Status = t.Status,
+            Section = t.Section,
+            TableType = t.IsActive ? "Active" : "Inactive"
+        }).ToList();
     }
 }
