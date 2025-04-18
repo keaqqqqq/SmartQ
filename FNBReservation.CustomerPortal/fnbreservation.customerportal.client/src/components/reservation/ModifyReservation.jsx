@@ -899,7 +899,7 @@ const ModifyReservation = () => {
                 <div className="grid grid-cols-2 gap-4 mb-2">
                     <div>
                         <p className="text-sm text-gray-500">Reservation Code</p>
-                        <p className="font-medium">{reservationDetails?.reservationCode || 'RES9299'}</p>
+                        <p className="font-medium">{reservationDetails?.reservationCode || ''}</p>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Restaurant</p>
@@ -1155,14 +1155,14 @@ const ModifyReservation = () => {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-500">Reservation Code</p>
-                                    <p className="font-medium">{reservationDetails?.reservationCode || 'RES9299'}</p>
+                                    <p className="font-medium">{reservationDetails?.reservationCode || ''}</p>
                                 </div>
                             </div>
                         </div>
 
                         <div className="flex justify-center">
                             <button
-                                onClick={() => navigate(`/reservation/${reservationDetails?.id || '12345'}`)}
+                                onClick={() => navigate(`/reservation/${reservationDetails?.id}`)}
                                 className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded"
                             >
                                 View Reservation

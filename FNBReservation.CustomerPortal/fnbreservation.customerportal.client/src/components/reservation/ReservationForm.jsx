@@ -1100,6 +1100,9 @@ const ReservationForm = () => {
             const responseData = response.data?.data || response.data || response;
             console.log("Reservation response:", responseData);
             
+            // Debug the actual reservationCode value
+            console.log("Reservation code from API:", responseData.reservationCode);
+            
             // Check multiple possible id structures
             const hasValidId = responseData?.id || responseData?.reservationId || 
                                (typeof responseData === 'object' && Object.keys(responseData).length > 0);
@@ -1122,9 +1125,13 @@ const ReservationForm = () => {
                 // Keep the sessionId value in localStorage and state to maintain consistent sessions
 
                 // Set the reservation code for the confirmation screen
-                const confirmationCode = responseData.confirmationCode || 
+                // Prioritize API-provided reservationCode
+                const confirmationCode = responseData.reservationCode || 
                     responseData.code || 
                     "RES" + Math.floor(10000 + Math.random() * 90000);
+                
+                // Log the code we're actually using
+                console.log("Using reservation code for display:", confirmationCode);
                 
                 setReservationCode(confirmationCode);
                 
