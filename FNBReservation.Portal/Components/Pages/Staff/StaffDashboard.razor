@@ -1366,15 +1366,19 @@
                 return;
             }
             
-            // Get the first customer in queue instead of showing a dialog
-            var nextInQueue = _waitingQueue.FirstOrDefault();
-            if (nextInQueue != null)
+            // Show a dialog with dropdown to select a customer from queue
+            var parameters = new DialogParameters
             {
-                await AssignTableToQueue(tableId, nextInQueue.QueueId);
-            }
-            else
+                ["TableNumber"] = _selectedTable.TableNumber,
+                ["WaitingQueue"] = _waitingQueue
+            };
+            
+            var dialog = await DialogService.ShowAsync<QueueSelectionDialog>("Assign Table", parameters);
+            var result = await dialog.Result;
+            
+            if (!result.Canceled && result.Data is string queueId && !string.IsNullOrEmpty(queueId))
             {
-                Snackbar.Add("No customers in queue to assign", Severity.Warning);
+                await AssignTableToQueue(tableId, queueId);
             }
         }
         catch (Exception ex)

@@ -285,7 +285,7 @@ namespace FNBReservation.Portal.Services
                 _logger?.LogInformation($"Assigning table to queue: {url}");
                 
                 var content = new StringContent(
-                    JsonSerializer.Serialize(new { queueId = queueId, tableId = tableId }), 
+                    JsonSerializer.Serialize(new { queueEntryId = queueId, tableId = tableId }), 
                     System.Text.Encoding.UTF8, 
                     "application/json");
                 
