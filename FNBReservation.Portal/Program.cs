@@ -214,6 +214,9 @@ builder.Services.AddScoped<IQueueService>(sp =>
     return new QueueService(httpClientFactory.CreateClient("API"), configuration, jwtTokenService, logger);
 });
 
+// Register TableOccupancyService as singleton to persist data between page navigations
+builder.Services.AddSingleton<ITableOccupancyService, TableOccupancyService>();
+
 // Register other mock services
 builder.Services.AddScoped<IStaffService>(sp => {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();

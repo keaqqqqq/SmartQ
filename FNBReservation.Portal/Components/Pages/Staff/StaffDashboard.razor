@@ -12,6 +12,7 @@
 @inject IOutletService OutletService
 @inject ITableService TableService
 @inject IQueueService QueueService
+@inject ITableOccupancyService TableOccupancyService
 @rendermode InteractiveServer
 
 
@@ -843,6 +844,12 @@
             
             await JS.InvokeVoidAsync("console.log", $"API CALL: GetQueueTablesAsync with outletId: {effectiveOutletId}");
             
+            // Retrieve persisted occupancy data from the TableOccupancyService
+            var persistedOccupancy = TableOccupancyService.GetQueueTableOccupancy(effectiveOutletId);
+            var persistedStatuses = TableOccupancyService.GetTableStatuses(effectiveOutletId);
+            
+            await JS.InvokeVoidAsync("console.log", $"Retrieved {persistedOccupancy.Count} occupancy records from TableOccupancyService");
+            
             // Store existing table statuses before making API call
             var existingTableStatuses = _queueTables
                 .Where(t => t.Status?.ToLower() == "occupied")
@@ -854,10 +861,15 @@
             // Convert the service TableTypeInfo to model TableTypeInfo
             var updatedTables = ConvertServiceToModelTableTypeInfo(serviceTables);
             
-            // Preserve occupied status for tables that were previously occupied
+            // Apply persisted statuses first
             foreach (var table in updatedTables)
             {
-                if (existingTableStatuses.ContainsKey(table.TableId))
+                if (persistedStatuses.TryGetValue(table.TableId, out var status))
+                {
+                    table.Status = status;
+                    await JS.InvokeVoidAsync("console.log", $"Applied persisted status '{status}' to table {table.TableNumber}");
+                }
+                else if (existingTableStatuses.ContainsKey(table.TableId))
                 {
                     table.Status = "occupied";
                 }
@@ -867,6 +879,27 @@
             _queueTables = updatedTables;
             
             await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {_queueTables.Count} queue tables");
+            
+            // Apply persisted occupancy data
+            if (persistedOccupancy.Count > 0)
+            {
+                _queueTableOccupancy = new Dictionary<string, QueueEntryDto>(persistedOccupancy);
+                await JS.InvokeVoidAsync("console.log", $"Applied {_queueTableOccupancy.Count} occupancy records from persisted data");
+                
+                // Make sure all tables with occupancy data have correct status
+                foreach (var kvp in _queueTableOccupancy)
+                {
+                    var tableId = kvp.Key;
+                    var queueEntry = kvp.Value;
+                    
+                    var table = _queueTables.FirstOrDefault(t => t.TableId == tableId);
+                    if (table != null && table.Status?.ToLower() != "occupied")
+                    {
+                        table.Status = "occupied";
+                        await JS.InvokeVoidAsync("console.log", $"Fixed status for table {table.TableNumber} to occupied based on persisted data");
+                    }
+                }
+            }
             
             // Log occupancy data before updating
             if (_queueTableOccupancy.Count > 0)
@@ -929,15 +962,15 @@
                 }
             }
             
-            // Log occupancy data after updating
-            if (_queueTableOccupancy.Count > 0)
-            {
-                await JS.InvokeVoidAsync("console.log", $"Updated queue table occupancy count: {_queueTableOccupancy.Count}");
-                foreach (var kvp in _queueTableOccupancy)
-                {
-                    await JS.InvokeVoidAsync("console.log", $"Occupancy data for table {kvp.Key}: {kvp.Value.CustomerName}");
-                }
-            }
+            // Save updated occupancy data to persistence service
+            TableOccupancyService.SetQueueTableOccupancy(effectiveOutletId, new Dictionary<string, QueueEntryDto>(_queueTableOccupancy));
+            
+            // Save updated table statuses to persistence service
+            var tableStatuses = _queueTables
+                .ToDictionary(t => t.TableId, t => t.Status ?? "available");
+            TableOccupancyService.SetTableStatuses(effectiveOutletId, tableStatuses);
+            
+            await JS.InvokeVoidAsync("console.log", $"Saved {_queueTableOccupancy.Count} occupancy records to TableOccupancyService");
         }
         catch (Exception ex)
         {
@@ -1283,6 +1316,9 @@
                     // Add to occupancy tracking immediately
                     _queueTableOccupancy[tableInfo.TableId] = nextQueueEntry;
                     
+                    // Update the persistence service
+                    TableOccupancyService.MarkTableAsOccupied(effectiveOutletId, tableId, nextQueueEntry);
+                    
                     await JS.InvokeVoidAsync("console.log", $"Updated table status and added queue entry to occupancy tracking");
                     await JS.InvokeVoidAsync("console.log", $"Queue entry in occupancy: {_queueTableOccupancy[tableInfo.TableId].CustomerName}");
                 }
@@ -1321,6 +1357,9 @@
                     {
                         tableInfo.Status = "occupied";
                         _queueTableOccupancy[tableInfo.TableId] = firstCustomer;
+                        
+                        // Update the persistence service
+                        TableOccupancyService.MarkTableAsOccupied(effectiveOutletId, tableId, firstCustomer);
                         
                         Snackbar.Add($"Called {firstCustomer.CustomerName} (Queue #{firstCustomer.QueueCode})", Severity.Success);
                         
@@ -1535,6 +1574,9 @@
                         // Add to occupancy tracking
                         _queueTableOccupancy[tableInfo.TableId] = queueEntry;
                         
+                        // Update the persistence service
+                        TableOccupancyService.MarkTableAsOccupied(effectiveOutletId, tableId, queueEntry);
+                        
                         // Log the assignment for debugging
                         await JS.InvokeVoidAsync("console.log", $"Assigned table {tableInfo.TableNumber} to {customerName}");
                         await JS.InvokeVoidAsync("console.log", $"Table status: {tableInfo.Status}");
@@ -1594,6 +1636,10 @@
                     {
                         // Update status in the occupancy dictionary
                         _queueTableOccupancy[tableId].Status = "Seated";
+                        
+                        // Update the persistence service with the updated status
+                        TableOccupancyService.MarkTableAsOccupied(effectiveOutletId, tableId, _queueTableOccupancy[tableId]);
+                        
                         await JS.InvokeVoidAsync("console.log", $"Updated status to Seated for customer {_queueTableOccupancy[tableId].CustomerName}");
                         break;
                     }
@@ -1655,6 +1701,9 @@
                 if (assignedTableId != null)
                 {
                     _queueTableOccupancy.Remove(assignedTableId);
+                    
+                    // Update the persistence service
+                    TableOccupancyService.MarkTableAsAvailable(effectiveOutletId, assignedTableId);
                     
                     // Update table status to available
                     var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == assignedTableId);
