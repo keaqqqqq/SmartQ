@@ -783,7 +783,7 @@
             else
             {
                 await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Could not find outlet with ID: {_outletId}");
-                Snackbar.Add("Could not find outlet information.", Severity.Warning);
+                
             }
         }
         catch (Exception ex)
