@@ -44,7 +44,9 @@ namespace FNBReservation.Modules.Reservation.Infrastructure.Adapters
                     DefaultDiningDurationMinutes = outlet.DefaultDiningDurationMinutes,
                     MaxAdvanceReservationTime = outlet.MaxAdvanceReservationTime,
                     MinAdvanceReservationTime = outlet.MinAdvanceReservationTime,
-                    IsActive = outlet.Status.Equals("Active", StringComparison.OrdinalIgnoreCase)
+                    IsActive = outlet.Status.Equals("Active", StringComparison.OrdinalIgnoreCase),
+                    OperatingHours = outlet.OperatingHours 
+
                 };
             }
             catch (Exception ex)

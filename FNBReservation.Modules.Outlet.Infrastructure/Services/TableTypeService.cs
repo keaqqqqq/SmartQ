@@ -14,6 +14,9 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
         private readonly IPeakHourService _peakHourService;
         private readonly ILogger<TableTypeService> _logger;
 
+        // Define what constitutes a large table (tables with capacity greater than this value)
+        private const int LARGE_TABLE_THRESHOLD = 6;
+
         public TableTypeService(
             ITableService tableService,
             IPeakHourService peakHourService,
@@ -57,18 +60,45 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
                 return activeTables;
             }
 
-            // Calculate CAPACITY-based allocation (not table count)
+            // Get all large tables first - these ALWAYS go to reservations
+            var largeTables = activeTables.Where(t => t.Capacity > LARGE_TABLE_THRESHOLD).ToList();
+            _logger.LogInformation("Found {Count} large tables with capacity > {Threshold}",
+                largeTables.Count, LARGE_TABLE_THRESHOLD);
+
+            // Calculate the remaining percentage target after allocating large tables
             int totalCapacity = activeTables.Sum(t => t.Capacity);
+            int largeTablesCapacity = largeTables.Sum(t => t.Capacity);
+            int remainingCapacity = totalCapacity - largeTablesCapacity;
+
+            // Calculate how much more capacity we need for reservations
             int targetReservationCapacity = (int)Math.Ceiling(totalCapacity * (reservationAllocationPercent / 100.0));
+            int additionalCapacityNeeded = Math.Max(0, targetReservationCapacity - largeTablesCapacity);
 
-            _logger.LogInformation("Target reservation capacity: {Target} out of {Total} total capacity ({Percent}%)",
-                targetReservationCapacity, totalCapacity, reservationAllocationPercent);
+            _logger.LogInformation("Large tables capacity: {LargeCapacity}, Total target reservation capacity: {TargetCapacity}, Additional needed: {AdditionalNeeded}",
+                largeTablesCapacity, targetReservationCapacity, additionalCapacityNeeded);
 
-            // Use a capacity-based allocation algorithm
-            var reservationTables = AllocateTablesByCapacity(activeTables, targetReservationCapacity);
+            // Get remaining tables (non-large)
+            var remainingTables = activeTables.Where(t => t.Capacity <= LARGE_TABLE_THRESHOLD).ToList();
 
-            _logger.LogInformation("Selected {Count} tables for reservations with total capacity {Capacity} out of {Total} total capacity",
-                reservationTables.Count, reservationTables.Sum(t => t.Capacity), totalCapacity);
+            // If we've already exceeded or met our target with just large tables, don't allocate more tables
+            if (largeTablesCapacity >= targetReservationCapacity)
+            {
+                _logger.LogInformation("Large tables already exceed target reservation capacity. Keeping all {Count} large tables for reservations.",
+                    largeTables.Count);
+                return largeTables;
+            }
+
+            // Allocate additional tables from remaining tables, prioritizing larger capacities within the remaining group
+            var additionalTables = AllocateAdditionalTables(remainingTables, additionalCapacityNeeded);
+
+            // Combine large tables with additional tables
+            var reservationTables = largeTables.Concat(additionalTables).ToList();
+
+            int finalReservationCapacity = reservationTables.Sum(t => t.Capacity);
+            double actualReservationPercentage = (double)finalReservationCapacity / totalCapacity * 100;
+
+            _logger.LogInformation("Final reservation allocation: {TableCount} tables with {Capacity} capacity ({ActualPercent}% vs target {TargetPercent}%)",
+                reservationTables.Count, finalReservationCapacity, Math.Round(actualReservationPercentage, 1), reservationAllocationPercent);
 
             return reservationTables;
         }
@@ -116,11 +146,22 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
             int reservationCapacity = reservationTables.Sum(t => t.Capacity);
             int queueCapacity = queueTables.Sum(t => t.Capacity);
             int totalCapacity = reservationCapacity + queueCapacity;
+            double queuePercent = (double)queueCapacity / totalCapacity * 100;
+            double reservationPercent = (double)reservationCapacity / totalCapacity * 100;
 
             _logger.LogInformation("Found {Count} tables available for queue with capacity {Capacity} ({QueuePercent}%), " +
                 "reservation tables: {ReservationCount} with capacity {ReservationCapacity} ({ReservationPercent}%)",
-                queueTables.Count, queueCapacity, Math.Round(100.0 * queueCapacity / totalCapacity, 1),
-                reservationTables.Count, reservationCapacity, Math.Round(100.0 * reservationCapacity / totalCapacity, 1));
+                queueTables.Count, queueCapacity, Math.Round(queuePercent, 1),
+                reservationTables.Count, reservationCapacity, Math.Round(reservationPercent, 1));
+
+            // Verify no large tables are in queue
+            var largeTablesInQueue = queueTables.Where(t => t.Capacity > LARGE_TABLE_THRESHOLD).ToList();
+            if (largeTablesInQueue.Any())
+            {
+                _logger.LogWarning("Warning: {Count} large tables were assigned to queue. This should not happen.",
+                    largeTablesInQueue.Count);
+                // This should never happen with our implementation, but logging as a safeguard
+            }
 
             return queueTables;
         }
@@ -137,142 +178,29 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Services
             return queueTables.Any(t => t.Id == tableId);
         }
 
-        // Helper method to allocate tables based on capacity target
-        private List<TableDto> AllocateTablesByCapacity(List<TableDto> allTables, int targetCapacity)
+        // Helper method to allocate additional tables for reservation
+        private List<TableDto> AllocateAdditionalTables(List<TableDto> tables, int targetCapacity)
         {
-            // Try multiple approaches and select the one that gives closest to target capacity
+            if (targetCapacity <= 0)
+                return new List<TableDto>();
 
-            // Approach 1: Start with largest tables with better-fit optimization
-            var largeFirstResult = new List<TableDto>();
-            int largeFirstCapacity = 0;
-            var largeFirstRemainingTables = new List<TableDto>(allTables);
-
-            // Sort by largest capacity first
-            largeFirstRemainingTables.Sort((a, b) => b.Capacity.CompareTo(a.Capacity));
-
-            while (largeFirstRemainingTables.Any() && largeFirstCapacity < targetCapacity)
-            {
-                var currentTable = largeFirstRemainingTables[0];
-                largeFirstRemainingTables.RemoveAt(0);
-
-                // If adding this table would exceed target by too much, try to find a better fit
-                if (largeFirstCapacity + currentTable.Capacity > targetCapacity * 1.1)
-                {
-                    // Look for a smaller table that fits better
-                    var betterFit = largeFirstRemainingTables
-                        .Where(t => largeFirstCapacity + t.Capacity <= targetCapacity)
-                        .OrderByDescending(t => t.Capacity)
-                        .FirstOrDefault();
-
-                    if (betterFit != null)
-                    {
-                        largeFirstResult.Add(betterFit);
-                        largeFirstCapacity += betterFit.Capacity;
-                        largeFirstRemainingTables.Remove(betterFit);
-                        continue;
-                    }
-                }
-
-                // If we're still below target or couldn't find a better fit, add current table
-                largeFirstResult.Add(currentTable);
-                largeFirstCapacity += currentTable.Capacity;
-
-                // Stop if we've reached or exceeded target
-                if (largeFirstCapacity >= targetCapacity)
-                    break;
-            }
-
-            // Approach 2: Start with smallest tables
-            var smallFirstResult = new List<TableDto>();
-            int smallFirstCapacity = 0;
-
-            foreach (var table in allTables.OrderBy(t => t.Capacity))
-            {
-                smallFirstResult.Add(table);
-                smallFirstCapacity += table.Capacity;
-
-                // Stop if we've reached or exceeded target
-                if (smallFirstCapacity >= targetCapacity)
-                    break;
-            }
-
-            // Approach 3: Bin packing algorithm (using greedy approximation)
-            var binPackResult = BinPackingAllocation(allTables, targetCapacity);
-            int binPackCapacity = binPackResult.Sum(t => t.Capacity);
-
-            // Choose the approach that gives closest to target capacity
-            int largeFirstDiff = Math.Abs(largeFirstCapacity - targetCapacity);
-            int smallFirstDiff = Math.Abs(smallFirstCapacity - targetCapacity);
-            int binPackDiff = Math.Abs(binPackCapacity - targetCapacity);
-
-            _logger.LogInformation("Allocation options - LargeFirst: {LargeCapacity}, SmallFirst: {SmallCapacity}, BinPack: {BinCapacity}, Target: {Target}",
-                largeFirstCapacity, smallFirstCapacity, binPackCapacity, targetCapacity);
-
-            if (largeFirstDiff <= smallFirstDiff && largeFirstDiff <= binPackDiff)
-            {
-                _logger.LogInformation("Using large-first approach. Allocated capacity: {Capacity}", largeFirstCapacity);
-                return largeFirstResult;
-            }
-            else if (smallFirstDiff <= binPackDiff)
-            {
-                _logger.LogInformation("Using small-first approach. Allocated capacity: {Capacity}", smallFirstCapacity);
-                return smallFirstResult;
-            }
-            else
-            {
-                _logger.LogInformation("Using bin-packing approach. Allocated capacity: {Capacity}", binPackCapacity);
-                return binPackResult;
-            }
-        }
-
-        // Bin packing algorithm implementation (simple greedy approximation)
-        private List<TableDto> BinPackingAllocation(List<TableDto> tables, int targetCapacity)
-        {
-            // Sort tables by decreasing capacity
+            // Sort by descending capacity (largest first, but all <= LARGE_TABLE_THRESHOLD)
             var sortedTables = tables.OrderByDescending(t => t.Capacity).ToList();
             var selectedTables = new List<TableDto>();
-            var remainingCapacity = targetCapacity;
+            int allocatedCapacity = 0;
 
-            // First pass: try to fill in tables that fit exactly or nearly
-            for (int i = 0; i < sortedTables.Count; i++)
-            {
-                // If we've filled the bin, break
-                if (remainingCapacity <= 0)
-                    break;
-
-                var table = sortedTables[i];
-
-                // If this table fits perfectly or nearly perfectly
-                if (table.Capacity <= remainingCapacity &&
-                    (table.Capacity > remainingCapacity * 0.9 || remainingCapacity - table.Capacity < 3))
-                {
-                    selectedTables.Add(table);
-                    remainingCapacity -= table.Capacity;
-                    sortedTables.RemoveAt(i);
-                    i--; // Adjust index since we removed an item
-                }
-            }
-
-            // Second pass: first-fit-decreasing approach for remaining space
             foreach (var table in sortedTables)
             {
-                if (table.Capacity <= remainingCapacity)
-                {
-                    selectedTables.Add(table);
-                    remainingCapacity -= table.Capacity;
+                selectedTables.Add(table);
+                allocatedCapacity += table.Capacity;
 
-                    // If we've filled the bin enough, break
-                    if (remainingCapacity <= 0)
-                        break;
-                }
+                // Stop when we've reached or exceeded the target
+                if (allocatedCapacity >= targetCapacity)
+                    break;
             }
 
-            // If we've selected nothing, at least pick the smallest table
-            if (selectedTables.Count == 0 && tables.Any())
-            {
-                var smallestTable = tables.OrderBy(t => t.Capacity).First();
-                selectedTables.Add(smallestTable);
-            }
+            _logger.LogInformation("Allocated {Count} additional tables with total capacity {Capacity} (target: {Target})",
+                selectedTables.Count, allocatedCapacity, targetCapacity);
 
             return selectedTables;
         }
