@@ -4,17 +4,26 @@ namespace FNBReservation.Portal.Models
 {
     public class StaffDto
     {
-        [JsonPropertyName("staffId")]
+        [JsonPropertyName("id")]
         public string StaffId { get; set; } = string.Empty;
+
+        [JsonPropertyName("userId")]
+        public string UserId { get; set; } = string.Empty;
 
         [JsonPropertyName("outletId")]
         public string OutletId { get; set; } = string.Empty;
+
+        [JsonPropertyName("outletName")]
+        public string OutletName { get; set; } = string.Empty;
 
         [JsonPropertyName("fullName")]
         public string FullName { get; set; } = string.Empty;
 
         [JsonPropertyName("username")]
         public string Username { get; set; } = string.Empty;
+
+        [JsonPropertyName("password")]
+        public string Password { get; set; } = string.Empty;
 
         [JsonPropertyName("email")]
         public string Email { get; set; } = string.Empty;
@@ -25,8 +34,14 @@ namespace FNBReservation.Portal.Models
         [JsonPropertyName("role")]
         public string Role { get; set; } = string.Empty;
 
+        [JsonPropertyName("isActive")]
+        public bool IsActive { get; set; } = true;
+
         [JsonPropertyName("createdAt")]
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+        [JsonPropertyName("updatedAt")]
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
     }
 
     public class OutletSummaryDto

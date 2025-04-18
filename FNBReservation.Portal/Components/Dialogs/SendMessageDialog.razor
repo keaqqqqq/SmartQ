@@ -1,0 +1,61 @@
+@inject MudBlazor.ISnackbar Snackbar
+@rendermode InteractiveServer
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Message" Class="mr-2" /> Send Message
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudContainer Style="max-width: 500px">
+            <MudText Class="mb-2"><b>To:</b> @CustomerName (@PhoneNumber)</MudText>
+            <MudTextField @bind-Value="MessageText" Label="Message" 
+                        Variant="Variant.Outlined" Lines="5" 
+                        HelperText="@($"{MessageText?.Length ?? 0}/160 characters")"
+                        Counter="160" Immediate="true"
+                        MaxLength="160" FullWidth="true" />
+            
+            <MudSelect @bind-Value="SelectedTemplate" Label="Message Template" Class="mt-3">
+                <MudSelectItem Value="@($"Hi {CustomerName}, your table is ready! Please proceed to the reception area. Thank you.")">Table Ready</MudSelectItem>
+                <MudSelectItem Value="@($"Hi {CustomerName}, we will be ready for you in about 10 minutes. Thank you for your patience.")">Almost Ready</MudSelectItem>
+                <MudSelectItem Value="@($"Hi {CustomerName}, we apologize for the delay. Your estimated wait time is now 15 minutes.")">Delay Notice</MudSelectItem>
+                <MudSelectItem Value="@($"Hi {CustomerName}, please confirm if you are still waiting. Your queue position will be cancelled if we don't hear from you in 10 minutes.")">Waiting Confirmation</MudSelectItem>
+                <MudSelectItem Value="@($"Hi {CustomerName}, thank you for visiting us today! We hope you enjoyed your experience.")">Thank You</MudSelectItem>
+            </MudSelect>
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@string.IsNullOrWhiteSpace(MessageText)">Send</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter] public string CustomerName { get; set; } = string.Empty;
+    [Parameter] public string PhoneNumber { get; set; } = string.Empty;
+    
+    private string MessageText { get; set; } = string.Empty;
+    
+    private string _selectedTemplate = string.Empty;
+    private string SelectedTemplate
+    {
+        get => _selectedTemplate;
+        set
+        {
+            _selectedTemplate = value;
+            MessageText = value;
+        }
+    }
+
+    void Submit()
+    {
+        // In a real application, this would call an SMS API service
+        // For now, we just close the dialog with success
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+    
+    void Cancel() => MudDialog.Cancel();
+} 

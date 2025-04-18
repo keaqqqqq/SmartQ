@@ -13,12 +13,7 @@ export const QueueProvider = ({ children }) => {
     const [queueEstimation, setQueueEstimation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [websocket, setWebsocket] = useState(null);
-    const [isConnected, setIsConnected] = useState(false);
     const [updateInterval, setUpdateInterval] = useState(null);
-
-    // Create queue service instance
-    const queueService = QueueService;
 
     // Join queue
     const joinQueue = useCallback(async (queueData) => {
@@ -26,13 +21,9 @@ export const QueueProvider = ({ children }) => {
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockJoinQueue(queueData);
+            // Use real API method
+            const response = await QueueService.joinQueue(queueData);
             setQueueDetails(response);
-
-            // Start polling for updates until WebSocket is set up
-            startPollingUpdates(response.id);
-
             return response;
         } catch (err) {
             setError('Failed to join queue. Please try again.');
@@ -43,14 +34,14 @@ export const QueueProvider = ({ children }) => {
         }
     }, []);
 
-    // Get queue status
+    // Get queue status (by ID)
     const getQueueStatus = useCallback(async (queueId) => {
         setLoading(true);
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockGetQueueStatus(queueId);
+            // Use real API method
+            const response = await QueueService.getQueueStatus(queueId);
             setQueueDetails(response);
             return response;
         } catch (err) {
@@ -68,13 +59,9 @@ export const QueueProvider = ({ children }) => {
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockGetQueueStatusByCode(code);
+            // Use real API method
+            const response = await QueueService.getQueueStatusByCode(code);
             setQueueDetails(response);
-
-            // Start polling for updates
-            startPollingUpdates(response.id);
-
             return response;
         } catch (err) {
             setError('Failed to get queue status. Please try again.');
@@ -85,36 +72,17 @@ export const QueueProvider = ({ children }) => {
         }
     }, []);
 
-    // Get queue by phone
-    const getQueueByPhone = useCallback(async (phone) => {
+    // Exit queue (cancel queue entry)
+    const exitQueue = useCallback(async (queueCode) => {
         setLoading(true);
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockGetQueueByPhone(phone);
-            setUserQueueEntries(response.queueEntries || []);
-            return response;
-        } catch (err) {
-            setError('Failed to get queue entries. Please try again.');
-            console.error('Error getting queue by phone:', err);
-            return { queueEntries: [] };
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Cancel queue
-    const cancelQueue = useCallback(async (queueId) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            // Use mock method for development
-            const response = await queueService.mockCancelQueue(queueId);
+            // Use real API method
+            const response = await QueueService.exitQueue(queueCode);
 
             // Update queue details if it's the current viewed queue
-            if (queueDetails && queueDetails.id === queueId) {
+            if (queueDetails && queueDetails.queueCode === queueCode) {
                 setQueueDetails({
                     ...queueDetails,
                     status: 'Cancelled'
@@ -124,59 +92,52 @@ export const QueueProvider = ({ children }) => {
             // Update user queue entries if it exists in the list
             setUserQueueEntries(prevEntries =>
                 prevEntries.map(entry =>
-                    entry.id === queueId
+                    entry.queueCode === queueCode
                         ? { ...entry, status: 'Cancelled' }
                         : entry
                 )
             );
 
-            // Stop polling for updates
-            stopPollingUpdates();
-
             return response;
         } catch (err) {
-            setError('Failed to cancel queue. Please try again.');
-            console.error('Error cancelling queue:', err);
+            setError('Failed to exit queue. Please try again.');
+            console.error('Error exiting queue:', err);
             throw err;
         } finally {
             setLoading(false);
         }
     }, [queueDetails]);
 
-    // Confirm arrival
-    const confirmArrival = useCallback(async (queueId) => {
+    // Update queue entry
+    const updateQueueEntry = useCallback(async (queueCode, updateData) => {
         setLoading(true);
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockConfirmArrival(queueId);
+            // Use real API method
+            const response = await QueueService.updateQueueEntry(queueCode, updateData);
 
             // Update queue details if it's the current viewed queue
-            if (queueDetails && queueDetails.id === queueId) {
+            if (queueDetails && queueDetails.queueCode === queueCode) {
                 setQueueDetails({
                     ...queueDetails,
-                    status: 'Arrived',
-                    tableNumber: response.tableNumber
+                    ...updateData
                 });
             }
 
             // Update user queue entries if it exists in the list
             setUserQueueEntries(prevEntries =>
                 prevEntries.map(entry =>
-                    entry.id === queueId
-                        ? { ...entry, status: 'Arrived', tableNumber: response.tableNumber }
+                    entry.queueCode === queueCode
+                        ? { ...entry, ...updateData }
                         : entry
                 )
             );
 
-            // Stop polling for updates
-            stopPollingUpdates();
-
             return response;
         } catch (err) {
-            setError('Failed to confirm arrival. Please try again.');
-            console.error('Error confirming arrival:', err);
+            setError('Failed to update queue entry. Please try again.');
+            console.error('Error updating queue entry:', err);
             throw err;
         } finally {
             setLoading(false);
@@ -189,8 +150,8 @@ export const QueueProvider = ({ children }) => {
         setError(null);
 
         try {
-            // Use mock method for development
-            const response = await queueService.mockGetQueueEstimation(outletId, partySize);
+            // Use real API method
+            const response = await QueueService.getQueueEstimation(outletId, partySize);
             setQueueEstimation(response);
             return response;
         } catch (err) {
@@ -201,46 +162,6 @@ export const QueueProvider = ({ children }) => {
             setLoading(false);
         }
     }, []);
-
-    // Setup WebSocket connection for real-time updates
-    const setupWebSocket = useCallback((queueId) => {
-        // Placeholder for actual WebSocket implementation
-        // In a real app, you would establish a WebSocket connection here
-
-        console.log('Setting up WebSocket for queue:', queueId);
-
-        // For now, we'll just simulate with a flag
-        setIsConnected(true);
-    }, []);
-
-    // Close WebSocket connection
-    const closeWebSocket = useCallback(() => {
-        if (websocket) {
-            // Placeholder for actual WebSocket closure
-            // websocket.close();
-            setWebsocket(null);
-        }
-        setIsConnected(false);
-    }, [websocket]);
-
-    // Start polling for updates (until WebSocket is implemented)
-    const startPollingUpdates = useCallback((queueId) => {
-        // Clear any existing intervals
-        stopPollingUpdates();
-
-        // Set up new interval to poll for updates every 10 seconds
-        const interval = setInterval(async () => {
-            if (queueId) {
-                try {
-                    await getQueueStatus(queueId);
-                } catch (error) {
-                    console.error('Error polling for updates:', error);
-                }
-            }
-        }, 10000); // Poll every 10 seconds
-
-        setUpdateInterval(interval);
-    }, [getQueueStatus]);
 
     // Stop polling for updates
     const stopPollingUpdates = useCallback(() => {
@@ -264,10 +185,9 @@ export const QueueProvider = ({ children }) => {
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            closeWebSocket();
             stopPollingUpdates();
         };
-    }, [closeWebSocket, stopPollingUpdates]);
+    }, [stopPollingUpdates]);
 
     // Context value
     const value = {
@@ -276,15 +196,13 @@ export const QueueProvider = ({ children }) => {
         queueEstimation,
         loading,
         error,
-        isConnected,
+        setError,
         joinQueue,
         getQueueStatus,
         getQueueStatusByCode,
-        getQueueByPhone,
-        cancelQueue,
-        confirmArrival,
+        exitQueue,
+        updateQueueEntry,
         getQueueEstimation,
-        setupWebSocket,
         clearQueueDetails,
         clearError
     };

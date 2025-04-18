@@ -27,9 +27,19 @@ export const ReservationProvider = ({ children }) => {
 
     // Format time with timezone for API
     const formatDateTimeWithTimezone = (date, time) => {
-        const reservationDateTime = new Date(`${date}T${time}`);
-        const timezone = '+08:00'; // Malaysia timezone
-        return format(reservationDateTime, "yyyy-MM-dd'T'HH:mm:ss") + timezone;
+        const formattedDate = date.includes('T') 
+            ? date.split('T')[0] 
+            : date;
+
+        // Format time properly
+        let formattedTime = time;
+        if (!formattedTime.includes(':')) {
+            formattedTime = `${formattedTime}:00:00`;
+        } else if (formattedTime.split(':').length === 2) {
+            formattedTime = `${formattedTime}:00`;
+        }
+
+        return `${formattedDate}T${formattedTime}`;
     };
 
     // Fetch nearby outlets
@@ -218,8 +228,19 @@ export const ReservationProvider = ({ children }) => {
 
             // For any other phone, proceed with the regular API call
             const response = await ReservationService.getReservationsByPhone(phone);
-            setUserReservations(response.reservations || []);
-            return response;
+            
+            // Handle different API response formats
+            // Response might be an array directly or an object with a reservations property
+            const reservations = Array.isArray(response) ? response : 
+                                (response.reservations ? response.reservations : []);
+            
+            console.log("Reservations received:", reservations);
+            setUserReservations(reservations);
+            
+            return {
+                reservations: reservations,
+                originalResponse: response
+            };
         } catch (err) {
             setError('Failed to fetch your reservations. Please try again.');
             console.error('Error fetching reservations by phone:', err);
@@ -235,11 +256,36 @@ export const ReservationProvider = ({ children }) => {
         setError(null);
 
         try {
-            const response = await ReservationService.updateReservation(data);
+            if (!data.id) {
+                throw new Error("Cannot update reservation: Missing ID");
+            }
+
+            // Log the data we're sending to the service
+            console.log("Updating reservation with data:", data);
+            
+            // Ensure we're passing a properly structured object
+            const response = await ReservationService.updateReservation({
+                id: data.id,
+                reservationCode: data.reservationCode,
+                outletId: data.outletId,
+                outletName: data.outletName,
+                customerName: data.customerName,
+                customerPhone: data.customerPhone,
+                customerEmail: data.customerEmail || "",
+                partySize: Number(data.partySize),
+                reservationDate: data.reservationDate,
+                specialRequests: data.specialRequests || "",
+                status: data.status || "Confirmed",
+                // Add holdId and sessionId if they exist
+                holdId: data.holdId || null,
+                sessionId: data.sessionId || null
+            });
+            
             setReservationDetails(response);
             return response;
         } catch (err) {
-            setError('Failed to update reservation. Please try again.');
+            const errorMessage = err.response?.data?.message || err.response?.data?.title || 'Failed to update reservation. Please try again.';
+            setError(errorMessage);
             console.error('Error updating reservation:', err);
             throw err;
         } finally {
@@ -247,8 +293,8 @@ export const ReservationProvider = ({ children }) => {
         }
     }, []);
 
-    // Cancel reservation with dummy support
-    const cancelReservation = useCallback(async (id) => {
+    // Cancel reservation
+    const cancelReservation = useCallback(async (id, reason = "Cancelled by customer") => {
         setLoading(true);
         setError(null);
 
@@ -281,7 +327,7 @@ export const ReservationProvider = ({ children }) => {
             }
 
             // For any other ID, proceed with the regular API call
-            const response = await ReservationService.cancelReservation(id);
+            const response = await ReservationService.cancelReservation(id, reason);
 
             // Update user reservations if they exist
             if (userReservations.length > 0) {

@@ -8,6 +8,7 @@ const ReservationDetail = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [cancellationReason, setCancellationReason] = useState("");
     const {
         reservationDetails,
         loading,
@@ -46,7 +47,9 @@ const ReservationDetail = () => {
     // Handle reservation cancellation
     const handleCancelReservation = async () => {
         try {
-            await cancelReservation(reservationDetails.id);
+            // Use the user-provided reason or a default if empty
+            const reason = cancellationReason.trim() || "Cancelled by customer through web portal";
+            await cancelReservation(reservationDetails.id, reason);
             setIsModalOpen(false);
             // Show temporary success message
             alert('Your reservation has been successfully cancelled.');
@@ -201,7 +204,21 @@ const ReservationDetail = () => {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
                         <h3 className="text-xl font-bold mb-4">Cancel Reservation</h3>
-                        <p className="mb-6">Are you sure you want to cancel your reservation for {formatReservationDate(reservationDetails.reservationDate)}?</p>
+                        <p className="mb-4">Are you sure you want to cancel your reservation for {formatReservationDate(reservationDetails.reservationDate)}?</p>
+                        
+                        <div className="mb-6">
+                            <label htmlFor="cancellationReason" className="block text-sm font-medium text-gray-700 mb-2">
+                                Please provide a reason for cancellation (optional):
+                            </label>
+                            <textarea
+                                id="cancellationReason"
+                                value={cancellationReason}
+                                onChange={(e) => setCancellationReason(e.target.value)}
+                                placeholder="e.g., Change of plans, Schedule conflict, etc."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                rows="3"
+                            ></textarea>
+                        </div>
 
                         <div className="flex justify-end gap-3">
                             <button

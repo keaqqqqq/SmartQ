@@ -43,9 +43,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FNBReservation.Modules.Rese
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FNBReservation.Modules.Reservation.API", "FNBReservation.Modules.Reservation.API\FNBReservation.Modules.Reservation.API.csproj", "{C45E6624-4D0C-4FA5-84BD-06DD30833A7C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FNBReservation.CustomerPortal.Server", "FNBReservation.CustomerPortal\FNBReservation.CustomerPortal.Server\FNBReservation.CustomerPortal.Server.csproj", "{074B8AB5-834E-8FD8-7BBB-B9FA1BC57C9E}"
-EndProject
-Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "fnbreservation.customerportal.client", "FNBReservation.CustomerPortal\fnbreservation.customerportal.client\fnbreservation.customerportal.client.esproj", "{C0BFE853-42CF-9C78-DD26-C6945A7B91E1}"
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "FNBReservation.CustomerPortal", "FNBReservation.CustomerPortal\fnbreservation.customerportal.client\FNBReservation.CustomerPortal.esproj", "{C0BFE853-42CF-9C78-DD26-C6945A7B91E1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Customer", "Customer", "{C61DED51-C5D6-4EDA-A56A-D97588DF80CB}"
 EndProject
@@ -123,10 +121,6 @@ Global
 		{C45E6624-4D0C-4FA5-84BD-06DD30833A7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C45E6624-4D0C-4FA5-84BD-06DD30833A7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C45E6624-4D0C-4FA5-84BD-06DD30833A7C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{074B8AB5-834E-8FD8-7BBB-B9FA1BC57C9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{074B8AB5-834E-8FD8-7BBB-B9FA1BC57C9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{074B8AB5-834E-8FD8-7BBB-B9FA1BC57C9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{074B8AB5-834E-8FD8-7BBB-B9FA1BC57C9E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C0BFE853-42CF-9C78-DD26-C6945A7B91E1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C0BFE853-42CF-9C78-DD26-C6945A7B91E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C0BFE853-42CF-9C78-DD26-C6945A7B91E1}.Debug|Any CPU.Deploy.0 = Debug|Any CPU

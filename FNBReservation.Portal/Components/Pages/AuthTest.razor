@@ -1,0 +1,133 @@
+@page "/auth-test"
+@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject JwtTokenService TokenService
+@inject AuthService AuthService
+@inject CurrentUserService CurrentUserService
+
+<PageTitle>Authentication Test</PageTitle>
+
+<div class="auth-test-container">
+    <h3>Authentication Test</h3>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Authentication Status</h5>
+        </div>
+        <div class="card-body">
+            <p><strong>Is Authenticated:</strong> @isAuthenticated</p>
+            
+            @if (isAuthenticated)
+            {
+                <div>
+                    <p><strong>Username:</strong> @username</p>
+                    <p><strong>Role:</strong> @role</p>
+                    @if (!string.IsNullOrEmpty(outletId))
+                    {
+                        <p><strong>Outlet ID:</strong> @outletId</p>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <button class="btn btn-primary me-2" @onclick="RefreshToken">Refresh Token</button>
+                <button class="btn btn-secondary" @onclick="CheckAuth">Check Auth</button>
+            </div>
+            
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @(success ? "alert-success" : "alert-danger")">
+                    @message
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isAuthenticated;
+    private string username;
+    private string role;
+    private string outletId;
+    private string message;
+    private bool success;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuth();
+    }
+    
+    private async Task CheckAuth()
+    {
+        try
+        {
+            isAuthenticated = await AuthService.IsUserAuthenticated();
+            
+            if (isAuthenticated)
+            {
+                username = await CurrentUserService.GetCurrentUsernameAsync();
+                role = await CurrentUserService.GetCurrentRoleAsync();
+                outletId = await CurrentUserService.GetCurrentOutletIdAsync();
+                
+                message = "Authentication status checked successfully.";
+                success = true;
+            }
+            else
+            {
+                message = "User is not authenticated.";
+                success = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Error checking authentication: {ex.Message}";
+            success = false;
+            await JS.InvokeVoidAsync("console.error", ex.ToString());
+        }
+    }
+    
+    private async Task RefreshToken()
+    {
+        try
+        {
+            var result = await TokenService.RefreshTokenAsync();
+            
+            if (result.Success)
+            {
+                message = "Token refreshed successfully.";
+                success = true;
+                
+                // Re-check authentication to update displayed info
+                await CheckAuth();
+            }
+            else
+            {
+                message = $"Failed to refresh token: {result.ErrorMessage}";
+                success = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Error refreshing token: {ex.Message}";
+            success = false;
+            await JS.InvokeVoidAsync("console.error", ex.ToString());
+        }
+    }
+}
+
+<style>
+    .auth-test-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+</style> 

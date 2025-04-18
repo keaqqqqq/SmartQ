@@ -2,8 +2,22 @@
 
 namespace FNBReservation.Portal.Services
 {
+    // Simple class to match the API response for reservations
+    public class ApiReservation
+    {
+        public Guid ReservationId { get; set; }
+        public string ReservationCode { get; set; } = string.Empty;
+        public DateTime Date { get; set; }
+        public Guid OutletId { get; set; }
+        public string OutletName { get; set; } = string.Empty;
+        public int PartySize { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? SpecialRequests { get; set; }
+    }
+
     public interface ICustomerService
     {
+        Task InitializeAsync();
         Task<List<CustomerDto>> GetCustomersAsync(string? searchTerm = null);
         Task<CustomerDto?> GetCustomerByIdAsync(string customerId);
         Task<CustomerDto?> GetCustomerByPhoneAsync(string phoneNumber);
@@ -12,6 +26,13 @@ namespace FNBReservation.Portal.Services
         Task<bool> UnbanCustomerAsync(string customerId);
         Task<bool> UpdateCustomerBanAsync(string customerId, string reason, string notes, DateTime? expiryDate = null);
         Task<bool> AddCustomerNoteAsync(string customerId, string note);
+        
+        // New staff-specific methods for outlet customer management
+        Task<List<CustomerDto>> GetOutletCustomersAsync(string outletId, string? searchTerm = null);
+        Task<List<CustomerDto>> GetOutletActiveCustomersAsync(string outletId, string? searchTerm = null);
+        Task<List<CustomerDto>> GetOutletBannedCustomersAsync(string outletId, string? searchTerm = null);
+        Task<CustomerDto?> GetOutletCustomerByIdAsync(string outletId, string customerId);
+        Task<List<ApiReservation>> GetOutletCustomerReservationsAsync(string outletId, string customerId);
     }
 
     public class MockCustomerService : ICustomerService
@@ -21,6 +42,12 @@ namespace FNBReservation.Portal.Services
         public MockCustomerService()
         {
             _customers = GenerateMockCustomers();
+        }
+
+        public Task InitializeAsync()
+        {
+            // Nothing to initialize for mock service
+            return Task.CompletedTask;
         }
 
         public Task<List<CustomerDto>> GetCustomersAsync(string? searchTerm = null)
@@ -64,7 +91,7 @@ namespace FNBReservation.Portal.Services
             customer.IsBanned = true;
             customer.BanReason = reason;
             customer.BannedDate = DateTime.Now;
-            customer.BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System";
+            customer.BannedBy = "Admin";
             customer.BanExpiryDate = expiryDate;
 
             if (!string.IsNullOrWhiteSpace(notes))
@@ -97,7 +124,7 @@ namespace FNBReservation.Portal.Services
                 IsBanned = true,
                 BanReason = reason,
                 BannedDate = DateTime.Now,
-                BannedBy = notes.Contains("by ") ? notes.Substring(notes.IndexOf("by ") + 3) : "System",
+                BannedBy = "Admin",
                 BanExpiryDate = expiryDate,
                 TotalReservations = 0,
                 NoShows = 0
@@ -124,7 +151,7 @@ namespace FNBReservation.Portal.Services
             customer.BanExpiryDate = null;
 
             var currentNotes = string.IsNullOrEmpty(customer.Notes) ? "" : customer.Notes + "\n\n";
-            customer.Notes = currentNotes + $"[{DateTime.Now:G}] Ban removed by Admin User";
+            customer.Notes = currentNotes + $"[{DateTime.Now:G}] Ban removed by Admin";
 
             return Task.FromResult(true);
         }
@@ -161,6 +188,127 @@ namespace FNBReservation.Portal.Services
             customer.Notes = currentNotes + $"[{DateTime.Now:G}] {note}";
 
             return Task.FromResult(true);
+        }
+
+        public Task<List<CustomerDto>> GetOutletCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            // For mock service, we'll just use the same customer list but pretend they're from the given outlet
+            var filteredList = _customers.ToList();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                filteredList = filteredList
+                    .Where(c =>
+                        c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Email ?? "").Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.CustomerId.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // Assign the outlet ID to each customer's first reservation for testing purposes
+            foreach (var customer in filteredList)
+            {
+                if (customer.ReservationHistory.Any())
+                {
+                    customer.ReservationHistory.First().OutletId = outletId;
+                }
+            }
+
+            return Task.FromResult(filteredList);
+        }
+
+        public Task<List<CustomerDto>> GetOutletActiveCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            var filteredList = _customers.Where(c => !c.IsBanned).ToList();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                filteredList = filteredList
+                    .Where(c =>
+                        c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Email ?? "").Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.CustomerId.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // Assign the outlet ID to each customer's first reservation for testing purposes
+            foreach (var customer in filteredList)
+            {
+                if (customer.ReservationHistory.Any())
+                {
+                    customer.ReservationHistory.First().OutletId = outletId;
+                }
+            }
+
+            return Task.FromResult(filteredList);
+        }
+
+        public Task<List<CustomerDto>> GetOutletBannedCustomersAsync(string outletId, string? searchTerm = null)
+        {
+            var filteredList = _customers.Where(c => c.IsBanned).ToList();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                filteredList = filteredList
+                    .Where(c =>
+                        c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Email ?? "").Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        c.CustomerId.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // Assign the outlet ID to each customer's first reservation for testing purposes
+            foreach (var customer in filteredList)
+            {
+                if (customer.ReservationHistory.Any())
+                {
+                    customer.ReservationHistory.First().OutletId = outletId;
+                }
+            }
+
+            return Task.FromResult(filteredList);
+        }
+
+        public Task<CustomerDto?> GetOutletCustomerByIdAsync(string outletId, string customerId)
+        {
+            var customer = _customers.FirstOrDefault(c => c.CustomerId == customerId);
+            
+            // In a real implementation, we would check if this customer belongs to the specified outlet
+            if (customer != null && customer.ReservationHistory.Any())
+            {
+                // Set the outlet ID for testing purposes
+                customer.ReservationHistory.ForEach(r => r.OutletId = outletId);
+            }
+            
+            return Task.FromResult(customer);
+        }
+
+        public Task<List<ApiReservation>> GetOutletCustomerReservationsAsync(string outletId, string customerId)
+        {
+            var customer = _customers.FirstOrDefault(c => c.CustomerId == customerId);
+            
+            if (customer == null || !customer.ReservationHistory.Any())
+            {
+                return Task.FromResult(new List<ApiReservation>());
+            }
+            
+            // Convert ReservationHistoryItem to ApiReservation
+            var reservations = customer.ReservationHistory.Select(r => new ApiReservation
+            {
+                ReservationId = Guid.Parse(r.ReservationId),
+                ReservationCode = r.ReservationId,
+                Date = r.ReservationDate,
+                OutletId = Guid.Parse(outletId),
+                OutletName = r.OutletName,
+                PartySize = r.GuestCount,
+                Status = r.Status,
+                SpecialRequests = r.Notes
+            }).ToList();
+            
+            return Task.FromResult(reservations);
         }
 
         private List<CustomerDto> GenerateMockCustomers()
@@ -246,7 +394,7 @@ namespace FNBReservation.Portal.Services
                     IsBanned = true,
                     BanReason = "Repeated No-Shows",
                     BannedDate = new DateTime(2025, 1, 14),
-                    BannedBy = "Admin User",
+                    BannedBy = "Admin",
                     TotalReservations = 3,
                     NoShows = 2,
                     LastVisit = new DateTime(2025, 1, 16),

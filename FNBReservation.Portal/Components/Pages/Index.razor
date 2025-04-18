@@ -1,0 +1,97 @@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using FNBReservation.Portal.Services
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject JwtTokenService TokenService
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <MudText Typo="Typo.h3" Class="mb-4">Dashboard</MudText>
+        <MudText>Welcome, @context.User.Identity.Name!</MudText>
+    </Authorized>
+    <NotAuthorized>
+        <MudPaper Class="pa-4 mt-4">
+            <MudText Typo="Typo.h5" Class="mb-4">Please log in to access this page</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RedirectToLogin">Log In</MudButton>
+        </MudPaper>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("console.log", "Dashboard loaded");
+                
+                // Check authentication state safely
+                if (AuthState != null)
+                {
+                    var authState = await AuthState;
+                    var isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
+                    
+                    await JS.InvokeVoidAsync("console.log", $"Auth check from cascading parameter: {isAuthenticated}");
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("console.log", "AuthState cascading parameter is null");
+                }
+                
+                // Also check localStorage as backup
+                if (AuthStateProvider is CustomAuthStateProvider customAuthProvider)
+                {
+                    var user = await customAuthProvider.GetAuthenticatedUserFromStorageAsync();
+                    await JS.InvokeVoidAsync("console.log", $"Auth check from localStorage: {user.Identity?.IsAuthenticated}");
+                    
+                    if (user.Identity?.IsAuthenticated == true)
+                    {
+                        // Update the auth state since we found a valid user
+                        customAuthProvider.UpdateAuthenticationState(new AuthenticationState(user));
+                    }
+                    else 
+                    {
+                        try 
+                        {
+                            var isAuthInJs = await JS.InvokeAsync<bool>("localStorage.getItem", "authData") != null;
+                            if (isAuthInJs)
+                            {
+                                // JS has auth data but C# couldn't read it properly
+                                await JS.InvokeVoidAsync("console.log", "Auth data mismatch between JS and C#");
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore JS interop errors
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.error", $"Error checking authentication: {ex.Message}");
+            }
+        }
+    }
+
+    private void RedirectToLogin()
+    {
+        NavigationManager.NavigateTo("/login", true);
+    }
+} 
