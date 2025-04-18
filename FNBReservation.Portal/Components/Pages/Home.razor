@@ -16,14 +16,14 @@
             <MudPaper Class="pa-4 mb-4">
                 <MudText Typo="Typo.h5" Class="mb-2">Hello, @context.User.Identity.Name!</MudText>
                 <MudText Typo="Typo.body1">You are logged in and can access all features of SmartQ.</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/dashboard" Class="mt-3">Go to Dashboard</MudButton>
+                
             </MudPaper>
         </Authorized>
         <NotAuthorized>
             <MudPaper Class="pa-4 mb-4">
                 <MudText Typo="Typo.h5" Class="mb-2">Welcome to the SmartQ System</MudText>
                 <MudText Typo="Typo.body1" Class="mb-3">Please log in to access the reservation management features.</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">Log In</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavigationManager.NavigateTo("/"))">Log In</MudButton>
             </MudPaper>
         </NotAuthorized>
     </AuthorizeView>

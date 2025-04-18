@@ -1,4 +1,4 @@
-﻿@page "/login"
+﻿@page "/"
 @using System.ComponentModel.DataAnnotations
 @using FNBReservation.Portal.Services
 @using Microsoft.AspNetCore.WebUtilities
@@ -128,10 +128,23 @@
                 // Small delay to ensure authentication state is updated
                 await Task.Delay(300);
                 
-                // Navigate to return URL if it exists, otherwise to home
-                var targetUrl = string.IsNullOrEmpty(returnUrl) ? "/" : returnUrl;
+                // Determine target URL based on user role
+                string targetUrl;
+                if (result.Role?.ToLower() == "outletstaff")
+                {
+                    targetUrl = "/staff-dashboard";
+                }
+                else if (result.Role?.ToLower() == "admin")
+                {
+                    targetUrl = "/home";
+                }
+                else
+                {
+                    // Default to return URL if exists, otherwise home
+                    targetUrl = string.IsNullOrEmpty(returnUrl) ? "/index" : returnUrl;
+                }
                 
-                await JS.InvokeVoidAsync("console.log", "Login successful, redirecting to: " + targetUrl);
+                await JS.InvokeVoidAsync("console.log", $"Login successful, redirecting to: {targetUrl} (Role: {result.Role})");
                 
                 // Force reload the page to ensure auth state is recognized
                 NavigationManager.NavigateTo(targetUrl, forceLoad: true);

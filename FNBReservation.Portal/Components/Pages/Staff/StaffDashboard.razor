@@ -323,7 +323,7 @@
                                                     
                                                     <div class="time-indicator primary">
                                                         <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                                        @(reservation != null && reservation.CheckInTime.HasValue ? GetTimeElapsed(reservation.CheckInTime) : "45m")
+                                                        Occupied
                                                     </div>
                                                 }
                                                 else if (_todayReservations.Any(r => r.Status == "Confirmed" && r.TableNumbers != null && r.TableNumbers.Any(t => t == table.TableNumber)))
@@ -368,7 +368,7 @@
                                                                 <MudText Typo="Typo.body2" Class="mr-3">@reservation.PartySize guests</MudText>
 
                                                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2">@reservation.ReservationDate.ToString("h:mm tt")</MudText>
+                                                                <MudText Typo="Typo.body2">@reservation.ReservationDate.AddHours(8).ToString("h:mm tt")</MudText>
                                                         </div>
                                                         <div class="d-flex align-center mt-1">
                                                             <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
@@ -417,7 +417,7 @@
                                                                 <MudText Typo="Typo.caption" Class="mr-3">@upcomingReservation.PartySize guests</MudText>
 
                                                                 <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.caption">@upcomingReservation.ReservationDate.ToString("h:mm tt")</MudText>
+                                                                <MudText Typo="Typo.caption">@upcomingReservation.ReservationDate.AddHours(8).ToString("h:mm tt")</MudText>
                                                             </div>
                                                             <div class="d-flex align-center mt-1">
                                                                 <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
@@ -475,8 +475,7 @@
                                                 {
                                                     <div class="time-indicator warning">
                                                         <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                                        @(_queueTableOccupancy.TryGetValue(table.TableId, out var queueData) ? 
-                                                            GetTimeElapsed(queueData.SeatedAt) : "Unknown")
+                                                        Occupied
                                                     </div>
                                                 }
                                                 else
@@ -510,7 +509,7 @@
                                                                 <MudText Typo="Typo.body2" Class="mr-3">@queueInfo.PartySize guests</MudText>
 
                                                                 <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
-                                                                <MudText Typo="Typo.body2">@queueInfo.QueuedAt.ToString("h:mm tt")</MudText>
+                                                                <MudText Typo="Typo.body2">@queueInfo.QueuedAt.AddHours(8).ToString("h:mm tt")</MudText>
                                                             </div>
                                                             <div class="d-flex align-center mt-1">
                                                                 <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />

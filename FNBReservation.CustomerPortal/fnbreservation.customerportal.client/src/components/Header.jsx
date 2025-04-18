@@ -41,11 +41,7 @@ const Header = () => {
                         <Link to="/reservation/lookup" className={linkClasses}>
                             Find a reservation
                         </Link>
-                        {isDev && (
-                            <Link to="/api-tester" className={`${linkClasses} text-yellow-400`}>
-                                API Tester
-                            </Link>
-                        )}
+                       
                     </nav>
 
                     {/* Mobile menu button */}
@@ -111,15 +107,7 @@ const Header = () => {
                     >
                         Find a reservation
                     </Link>
-                    {isDev && (
-                        <Link
-                            to="/api-tester"
-                            className="block px-3 py-2 rounded-md text-base font-medium text-yellow-400 hover:bg-gray-700"
-                            onClick={() => setMobileMenuOpen(false)}
-                        >
-                            API Tester
-                        </Link>
-                    )}
+             
                 </div>
             </div>
         </header>

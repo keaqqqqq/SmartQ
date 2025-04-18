@@ -56,7 +56,7 @@
                 }
                 else
                 {
-                    <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">
+                    <MudNavLink Href="/" Icon="@Icons.Material.Filled.Login">
                         Login
                     </MudNavLink>
                 }
@@ -186,7 +186,7 @@
             isLoggingOut = true;
             await JS.InvokeVoidAsync("console.log", "Logging out...");
             await AuthService.Logout();
-            NavigationManager.NavigateTo("/login", true);
+            NavigationManager.NavigateTo("/", true);
         }
         catch (Exception ex)
         {

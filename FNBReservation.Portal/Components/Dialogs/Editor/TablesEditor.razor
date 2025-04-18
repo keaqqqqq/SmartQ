@@ -14,11 +14,6 @@
         <ToolBarContent>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                        OnClick="OpenAddTableDialog" Class="ml-auto">Add Table</MudButton>
-            @if (debugMode)
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="TestApiConnectivity" 
-                          Class="ml-2">Test API</MudButton>
-            }
         </ToolBarContent>
         <HeaderContent>
             <MudTh>Table Number</MudTh>

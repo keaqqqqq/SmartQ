@@ -57,7 +57,7 @@
         protected override void OnInitialized()
         {
             var returnUrlEncoded = string.IsNullOrWhiteSpace(ReturnUrl) ? "" : $"?ReturnUrl={Uri.EscapeDataString(ReturnUrl)}";
-            var loginUrl = $"/login{returnUrlEncoded}";
+            var loginUrl = $"/{returnUrlEncoded}";
             
             // Don't use JS interop here during static rendering
             NavigationManager.NavigateTo(loginUrl);
