@@ -8,6 +8,8 @@ using FNBReservation.Modules.Queue.Infrastructure.Data;
 using FNBReservation.Modules.Queue.Infrastructure.Repositories;
 using FNBReservation.Modules.Queue.Infrastructure.Services;
 using FNBReservation.Modules.Notification.Infrastructure.Extensions;
+using Microsoft.Extensions.Logging;
+using FNBReservation.SharedKernel.Data;
 
 namespace FNBReservation.Modules.Queue.API.Extensions
 {
@@ -26,6 +28,23 @@ namespace FNBReservation.Modules.Queue.API.Extensions
                     ServerVersion.AutoDetect(configuration.GetConnectionString("DefaultConnection"))
                 )
             );
+
+            // Register DbContextFactory for read/write splitting
+            services.AddScoped<DbContextFactory<QueueDbContext>>(provider =>
+            {
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+                var logger = loggerFactory.CreateLogger<DbContextFactory<QueueDbContext>>();
+
+                return new DbContextFactory<QueueDbContext>(
+                    configuration,
+                    (options, connectionString) => options.UseMySql(
+                        connectionString,
+                        ServerVersion.AutoDetect(connectionString)
+                    ),
+                    logger
+                );
+            });
 
             services.AddNotificationModule(configuration);
 

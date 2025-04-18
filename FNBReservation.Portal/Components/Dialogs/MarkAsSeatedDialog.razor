@@ -1,0 +1,52 @@
+@inject IJSRuntime JS
+@inject IQueueService QueueService
+@using MudBlazor.Utilities
+
+<MudDialog>
+    <DialogContent>
+        <div class="d-flex flex-column align-center justify-center pa-4">
+            <MudIcon Icon="@Icons.Material.Filled.Celebration" Color="Color.Success" Size="Size.Large" Class="mb-4" />
+            
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-2">Table Assigned Successfully</MudText>
+            
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-4">
+                @CustomerName has been assigned a table. Would you like to mark them as seated now?
+            </MudText>
+            
+            <MudText Typo="Typo.caption" Align="Align.Center" Class="mb-3">
+                Choose "Mark as Seated" if the customer is currently at the table.
+                <br/>
+                Choose "Not Yet" if the customer has been notified but hasn't arrived yet.
+            </MudText>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="NotYet" Variant="Variant.Outlined" Color="Color.Primary">Not Yet</MudButton>
+        <MudButton OnClick="MarkAsSeated" Variant="Variant.Filled" Color="Color.Success">
+            Mark as Seated
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter] public string QueueId { get; set; }
+    [Parameter] public string CustomerName { get; set; } = "Customer";
+    [Parameter] public string OutletId { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("console.log", $"MarkAsSeatedDialog initialized for {CustomerName}, Queue ID: {QueueId}");
+    }
+    
+    private void NotYet()
+    {
+        MudDialog.Close(DialogResult.Ok(false));
+    }
+    
+    private void MarkAsSeated()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+} 

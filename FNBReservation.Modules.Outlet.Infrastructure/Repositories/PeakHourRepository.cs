@@ -8,17 +8,19 @@ using Microsoft.Extensions.Logging;
 using FNBReservation.Modules.Outlet.Core.Entities;
 using FNBReservation.Modules.Outlet.Core.Interfaces;
 using FNBReservation.Modules.Outlet.Infrastructure.Data;
+using FNBReservation.SharedKernel.Data;
 
 namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
 {
-    public class PeakHourRepository : IPeakHourRepository
+    public class PeakHourRepository : BaseRepository<PeakHourSetting, OutletDbContext>, IPeakHourRepository
     {
-        private readonly OutletDbContext _dbContext;
         private readonly ILogger<PeakHourRepository> _logger;
 
-        public PeakHourRepository(OutletDbContext dbContext, ILogger<PeakHourRepository> logger)
+        public PeakHourRepository(
+            DbContextFactory<OutletDbContext> contextFactory,
+            ILogger<PeakHourRepository> logger)
+            : base(contextFactory, logger)
         {
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -27,28 +29,34 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
             _logger.LogInformation("Creating new peak hour setting {Name} for outlet {OutletId}",
                 peakHourSetting.Name, peakHourSetting.OutletId);
 
-            await _dbContext.PeakHourSettings.AddAsync(peakHourSetting);
-            await _dbContext.SaveChangesAsync();
-
-            return peakHourSetting;
+            return await ExecuteWriteQueryAsync(async dbSet =>
+            {
+                var result = await dbSet.AddAsync(peakHourSetting);
+                return result.Entity;
+            });
         }
 
         public async Task<PeakHourSetting> GetByIdAsync(Guid id)
         {
             _logger.LogInformation("Getting peak hour setting by ID {Id}", id);
 
-            return await _dbContext.PeakHourSettings
-                .FirstOrDefaultAsync(p => p.Id == id);
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet.FirstOrDefaultAsync(p => p.Id == id);
+            });
         }
 
         public async Task<IEnumerable<PeakHourSetting>> GetByOutletIdAsync(Guid outletId)
         {
             _logger.LogInformation("Getting all peak hour settings for outlet {OutletId}", outletId);
 
-            return await _dbContext.PeakHourSettings
-                .Where(p => p.OutletId == outletId)
-                .OrderBy(p => p.StartTime)
-                .ToListAsync();
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                return await dbSet
+                    .Where(p => p.OutletId == outletId)
+                    .OrderBy(p => p.StartTime)
+                    .ToListAsync();
+            });
         }
 
         public async Task<IEnumerable<PeakHourSetting>> GetActiveSettingsForDateAsync(Guid outletId, DateTime date)
@@ -62,13 +70,16 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
 
             string dayOfWeekStr = dayOfWeek.ToString();
 
-            // Get active settings for this day of week
-            return await _dbContext.PeakHourSettings
-                .Where(p => p.OutletId == outletId
-                       && p.IsActive
-                       && p.DaysOfWeek.Contains(dayOfWeekStr))
-                .OrderBy(p => p.StartTime)
-                .ToListAsync();
+            return await ExecuteReadQueryAsync(async dbSet =>
+            {
+                // Get active settings for this day of week
+                return await dbSet
+                    .Where(p => p.OutletId == outletId
+                           && p.IsActive
+                           && p.DaysOfWeek.Contains(dayOfWeekStr))
+                    .OrderBy(p => p.StartTime)
+                    .ToListAsync();
+            });
         }
 
         public async Task<PeakHourSetting> GetActiveSettingForDateTimeAsync(Guid outletId, DateTime dateTime)
@@ -91,26 +102,29 @@ namespace FNBReservation.Modules.Outlet.Infrastructure.Repositories
         {
             _logger.LogInformation("Updating peak hour setting {Id}", peakHourSetting.Id);
 
-            _dbContext.PeakHourSettings.Update(peakHourSetting);
-            await _dbContext.SaveChangesAsync();
-
-            return peakHourSetting;
+            return await ExecuteWriteQueryAsync(async dbSet =>
+            {
+                dbSet.Update(peakHourSetting);
+                return peakHourSetting;
+            });
         }
 
         public async Task<bool> DeleteAsync(Guid id)
         {
             _logger.LogInformation("Deleting peak hour setting {Id}", id);
 
-            var setting = await _dbContext.PeakHourSettings.FindAsync(id);
-            if (setting == null)
+            return await ExecuteWriteQueryAsync(async dbSet =>
             {
-                _logger.LogWarning("Peak hour setting {Id} not found for deletion", id);
-                return false;
-            }
+                var setting = await dbSet.FindAsync(id);
+                if (setting == null)
+                {
+                    _logger.LogWarning("Peak hour setting {Id} not found for deletion", id);
+                    return false;
+                }
 
-            _dbContext.PeakHourSettings.Remove(setting);
-            await _dbContext.SaveChangesAsync();
-            return true;
+                dbSet.Remove(setting);
+                return true;
+            });
         }
     }
 }

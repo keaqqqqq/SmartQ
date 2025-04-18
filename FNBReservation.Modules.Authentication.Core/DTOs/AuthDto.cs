@@ -42,11 +42,11 @@ namespace FNBReservation.Modules.Authentication.Core.DTOs
     {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; }
-        public string AccessToken { get; set; }
-        public string RefreshToken { get; set; }
         public int ExpiresIn { get; set; }
         public string Role { get; set; }
         public string Username { get; set; }
+
+        public Guid? OutletId { get; set; }
     }
 
     public class TokenResult
@@ -58,6 +58,7 @@ namespace FNBReservation.Modules.Authentication.Core.DTOs
         public int ExpiresIn { get; set; }
         public string Role { get; set; }
         public string Username { get; set; }
+        public Guid? OutletId { get; set; }
     }
 
     public class PasswordResetResult

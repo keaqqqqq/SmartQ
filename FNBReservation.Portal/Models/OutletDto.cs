@@ -4,6 +4,9 @@ namespace FNBReservation.Portal.Models
 {
     public class OutletDto
     {
+        [JsonPropertyName("id")]
+        public string id { get; set; } = string.Empty;
+
         [JsonPropertyName("outletId")]
         public string OutletId { get; set; } = string.Empty;
 

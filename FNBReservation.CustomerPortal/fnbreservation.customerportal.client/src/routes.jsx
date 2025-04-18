@@ -9,7 +9,7 @@ import ReservationList from "./components/reservation/ReservationList";
 import ReservationLookup from "./components/reservation/ReservationLookup";
 import ModifyReservation from "./components/reservation/ModifyReservation";
 import Outlet from "./components/Outlet/Outlets";
-
+import ApiTester from "./components/Outlet/ApiTester";
 
 // Import queue components
 import QueueForm from "./components/queue/QueueForm";
@@ -26,6 +26,7 @@ const AppRoutes = () => {
             <Route path="/reservation/:id" element={<ReservationDetail />} />
             <Route path="/reservation/code/:code" element={<ReservationDetail />} />
             <Route path="/reservations" element={<ReservationList />} />
+            <Route path="/reservations/:phone" element={<ReservationList />} />
             <Route path="/reservation/lookup" element={<ReservationLookup />} />
             <Route path="/update-reservation/:id" element={<ModifyReservation />} />
 
@@ -36,7 +37,10 @@ const AppRoutes = () => {
 
             {/* Admin/Staff tools */}
             <Route path="/admin/qrcode-generator" element={<QRCodeGenerator />} />
-               </Routes>
+            
+            {/* Development/Testing routes */}
+            <Route path="/api-tester" element={<ApiTester />} />
+        </Routes>
     );
 };
 

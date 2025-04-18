@@ -4,8 +4,11 @@ namespace FNBReservation.Portal.Models
 {
     public class ReservationDto
     {
-        [JsonPropertyName("reservationId")]
+        [JsonPropertyName("id")]
         public string ReservationId { get; set; } = string.Empty;
+
+        [JsonPropertyName("reservationCode")]
+        public string ReservationCode { get; set; } = string.Empty;
 
         [JsonPropertyName("outletId")]
         public string OutletId { get; set; } = string.Empty;
@@ -28,11 +31,14 @@ namespace FNBReservation.Portal.Models
         [JsonPropertyName("reservationDate")]
         public DateTime ReservationDate { get; set; }
 
-        [JsonPropertyName("endTime")]
-        public DateTime EndTime { get; set; }
+        [JsonPropertyName("duration")]
+        public string Duration { get; set; } = "01:30:00";
+
+        [JsonIgnore]
+        public DateTime EndTime => ReservationDate.Add(TimeSpan.Parse(Duration));
 
         [JsonPropertyName("tableAssignments")]
-        public List<string> TableAssignments { get; set; } = new List<string>();
+        public List<TableAssignment> TableAssignments { get; set; } = new List<TableAssignment>();
 
         [JsonPropertyName("status")]
         public string Status { get; set; } = "Confirmed";
@@ -57,6 +63,25 @@ namespace FNBReservation.Portal.Models
 
         [JsonPropertyName("checkOutTime")]
         public DateTime? CheckOutTime { get; set; }
+
+        // Helper property to get table numbers as a list of strings (for display)
+        [JsonIgnore]
+        public List<string> TableNumbers => TableAssignments?.Select(t => t.TableNumber).ToList() ?? new List<string>();
+    }
+
+    public class TableAssignment
+    {
+        [JsonPropertyName("tableId")]
+        public string TableId { get; set; } = string.Empty;
+
+        [JsonPropertyName("tableNumber")]
+        public string TableNumber { get; set; } = string.Empty;
+
+        [JsonPropertyName("section")]
+        public string Section { get; set; } = string.Empty;
+
+        [JsonPropertyName("capacity")]
+        public int Capacity { get; set; }
     }
 
     public class CreateReservationDto
@@ -109,7 +134,7 @@ namespace FNBReservation.Portal.Models
         [JsonPropertyName("status")]
         public string? Status { get; set; }
 
-        [JsonPropertyName("tableAssignments")]
+        [JsonPropertyName("tableNumbers")]
         public List<string>? TableAssignments { get; set; }
 
         [JsonPropertyName("specialRequests")]
@@ -167,8 +192,6 @@ namespace FNBReservation.Portal.Models
     public class ReservationFilterDto
     {
         public string? OutletId { get; set; }
-        public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
         public string? Status { get; set; }
         public string? SearchTerm { get; set; }
     }

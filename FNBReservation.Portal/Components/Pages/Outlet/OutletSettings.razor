@@ -1,5 +1,554 @@
-﻿<h3>OutletSettings</h3>
+﻿@page "/admin/dashboard"
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@inject IReservationService ReservationService
+@inject IOutletService OutletService
+@inject ICustomerService CustomerService
+@inject IStaffService StaffService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Admin Dashboard - F&B Reservation System</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudText Typo="Typo.h4" Class="mb-4">Admin Dashboard</MudText>
+            <MudPaper Class="pa-4 mb-4" Elevation="3">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudDateRangePicker PickerVariant="PickerVariant.Dialog"
+                                            Label="Date Range" DateRange="dateRange"
+                                            DateFormat="dd/MM/yyyy" AutoClose="true"
+                                            AdornmentColor="Color.Primary"
+                                            Variant="Variant.Outlined"
+                                            HelperText="Select date range for dashboard data"
+                                            DateRangeChanged="DateRangeChangedHandler" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect T="string" Label="Outlet" Value="@selectedOutletId" ValueChanged="@ChangeOutlet"
+                                   Variant="Variant.Outlined">
+                            <MudSelectItem Value="@("all")">All Outlets</MudSelectItem>
+                            @foreach (var outlet in outlets)
+                            {
+                                <MudSelectItem Value="@outlet.OutletId">@outlet.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="RefreshDashboard"
+                                   Class="ml-auto">
+                            Refresh
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
+    }
+    else
+    {
+        <MudGrid>
+            <!-- First Row: Key Metrics -->
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="height: 100%;">
+                    <MudGrid>
+                        <MudItem xs="8">
+                            <MudText Typo="Typo.h6">Total Reservations</MudText>
+                            <MudText Typo="Typo.h3" Color="Color.Primary" Class="mt-2">@metrics.TotalReservations</MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="d-flex align-center justify-center">
+                            <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" Size="Size.Large" />
+                        </MudItem>
+                    </MudGrid>
+                    @if (metrics.ReservationChange >= 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Success" Class="mt-2">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" />
+                            +@metrics.ReservationChange% from previous period
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-2">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" />
+                            @metrics.ReservationChange% from previous period
+                        </MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="height: 100%;">
+                    <MudGrid>
+                        <MudItem xs="8">
+                            <MudText Typo="Typo.h6">Total Guests</MudText>
+                            <MudText Typo="Typo.h3" Color="Color.Secondary" Class="mt-2">@metrics.TotalGuests</MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="d-flex align-center justify-center">
+                            <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Color="Color.Secondary" Size="Size.Large" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudText Typo="Typo.caption" Class="mt-2">
+                        Average @metrics.AvgPartySize guests per reservation
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="height: 100%;">
+                    <MudGrid>
+                        <MudItem xs="8">
+                            <MudText Typo="Typo.h6">No-Show Rate</MudText>
+                            <MudText Typo="Typo.h3" Color="@(metrics.NoShowRate > 10 ? Color.Error : Color.Success)" Class="mt-2">
+                                @metrics.NoShowRate%
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="d-flex align-center justify-center">
+                            <MudIcon Icon="@Icons.Material.Filled.PersonOff"
+                                     Color="@(metrics.NoShowRate > 10 ? Color.Error : Color.Success)"
+                                     Size="Size.Large" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudText Typo="Typo.caption" Class="mt-2">
+                        @metrics.NoShows no-shows from @metrics.TotalReservations reservations
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="height: 100%;">
+                    <MudGrid>
+                        <MudItem xs="8">
+                            <MudText Typo="Typo.h6">Avg. Duration</MudText>
+                            <MudText Typo="Typo.h3" Color="Color.Tertiary" Class="mt-2">@metrics.AvgDuration min</MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="d-flex align-center justify-center">
+                            <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Tertiary" Size="Size.Large" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudText Typo="Typo.caption" Class="mt-2">
+                        Based on @metrics.CompletedReservations completed reservations
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Second Row: Reservations Chart and Status Distribution -->
+            <MudItem xs="12" md="8">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Reservations Over Time</MudText>
+                    <div style="height: 300px;">
+                        @if (chartData.Count > 0)
+                        {
+                            <MudChart ChartType="ChartType.Line" ChartSeries="@chartSeries" XAxisLabels="@chartLabels"
+                                      Width="100%" Height="300px" />
+                        }
+                        else
+                        {
+                            <div class="d-flex align-center justify-center" style="height: 100%;">
+                                <MudText Typo="Typo.subtitle1" Color="Color.Default">No data available for the selected period</MudText>
+                            </div>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Reservation Status</MudText>
+                    <div style="height: 300px;">
+                        @if (statusData.Count > 0)
+                        {
+                            <MudChart ChartType="ChartType.Donut" Width="100%" Height="300px"
+                                      InputData="@statusSeries" LegendPosition="Position.Bottom" />
+                        }
+                        else
+                        {
+                            <div class="d-flex align-center justify-center" style="height: 100%;">
+                                <MudText Typo="Typo.subtitle1" Color="Color.Default">No data available</MudText>
+                            </div>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Third Row: Outlet Performance and Recent Activity -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Outlet Performance</MudText>
+                    @if (outletPerformance.Count > 0)
+                    {
+                        <MudTable Items="@outletPerformance" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Outlet</MudTh>
+                                <MudTh>Reservations</MudTh>
+                                <MudTh>No-Shows</MudTh>
+                                <MudTh>Rate</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Outlet">@context.Name</MudTd>
+                                <MudTd DataLabel="Reservations">@context.Reservations</MudTd>
+                                <MudTd DataLabel="No-Shows">@context.NoShows</MudTd>
+                                <MudTd DataLabel="Rate">
+                                    <MudChip Size="Size.Small" T="string"
+                                             Color="@(context.NoShowRate > 10 ? Color.Error : Color.Success)">
+                                        @context.NoShowRate%
+                                    </MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No outlet data available</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Recent Activity</MudText>
+                    @if (recentActivity.Count > 0)
+                    {
+                        <MudList Dense="true" T="string">
+                            @foreach (var activity in recentActivity)
+                            {
+                                <MudListItem T="string">
+                                    <div class="d-flex">
+                                        <MudAvatar Size="Size.Small" Color="@GetActivityColor(activity.Type)"
+                                                   Class="mr-3 mt-1">@activity.Type[0]</MudAvatar>
+                                        <div>
+                                            <MudText Typo="Typo.body2">@activity.Description</MudText>
+                                            <MudText Typo="Typo.caption">@activity.Time.ToString("MMM dd, yyyy HH:mm")</MudText>
+                                        </div>
+                                    </div>
+                                </MudListItem>
+                                <MudDivider />
+                            }
+                        </MudList>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="my-4">No recent activity</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Fourth Row: Quick Actions -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Quick Actions</MudText>
+                    <MudGrid>
+                        <MudItem xs="6" sm="3">
+                            <MudButton Variant="Variant.Filled" FullWidth="true"
+                                       OnClick="@(() => NavigationManager.NavigateTo("/reservations"))"
+                                       StartIcon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary">
+                                View Reservations
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudButton Variant="Variant.Filled" FullWidth="true"
+                                       OnClick="@(() => NavigationManager.NavigateTo("/outlets"))"
+                                       StartIcon="@Icons.Material.Filled.Store" Color="Color.Secondary">
+                                Manage Outlets
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudButton Variant="Variant.Filled" FullWidth="true"
+                                       OnClick="@(() => NavigationManager.NavigateTo("/staff"))"
+                                       StartIcon="@Icons.Material.Filled.People" Color="Color.Tertiary">
+                                Staff Management
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <MudButton Variant="Variant.Filled" FullWidth="true"
+                                       OnClick="@(() => NavigationManager.NavigateTo("/customers"))"
+                                       StartIcon="@Icons.Material.Filled.Person" Color="Color.Info">
+                                Customer List
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
 
 @code {
+    private bool isLoading = true;
+    private List<OutletDto> outlets = new();
+    private string selectedOutletId = "all";
+    private DateRange dateRange = new DateRange(DateTime.Now.AddDays(-7), DateTime.Now);
 
+    // Dashboard data models
+    private DashboardMetrics metrics = new();
+    private List<Dictionary<string, object>> chartData = new();
+    private List<ChartSeries> chartSeries = new();
+    private string[] chartLabels = Array.Empty<string>();
+    private List<Dictionary<string, object>> statusData = new();
+    private double[] statusSeries = Array.Empty<double>();
+    private async Task DateRangeChangedHandler(DateRange range)
+    {
+        dateRange = range;
+        await LoadDashboardData();
+    }
+    private List<OutletPerformance> outletPerformance = new();
+    private List<ActivityItem> recentActivity = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+        await LoadDashboardData();
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            outlets = await OutletService.GetOutletsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ChangeOutlet(string outletId)
+    {
+        selectedOutletId = outletId;
+        await LoadDashboardData();
+    }
+
+    private async Task RefreshDashboard()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        await LoadDashboardData();
+
+        Snackbar.Add("Dashboard refreshed successfully", Severity.Success);
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // In a real application, you would make API calls to get this data
+            // For now, we'll generate mock data
+            await Task.Delay(1000);  // Simulate API call delay
+
+            GenerateMockDashboardData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dashboard data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GenerateMockDashboardData()
+    {
+        // Generate mock metrics
+        metrics = new DashboardMetrics
+            {
+                TotalReservations = Random.Shared.Next(150, 300),
+                TotalGuests = Random.Shared.Next(400, 900),
+                NoShows = Random.Shared.Next(5, 30),
+                CompletedReservations = Random.Shared.Next(100, 200),
+                ReservationChange = Random.Shared.Next(-15, 25),
+            };
+
+        metrics.NoShowRate = (int)Math.Round((double)metrics.NoShows / metrics.TotalReservations * 100);
+        metrics.AvgPartySize = (double)metrics.TotalGuests / metrics.TotalReservations;
+        metrics.AvgDuration = Random.Shared.Next(70, 110);
+
+        // Generate chart data
+        GenerateChartData();
+
+        // Generate status distribution
+        GenerateStatusData();
+
+        // Generate outlet performance
+        GenerateOutletPerformance();
+
+        // Generate recent activity
+        GenerateRecentActivity();
+    }
+
+    private void GenerateChartData()
+    {
+        chartData = new List<Dictionary<string, object>>();
+        chartSeries = new List<ChartSeries>();
+
+        // Create date labels
+        var startDate = dateRange.Start?.Date ?? DateTime.Now.AddDays(-7);
+        var endDate = dateRange.End?.Date ?? DateTime.Now;
+        var dateDiff = (endDate - startDate).Days + 1;
+
+        var dates = new List<string>();
+        var reservationsData = new List<double>();
+        var guestsData = new List<double>();
+
+        for (int i = 0; i < dateDiff; i++)
+        {
+            var date = startDate.AddDays(i);
+            dates.Add(date.ToString("MMM dd"));
+
+            var reservations = Random.Shared.Next(10, 50);
+            var guests = reservations * Random.Shared.Next(2, 5);
+
+            reservationsData.Add(reservations);
+            guestsData.Add(guests);
+
+            chartData.Add(new Dictionary<string, object>
+                {
+                    ["date"] = date.ToString("MMM dd"),
+                    ["reservations"] = reservations,
+                    ["guests"] = guests
+                });
+        }
+
+        chartLabels = dates.ToArray();
+
+        chartSeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Reservations", Data = reservationsData.ToArray() },
+            new ChartSeries { Name = "Guests", Data = guestsData.ToArray() }
+        };
+    }
+
+    private void GenerateStatusData()
+    {
+        statusData = new List<Dictionary<string, object>>();
+
+        var confirmed = Random.Shared.Next(20, 50);
+        var seated = Random.Shared.Next(10, 30);
+        var completed = Random.Shared.Next(30, 70);
+        var cancelled = Random.Shared.Next(5, 20);
+        var noShow = Random.Shared.Next(5, 15);
+
+        statusData.Add(new Dictionary<string, object> { ["status"] = "Confirmed", ["count"] = confirmed });
+        statusData.Add(new Dictionary<string, object> { ["status"] = "Seated", ["count"] = seated });
+        statusData.Add(new Dictionary<string, object> { ["status"] = "Completed", ["count"] = completed });
+        statusData.Add(new Dictionary<string, object> { ["status"] = "Cancelled", ["count"] = cancelled });
+        statusData.Add(new Dictionary<string, object> { ["status"] = "No-Show", ["count"] = noShow });
+
+        statusSeries = new double[] { confirmed, seated, completed, cancelled, noShow };
+    }
+
+    private void GenerateOutletPerformance()
+    {
+        outletPerformance = new List<OutletPerformance>();
+
+        foreach (var outlet in outlets)
+        {
+            var reservations = Random.Shared.Next(30, 100);
+            var noShows = Random.Shared.Next(1, 10);
+            var noShowRate = (int)Math.Round((double)noShows / reservations * 100);
+
+            outletPerformance.Add(new OutletPerformance
+                {
+                    OutletId = outlet.OutletId,
+                    Name = outlet.Name,
+                    Reservations = reservations,
+                    NoShows = noShows,
+                    NoShowRate = noShowRate
+                });
+        }
+    }
+
+    private void GenerateRecentActivity()
+    {
+        recentActivity = new List<ActivityItem>();
+        var activityTypes = new[] { "Reservation", "Check-in", "Check-out", "Cancellation", "No-show" };
+
+        for (int i = 0; i < 5; i++)
+        {
+            var type = activityTypes[Random.Shared.Next(activityTypes.Length)];
+            var time = DateTime.Now.AddHours(-Random.Shared.Next(1, 24));
+            var description = GenerateActivityDescription(type);
+
+            recentActivity.Add(new ActivityItem
+                {
+                    Type = type,
+                    Time = time,
+                    Description = description
+                });
+        }
+
+        recentActivity = recentActivity.OrderByDescending(a => a.Time).ToList();
+    }
+
+    private string GenerateActivityDescription(string type)
+    {
+        var names = new[] { "John Smith", "Emily Johnson", "Michael Davis", "Sarah Wilson", "James Brown" };
+        var name = names[Random.Shared.Next(names.Length)];
+        var outletName = outlets[Random.Shared.Next(outlets.Count)].Name;
+
+        return type switch
+        {
+            "Reservation" => $"{name} made a reservation for {Random.Shared.Next(2, 8)} guests at {outletName}",
+            "Check-in" => $"{name} checked in at {outletName} with {Random.Shared.Next(2, 8)} guests",
+            "Check-out" => $"{name} checked out from {outletName} after {Random.Shared.Next(60, 120)} minutes",
+            "Cancellation" => $"{name} cancelled reservation at {outletName}",
+            "No-show" => $"{name} was marked as no-show for reservation at {outletName}",
+            _ => $"{name} interacted with {outletName}"
+        };
+    }
+
+    private Color GetActivityColor(string type)
+    {
+        return type switch
+        {
+            "Reservation" => Color.Info,
+            "Check-in" => Color.Success,
+            "Check-out" => Color.Dark,
+            "Cancellation" => Color.Error,
+            "No-show" => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    // Data models for dashboard
+    private class DashboardMetrics
+    {
+        public int TotalReservations { get; set; }
+        public int TotalGuests { get; set; }
+        public double AvgPartySize { get; set; }
+        public int NoShows { get; set; }
+        public int NoShowRate { get; set; }
+        public int CompletedReservations { get; set; }
+        public int AvgDuration { get; set; }
+        public int ReservationChange { get; set; }
+    }
+
+    private class OutletPerformance
+    {
+        public string OutletId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int Reservations { get; set; }
+        public int NoShows { get; set; }
+        public int NoShowRate { get; set; }
+    }
+
+    private class ActivityItem
+    {
+        public string Type { get; set; } = string.Empty;
+        public DateTime Time { get; set; }
+        public string Description { get; set; } = string.Empty;
+    }
 }

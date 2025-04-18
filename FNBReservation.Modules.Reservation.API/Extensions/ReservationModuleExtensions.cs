@@ -8,6 +8,8 @@ using FNBReservation.Modules.Reservation.Infrastructure.Repositories;
 using FNBReservation.Modules.Reservation.Infrastructure.Adapters;
 using FNBReservation.Modules.Reservation.Infrastructure.Data;
 using FNBReservation.Modules.Notification.Infrastructure.Extensions;
+using Microsoft.Extensions.Logging;
+using FNBReservation.SharedKernel.Data;
 
 namespace FNBReservation.Modules.Reservation.API.Extensions
 {
@@ -26,6 +28,35 @@ namespace FNBReservation.Modules.Reservation.API.Extensions
                     ServerVersion.AutoDetect(configuration.GetConnectionString("DefaultConnection"))
                 )
             );
+
+            // Register DbContextFactory
+            services.AddSingleton<DbContextFactory<ReservationDbContext>>(provider =>
+            {
+                var config = provider.GetRequiredService<IConfiguration>();
+                var logger = provider.GetRequiredService<ILogger<DbContextFactory<ReservationDbContext>>>();
+
+                return new DbContextFactory<ReservationDbContext>(
+                    config,
+                    (builder, connectionString) =>
+                    {
+                        builder.UseMySql(
+                            connectionString,
+                            ServerVersion.AutoDetect(connectionString),
+                            options =>
+                            {
+                                options.EnableRetryOnFailure(
+                                    maxRetryCount: 5,
+                                    maxRetryDelay: TimeSpan.FromSeconds(30),
+                                    errorNumbersToAdd: null);
+
+                                // Set command timeout from configuration
+                                var timeout = config.GetValue<int>("DatabaseOptions:CommandTimeout", 30);
+                                options.CommandTimeout(timeout);
+                            }
+                        );
+                    },
+                    logger);
+            });
 
             services.AddNotificationModule(configuration);
 

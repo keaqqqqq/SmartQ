@@ -1,0 +1,100 @@
+@using FNBReservation.Portal.Models
+@inject IJSRuntime JS
+
+<MudDialog>
+    <DialogContent>
+        <MudContainer Style="max-width: 400px;">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">
+                Assign table <strong>@TableNumber</strong> to a customer
+            </MudText>
+            
+            <MudSelect T="string" Label="Select customer" 
+                      Variant="Variant.Outlined" 
+                      Value="@selectedQueueId" 
+                      ValueChanged="@((string val) => selectedQueueId = val)"
+                      FullWidth="true">
+                @foreach (var customer in WaitingQueue)
+                {
+                    <MudSelectItem Value="@customer.QueueId">
+                        <div class="d-flex align-center">
+                            <div>
+                                <span style="font-weight: 500;">@customer.QueueCode - @customer.CustomerName</span>
+                                <div style="font-size: 0.8rem; color: var(--mud-palette-text-secondary);">
+                                    @customer.PartySize guests | Waiting: @GetWaitingTime(customer.QueuedAt)
+                                </div>
+                            </div>
+                        </div>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (selectedCustomer != null)
+            {
+                <MudPaper Elevation="0" Class="mt-4 pa-3" Style="background-color: #FFF8E1; border-radius: 8px;">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Customer Details</MudText>
+                    <div class="d-flex align-center mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-2" />
+                        <MudText Typo="Typo.body2">@selectedCustomer.CustomerName</MudText>
+                    </div>
+                    <div class="d-flex align-center mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-2" />
+                        <MudText Typo="Typo.body2">@selectedCustomer.CustomerPhone</MudText>
+                    </div>
+                    <div class="d-flex align-center mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Class="mr-2" />
+                        <MudText Typo="Typo.body2">@selectedCustomer.PartySize guests</MudText>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedCustomer.Notes))
+                    {
+                        <div class="d-flex align-start mb-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Notes" Size="Size.Small" Class="mr-2 mt-1" />
+                            <MudText Typo="Typo.body2">@selectedCustomer.Notes</MudText>
+                        </div>
+                    }
+                </MudPaper>
+            }
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Cancel</MudButton>
+        <MudButton OnClick="AssignTable" 
+                  Variant="Variant.Filled" 
+                  Color="Color.Primary"
+                  Disabled="@(string.IsNullOrEmpty(selectedQueueId))">
+            Assign Table
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public string TableNumber { get; set; }
+    [Parameter] public List<QueueEntryDto> WaitingQueue { get; set; } = new List<QueueEntryDto>();
+    
+    private string selectedQueueId;
+    private QueueEntryDto selectedCustomer => WaitingQueue.FirstOrDefault(c => c.QueueId == selectedQueueId);
+    
+    private void Cancel() => MudDialog.Cancel();
+    
+    private void AssignTable() => MudDialog.Close(DialogResult.Ok(selectedQueueId));
+    
+    private string GetWaitingTime(DateTime queuedAt)
+    {
+        // Subtract 8 hours from current time for time zone adjustment
+        var adjustedCurrentTime = DateTime.Now.AddHours(-8);
+        var elapsed = adjustedCurrentTime - queuedAt;
+        
+        // Handle negative elapsed time
+        if (elapsed.TotalSeconds < 0)
+        {
+            return "0m";
+        }
+        
+        if (elapsed.Hours > 0)
+        {
+            return $"{elapsed.Hours}h {elapsed.Minutes}m";
+        }
+        
+        return $"{elapsed.Minutes}m";
+    }
+} 

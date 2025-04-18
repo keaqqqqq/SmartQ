@@ -3,7 +3,10 @@ using FNBReservation.Modules.Authentication.Infrastructure.Services;
 using FNBReservation.Modules.Authentication.Core.Interfaces;
 using FNBReservation.Infrastructure.Services.Notification;
 using FNBReservation.Modules.Authentication.Infrastructure.Adapters;
-using Microsoft.AspNetCore.Http;
+using FNBReservation.SharedKernel.Data;
+using FNBReservation.Modules.Authentication.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using FNBReservation.Modules.Authentication.Infrastructure.Repositories;
 
 namespace FNBReservation.Modules.Authentication.API.Extensions
 {
@@ -15,6 +18,23 @@ namespace FNBReservation.Modules.Authentication.API.Extensions
             services.AddControllers()
                 .AddApplicationPart(typeof(AuthenticationModuleExtensions).Assembly);
 
+            // Register DbContextFactory for read/write splitting
+            services.AddScoped<DbContextFactory<FNBDbContext>>(provider =>
+            {
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+                var logger = loggerFactory.CreateLogger<DbContextFactory<FNBDbContext>>();
+
+                return new DbContextFactory<FNBDbContext>(
+                    configuration,
+                    (options, connectionString) => options.UseMySql(
+                        connectionString,
+                        ServerVersion.AutoDetect(connectionString)
+                    ),
+                    logger
+                );
+            });
+
             // Configure and validate SMTP settings
             var smtpSection = configuration.GetSection("SmtpSettings");
             if (string.IsNullOrEmpty(smtpSection["Host"]))
@@ -25,6 +45,10 @@ namespace FNBReservation.Modules.Authentication.API.Extensions
 
             // Ensure HttpContextAccessor is registered
             services.AddHttpContextAccessor();
+
+            services.AddScoped<IAuthRepository, AuthRepository>();
+            services.AddScoped<IStaffRepository, StaffRepository>();
+
 
             // Register module-specific services
             services.AddScoped<IAuthService, AuthService>();

@@ -2,7 +2,9 @@
 @using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @using FNBReservation.Portal.Components.Dialogs
+@using Microsoft.AspNetCore.Components.Web
 @inject ICustomerService CustomerService
+@inject CurrentUserService UserService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
@@ -18,11 +20,26 @@
             <MudTabPanel Icon="@Icons.Material.Filled.People" Text="ALL CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <MudTextField T="string" @bind-Value="SearchTerm"
-                                      Placeholder="Search by name or phone number"
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
-                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                      Style="max-width: 400px;" />
+                        <!-- Enhanced search UI -->
+                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                                      DisableUnderLine="true" Variant="Variant.Text"
+                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                      Class="my-0 py-0"
+                                      OnKeyDown="@SearchOnEnter" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                       Class="ml-1" />
+                        </MudPaper>
+                        
+                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        {
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                                @($"Search: {SearchTerm}")
+                            </MudChip>
+                        }
                     </div>
 
                     <MudTable Items="@GetAllCustomers()" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -92,11 +109,26 @@
             <MudTabPanel Icon="@Icons.Material.Filled.CheckCircle" Text="ACTIVE CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <MudTextField T="string" @bind-Value="SearchTerm"
-                                      Placeholder="Search by name or phone number"
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
-                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                      Style="max-width: 400px;" />
+                        <!-- Enhanced search UI -->
+                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                                      DisableUnderLine="true" Variant="Variant.Text"
+                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                      Class="my-0 py-0"
+                                      OnKeyDown="@SearchOnEnter" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                       Class="ml-1" />
+                        </MudPaper>
+                        
+                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        {
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                                @($"Search: {SearchTerm}")
+                            </MudChip>
+                        }
                     </div>
 
                     <MudTable Items="@GetFilteredCustomers(false)" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -156,11 +188,26 @@
             <MudTabPanel Icon="@Icons.Material.Filled.Block" Text="BANNED CUSTOMERS">
                 <MudCardContent Class="pb-0">
                     <div class="d-flex align-center justify-space-between mb-4">
-                        <MudTextField T="string" @bind-Value="SearchTerm"
-                                      Placeholder="Search by name or phone number"
-                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers"
-                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                      Style="max-width: 400px;" />
+                        <!-- Enhanced search UI -->
+                        <MudPaper Elevation="0" Class="d-flex align-center pa-2" Style="background-color: var(--mud-palette-background-grey); flex-grow: 0; max-width: 400px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            <MudTextField @bind-Value="SearchTerm" Placeholder="Search by name, phone, email..." 
+                                      Immediate="true" OnDebounceIntervalElapsed="SearchCustomers" DebounceInterval="300"
+                                      DisableUnderLine="true" Variant="Variant.Text"
+                                      Clearable="true" OnClearButtonClick="ClearSearch" Style="min-width: 300px;"
+                                      Class="my-0 py-0"
+                                      OnKeyDown="@SearchOnEnter" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Default" 
+                                       OnClick="ClearSearch" Size="Size.Small" Title="Clear search"
+                                       Class="ml-1" />
+                        </MudPaper>
+                        
+                        @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                        {
+                            <MudChip Color="Color.Primary" Size="Size.Small" Class="ml-2" OnClose="ClearSearch" T="string">
+                                @($"Search: {SearchTerm}")
+                            </MudChip>
+                        }
                     </div>
 
                     <MudTable Items="@GetFilteredCustomers(true)" Hover="true" Breakpoint="Breakpoint.Sm"
@@ -196,7 +243,10 @@
                                 }
                             </MudTd>
                             <MudTd DataLabel="Banned By">
-                                @(customer.BannedBy ?? "Unknown")
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
+                                    <span>@(customer.BannedBy ?? "Unknown")</span>
+                                </div>
                             </MudTd>
                             <MudTd DataLabel="Actions">
                                 <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small"
@@ -223,10 +273,54 @@
     private bool isLoading = true;
     private string SearchTerm = "";
     private int activeTabIndex = 0;
+    private bool _isInitialized = false;
+    private Exception _loadException = null;
+    private string _currentUsername = "Admin"; // Default fallback value
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCustomers();
+        
+        // Get the current username from the auth service
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the default value if there's an error
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isInitialized = true;
+            
+            // Initialize the customer service for JS interop
+            if (CustomerService is HttpClientCustomerService httpClientService)
+            {
+                await httpClientService.InitializeAsync();
+            }
+            
+            // Try to get username from localStorage
+            try
+            {
+                var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentUser");
+                if (!string.IsNullOrEmpty(username))
+                {
+                    _currentUsername = username;
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error getting username from localStorage:", ex.Message);
+            }
+            
+            // Log any error that occurred during initialization
+            if (_loadException != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", _loadException.Message, _loadException.StackTrace);
+            }
+        }
     }
 
     private async Task LoadCustomers()
@@ -241,7 +335,15 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading customers: {ex.Message}", Severity.Error);
-            await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex);
+            
+            // Store the exception to log after rendering
+            _loadException = ex;
+            
+            // Only log to console if we've already rendered
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Error loading customers:", ex.Message, ex.StackTrace);
+            }
         }
         finally
         {
@@ -288,15 +390,81 @@
 
     private async Task SearchCustomers()
     {
+        try
+        {
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", $"Searching for customers with term: '{SearchTerm}'");
+            }
+            
+            if (string.IsNullOrWhiteSpace(SearchTerm))
+            {
+                return;
+            }
+            
+            var results = GetAllCustomers();
+            if (results.Count == 0)
+            {
+                Snackbar.Add($"No customers found matching '{SearchTerm}'", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add($"Found {results.Count} customers matching '{SearchTerm}'", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Search error: {ex.Message}", Severity.Error);
+            
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", $"Search error: {ex.Message}");
+            }
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+    
+    private async Task ClearSearch()
+    {
+        SearchTerm = "";
+        
+        if (_isInitialized)
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", "Customer search cleared");
+        }
+        
         StateHasChanged();
+    }
+    
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            if (_isInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", "Customer search triggered by Enter key");
+            }
+            
+            await SearchCustomers();
+        }
     }
 
     private async Task OpenBanCustomerDialog(CustomerDto customer)
     {
+        // Refresh username in case it changed
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the current value if there's an error
+        }
+        
         var parameters = new DialogParameters
             {
                 ["Customer"] = customer,
-                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+                ["CurrentUser"] = _currentUsername 
             };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
@@ -346,14 +514,21 @@
 
     private async Task ViewCustomerDetails(CustomerDto customer)
     {
+        // Refresh username in case it changed
+        try {
+            _currentUsername = await UserService.GetCurrentUsernameAsync();
+        } catch {
+            // Keep the current value if there's an error
+        }
+        
         var parameters = new DialogParameters
             {
                 ["CustomerId"] = customer.CustomerId,
-                ["CurrentUser"] = "Admin User" // This would normally come from your authentication system
+                ["CurrentUser"] = _currentUsername
             };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<CustomerDetailsDialog>("Customer Details", parameters, options);
+        var dialog = await DialogService.ShowAsync<AdminCustomerDetailsDialog>("Customer Details", parameters, options);
         var result = await dialog.Result;
 
         // Refresh data after dialog is closed in case any changes were made

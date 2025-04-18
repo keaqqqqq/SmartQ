@@ -10,6 +10,13 @@
     </TitleContent>
     <DialogContent>
         <MudGrid>
+            <MudItem xs="12" sm="6">
+                <div class="d-flex align-center">
+                    <input type="checkbox" id="isActive" checked="@PeakHour.IsActive" @onchange="@((e) => PeakHour.IsActive = (bool)e.Value)" />
+                    <label for="isActive" class="ml-2">Active</label>
+                </div>
+            </MudItem>
+
             <MudItem xs="12">
                 <MudTextField @bind-Value="PeakHour.Name" Label="Name" Required
                               Variant="Variant.Outlined" FullWidth="true" />
@@ -30,13 +37,34 @@
             <MudItem xs="12">
                 <MudText Typo="Typo.subtitle2" Class="mb-2">Days of Week</MudText>
                 <div class="d-flex flex-wrap gap-2">
-                    <MudCheckBox T="bool" Checked="Monday" CheckedChanged="UpdateMonday" Label="Monday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Tuesday" CheckedChanged="UpdateTuesday" Label="Tuesday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Wednesday" CheckedChanged="UpdateWednesday" Label="Wednesday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Thursday" CheckedChanged="UpdateThursday" Label="Thursday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Friday" CheckedChanged="UpdateFriday" Label="Friday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Saturday" CheckedChanged="UpdateSaturday" Label="Saturday" Color="Color.Primary" />
-                    <MudCheckBox T="bool" Checked="Sunday" CheckedChanged="UpdateSunday" Label="Sunday" Color="Color.Primary" />
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="monday" checked="@Monday" @onchange="@((e) => UpdateMonday((bool)e.Value))" />
+                        <label for="monday" class="ml-2">Monday</label>
+                    </div>
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="tuesday" checked="@Tuesday" @onchange="@((e) => UpdateTuesday((bool)e.Value))" />
+                        <label for="tuesday" class="ml-2">Tuesday</label>
+                    </div>
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="wednesday" checked="@Wednesday" @onchange="@((e) => UpdateWednesday((bool)e.Value))" />
+                        <label for="wednesday" class="ml-2">Wednesday</label>
+                    </div>
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="thursday" checked="@Thursday" @onchange="@((e) => UpdateThursday((bool)e.Value))" />
+                        <label for="thursday" class="ml-2">Thursday</label>
+                    </div>
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="friday" checked="@Friday" @onchange="@((e) => UpdateFriday((bool)e.Value))" />
+                        <label for="friday" class="ml-2">Friday</label>
+                    </div>
+                    <div class="d-flex align-center mr-3">
+                        <input type="checkbox" id="saturday" checked="@Saturday" @onchange="@((e) => UpdateSaturday((bool)e.Value))" />
+                        <label for="saturday" class="ml-2">Saturday</label>
+                    </div>
+                    <div class="d-flex align-center">
+                        <input type="checkbox" id="sunday" checked="@Sunday" @onchange="@((e) => UpdateSunday((bool)e.Value))" />
+                        <label for="sunday" class="ml-2">Sunday</label>
+                    </div>
                 </div>
             </MudItem>
 
@@ -45,19 +73,6 @@
                                  Variant="Variant.Outlined" Min="0" Max="100" />
             </MudItem>
 
-            <MudItem xs="12" sm="6">
-                <MudSwitch @bind-Checked="PeakHour.IsActive" Label="Active" Color="Color.Primary" T="bool" />
-            </MudItem>
-
-            <MudItem xs="12" sm="6">
-                <MudDatePicker Date="PeakHour.StartDate" DateChanged="UpdateStartDate" Label="Start Date (Optional)"
-                               Variant="Variant.Outlined" />
-            </MudItem>
-
-            <MudItem xs="12" sm="6">
-                <MudDatePicker Date="PeakHour.EndDate" DateChanged="UpdateEndDate" Label="End Date (Optional)"
-                               Variant="Variant.Outlined" />
-            </MudItem>
         </MudGrid>
     </DialogContent>
     <DialogActions>

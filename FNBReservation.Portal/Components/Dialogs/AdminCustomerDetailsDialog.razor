@@ -1,0 +1,333 @@
+@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Services
+@using FNBReservation.Portal.Components.Dialogs
+@inject ICustomerService CustomerService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject CurrentUserService CurrentUserService
+@rendermode InteractiveServer
+
+<MudDialog DisableSidePadding="true">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="px-4 py-2 d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" /> Customer Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (isLoading)
+        {
+            <div class="d-flex justify-center align-center" style="height: 200px;">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (customer == null)
+        {
+            <MudAlert Severity="Severity.Error" Class="my-4">Failed to load customer details.</MudAlert>
+        }
+        else
+        {
+            <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                <MudTabPanel Icon="@Icons.Material.Filled.Info" Text="OVERVIEW">
+                    <div class="d-flex flex-column flex-md-row gap-4">
+                        <MudPaper Elevation="0" Class="flex-grow-1">
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Personal Information</MudText>
+
+                            <MudList Clickable="false" Dense="true" Padding="false" T="string">
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Customer ID</MudText>
+                                        <MudText>@customer.CustomerId</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Name</MudText>
+                                        <MudText>@customer.Name</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Phone</MudText>
+                                        <MudText>@customer.PhoneNumber</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Email</MudText>
+                                        <MudText>@(customer.Email ?? "Not provided")</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Status</MudText>
+                                        @if (customer.IsBanned)
+                                        {
+                                            <MudChip Color="Color.Error" Size="Size.Small" Style="height: 24px; font-size: 0.75rem;" T="string">Banned</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <div style="width: 100%;" class="pa-0">
+                                                <div class="rounded-pill" style="background-color: #00c853; color: white; text-align: center; padding: 3px 16px; font-size: 0.75rem; height: 24px; line-height: 18px; width: 100%;">
+                                                    Active
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </MudListItem>
+                            </MudList>
+                        </MudPaper>
+
+                        <MudPaper Elevation="0" Class="flex-grow-1">
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Reservation Statistics</MudText>
+
+                            <MudList Clickable="false" Dense="true" Padding="false" T="string">
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Total Reservations</MudText>
+                                        <MudText>@customer.TotalReservations</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">No-shows</MudText>
+                                        <MudText>@customer.NoShows</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">No-show Rate</MudText>
+                                        <MudText>@(customer.TotalReservations > 0 ? $"{(customer.NoShows * 100.0 / customer.TotalReservations):F1}%" : "0%")</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">Last Visit</MudText>
+                                        <MudText>@(customer.LastVisit?.ToString("d MMMM yyyy") ?? "Never")</MudText>
+                                    </div>
+                                </MudListItem>
+
+                                <MudListItem T="string">
+                                    <div class="d-flex flex-column">
+                                        <MudText Color="Color.Primary" Typo="Typo.subtitle2">First Visit</MudText>
+                                        <MudText>@(customer.FirstVisit?.ToString("d MMMM yyyy") ?? "Never")</MudText>
+                                    </div>
+                                </MudListItem>
+                            </MudList>
+                        </MudPaper>
+                    </div>
+
+                    @if (customer.IsBanned)
+                    {
+                        <MudPaper Elevation="0" Class="mt-4 pa-3" Style="background-color: #fff9f9; border: 1px solid #ffcdd2; border-radius: 4px;">
+                            <MudText Typo="Typo.subtitle1" Class="mb-2 d-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Class="mr-2" />
+                                Ban Information
+                            </MudText>
+                            <MudGrid>
+                                <MudItem xs="12" md="4">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Error">Ban Reason</MudText>
+                                    <MudText Typo="Typo.body2">@(customer.BanReason ?? "Not specified")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Error">Banned Date</MudText>
+                                    <MudText Typo="Typo.body2">@(customer.BannedDate?.ToString("d MMMM yyyy") ?? "Unknown")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Error">Banned By</MudText>
+                                    <div class="d-flex align-center mt-1">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                        <MudText Typo="Typo.body2"><strong>@(customer.BannedBy ?? "Unknown")</strong></MudText>
+                                    </div>
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Error">Ban Duration</MudText>
+                                    <MudText Typo="Typo.body2">
+                                        @if (customer.BanExpiryDate.HasValue)
+                                        {
+                                            <span>Until @customer.BanExpiryDate.Value.ToString("d MMMM yyyy")</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Permanent</span>
+                                        }
+                                    </MudText>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+                </MudTabPanel>
+
+                <MudTabPanel Icon="@Icons.Material.Filled.History" Text="RESERVATION HISTORY">
+                    @if (!customer.ReservationHistory.Any())
+                    {
+                        <MudAlert Severity="Severity.Info" Class="my-4">No reservations found for this customer.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="@customer.ReservationHistory" Dense="true" Hover="true" Bordered="true">
+                            <HeaderContent>
+                                <MudTh>Reservation Code</MudTh>
+                                <MudTh>Outlet</MudTh>
+                                <MudTh>Date & Time</MudTh>
+                                <MudTh>Guests</MudTh>
+                                <MudTh>Status</MudTh>
+                                <MudTh>Notes</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Reservation Code">
+                                    <span>@context.ReservationCode</span>
+                                    <MudText Typo="Typo.caption">@context.ReservationId</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Outlet">@context.OutletName</MudTd>
+                                <MudTd DataLabel="Date & Time">
+                                    <div class="d-flex flex-column">
+                                        <span>@context.ReservationDate.ToString("d MMM yyyy")</span>
+                                        <MudText Typo="Typo.caption">@context.ReservationDate.ToString("HH:mm")</MudText>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Guests">@context.GuestCount</MudTd>
+                                <MudTd DataLabel="Status">
+                                    <MudChip Color="@GetReservationStatusColor(context.Status)" Size="Size.Small" T="string">
+                                        @context.Status
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Notes">
+                                    @if (string.IsNullOrEmpty(context.Notes))
+                                    {
+                                        <span class="mud-text-disabled">None</span>
+                                    }
+                                    else
+                                    {
+                                        @context.Notes
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (customer != null && !customer.IsBanned)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="BanCustomer" Class="mr-auto">
+                BAN CUSTOMER
+            </MudButton>
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="Close">CLOSE</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .mud-dialog-content {
+        overflow-y: auto;
+        max-height: 70vh;
+    }
+</style>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string CustomerId { get; set; } = string.Empty;
+    [Parameter] public string CurrentUser { get; set; } = "System";
+
+    private CustomerDto? customer;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomerDetailsAsync();
+    }
+
+    private async Task LoadCustomerDetailsAsync()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            customer = await CustomerService.GetCustomerByIdAsync(CustomerId);
+
+            if (customer == null)
+            {
+                Snackbar.Add("Customer not found", Severity.Error);
+                MudDialog.Close();
+                return;
+            }
+
+            // Load reservation history
+            if (customer.ReservationHistory == null || !customer.ReservationHistory.Any())
+            {
+                var reservations = await CustomerService.GetCustomerReservationsAsync(CustomerId);
+                if (reservations != null)
+                {
+                    customer.ReservationHistory = reservations.Select(r => new ReservationHistoryItem
+                    {
+                        ReservationId = r.ReservationId.ToString(),
+                        ReservationDate = r.Date,
+                        OutletId = r.OutletId.ToString(),
+                        OutletName = r.OutletName,
+                        GuestCount = r.PartySize,
+                        Status = r.Status,
+                        Notes = r.SpecialRequests
+                    }).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading customer details: {ex.Message}", Severity.Error);
+            MudDialog.Close();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Color GetReservationStatusColor(string status)
+    {
+        return status.ToLower() switch
+        {
+            "completed" => Color.Success,
+            "no-show" => Color.Error,
+            "canceled" => Color.Warning,
+            "confirmed" => Color.Info,
+            "pending" => Color.Default,
+            _ => Color.Default
+        };
+    }
+
+    private async Task BanCustomer()
+    {
+        if (customer == null) return;
+
+        var parameters = new DialogParameters
+            {
+                ["Customer"] = customer,
+                ["CurrentUser"] = CurrentUser
+            };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<BanCustomerDialog>("Ban Customer", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadCustomerDetailsAsync();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+} 

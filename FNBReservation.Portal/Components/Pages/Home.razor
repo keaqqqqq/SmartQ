@@ -1,29 +1,115 @@
-﻿@page "/idk"
-@using FNBReservation.Portal.Models
-@using FNBReservation.Portal.Components.Dialogs
+﻿@page "/home"
+@using Microsoft.AspNetCore.Components.Authorization
 @using FNBReservation.Portal.Services
-@inject ISnackbar Snackbar
-@inject IDialogService DialogService
-@inject IStaffService StaffService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject AuthService AuthService
 @rendermode InteractiveServer
 
-<head>
-    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
-</head>
+<PageTitle>Home - SmartQ</PageTitle>
 
-<MudStack>
-    <MudDateRangePicker @ref="_picker" Label="With action buttons" @bind-DateRange="_dateRange"
-                        AutoClose="@_autoClose" PickerVariant="PickerVariant.Dialog">
-        <PickerActions>
-            <MudButton Class="mr-auto align-self-start" OnClick="@(() => _picker.ClearAsync())">Clear</MudButton>
-            <MudButton OnClick="@(() => _picker.CloseAsync(false))">Cancel</MudButton>
-            <MudButton Color="Color.Primary" OnClick="@(() => _picker.CloseAsync())">Ok</MudButton>
-        </PickerActions>
-    </MudDateRangePicker>
-    <MudSwitch @bind-Value="_autoClose" Color="Color.Secondary">AutoClose</MudSwitch>
-</MudStack>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h3" Class="mb-4">Welcome to SmartQ</MudText>
+    
+    <AuthorizeView>
+        <Authorized>
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Hello, @context.User.Identity.Name!</MudText>
+                <MudText Typo="Typo.body1">You are logged in and can access all features of SmartQ.</MudText>
+                
+            </MudPaper>
+        </Authorized>
+        <NotAuthorized>
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Welcome to the SmartQ System</MudText>
+                <MudText Typo="Typo.body1" Class="mb-3">Please log in to access the reservation management features.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => NavigationManager.NavigateTo("/"))">Log In</MudButton>
+            </MudPaper>
+        </NotAuthorized>
+    </AuthorizeView>
+    
+    <MudDivider Class="my-6" />
+    
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Queue Management</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.QueuePlayNext" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Efficiently manage customer queues and optimize wait times for your restaurant.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Table Reservations</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.TableRestaurant" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Handle table reservations with ease and maximize your restaurant's seating capacity.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" md="4">
+            <MudCard Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Customer Management</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Color="Color.Primary" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Keep track of customer preferences and history to provide personalized service.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
 @code {
-    private MudDateRangePicker _picker;
-    private DateRange _dateRange = new DateRange(DateTime.Now.Date, DateTime.Now.AddDays(5).Date);
-    private bool _autoClose;
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try 
+            {
+                await JS.InvokeVoidAsync("console.log", "Home page loaded");
+                
+                // Check authentication state through the service if needed for logging
+                if (AuthService != null)
+                {
+                    var isAuthenticated = await AuthService.IsUserAuthenticated();
+                    await JS.InvokeVoidAsync("console.log", $"Home page auth check: {isAuthenticated}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // This is safe in OnAfterRenderAsync
+                await JS.InvokeVoidAsync("console.error", $"Error in Home page: {ex.Message}");
+            }
+        }
+    }
 }

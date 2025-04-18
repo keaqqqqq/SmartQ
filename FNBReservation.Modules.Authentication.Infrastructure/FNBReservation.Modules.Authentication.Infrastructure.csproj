@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\FNBReservation.Modules.Authentication.Core\FNBReservation.Modules.Authentication.Core.csproj" />
 	<ProjectReference Include="..\FNBReservation.Modules.Outlet.Core\FNBReservation.Modules.Outlet.Core.csproj" />
+	<ProjectReference Include="..\FNBReservation.SharedKernel\FNBReservation.SharedKernel.csproj" />
   </ItemGroup>
 
 </Project>

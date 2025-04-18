@@ -1,12 +1,16 @@
 ﻿@using FNBReservation.Portal.Models
+@using Microsoft.JSInterop
+@using FNBReservation.Portal.Services
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ITableService TableService
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <MudPaper Elevation="0" Class="pa-4">
     <MudText Typo="Typo.subtitle1" Class="mb-4">Tables Configuration</MudText>
 
-    <MudTable Items="@Tables" Dense="true" Hover="true" Bordered="true" Striped="true">
+    <MudTable Items="@Tables" Dense="true" Hover="true" Bordered="true" Striped="true" Loading="@isLoading" LoadingProgressColor="Color.Info">
         <ToolBarContent>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                        OnClick="OpenAddTableDialog" Class="ml-auto">Add Table</MudButton>
@@ -43,105 +47,227 @@
             <MudTablePager />
         </PagerContent>
     </MudTable>
-
-    <MudGrid Class="mt-4">
-        <MudItem xs="12">
-            <MudPaper Elevation="0" Class="pa-4" Style="background-color: #f5f5f5; border-radius: 4px;">
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Add Multiple Tables</MudText>
-                <MudGrid>
-                    <MudItem xs="3">
-                        <MudTextField @bind-Value="bulkSection" Label="Section"
-                                      Variant="Variant.Outlined" Placeholder="Main Dining" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudTextField @bind-Value="bulkPrefix" Label="Table # Prefix"
-                                      Variant="Variant.Outlined" Placeholder="A" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudNumericField @bind-Value="bulkCount" Label="Number of Tables"
-                                         Variant="Variant.Outlined" Min="1" Max="50" />
-                    </MudItem>
-                    <MudItem xs="3">
-                        <MudNumericField @bind-Value="bulkCapacity" Label="Capacity per Table"
-                                         Variant="Variant.Outlined" Min="1" Max="20" />
-                    </MudItem>
-                    <MudItem xs="12">
-                        <MudButton Variant="Variant.Filled" Color="Color.Secondary"
-                                   OnClick="BulkAddTables" FullWidth="false">
-                            Add Tables
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
 </MudPaper>
 
 @code {
     [Parameter] public List<TableInfo> Tables { get; set; } = new List<TableInfo>();
     [Parameter] public EventCallback<List<TableInfo>> TablesChanged { get; set; }
+    [Parameter] public EventCallback<List<TableInfo>> OnTablesUpdated { get; set; }
+    [Parameter] public Guid OutletId { get; set; }
+    [Parameter] public bool UseApiIntegration { get; set; } = true;
 
     private string bulkSection = "Main Dining";
     private string bulkPrefix = "A";
     private int bulkCount = 5;
     private int bulkCapacity = 4;
+    private bool isLoading = false;
+    private bool debugMode = true; // Set to false in production
+
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("console.log", $"TablesEditor initialized: OutletId={OutletId}, UseApiIntegration={UseApiIntegration}");
+        
+        if (UseApiIntegration)
+        {
+            await LoadTables();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("console.log", $"Using local tables (outlet creation mode), count: {Tables?.Count ?? 0}");
+        }
+    }
+
+    private async Task LoadTables()
+    {
+        try
+        {
+            isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Loading tables for outlet: {OutletId}");
+            
+            if (OutletId != Guid.Empty)
+            {
+                Tables = await TableService.GetTablesByOutletIdAsync(OutletId);
+                await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading tables: {ex.Message}");
+            Snackbar.Add($"Error loading tables: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
 
     private async Task OpenAddTableDialog()
     {
+        if (OutletId == Guid.Empty)
+        {
+            Snackbar.Add("No outlet selected. Please select an outlet first.", Severity.Warning);
+            return;
+        }
+
+        var tableId = Guid.NewGuid();
+        await JS.InvokeVoidAsync("console.log", $"Generated new ID for table: {tableId}");
+        
         var newTable = new TableInfo
-            {
-                TableNumber = $"{bulkPrefix}{Tables.Count + 1}",
-                Capacity = 4,
-                Section = "Main Dining",
-                IsActive = true
-            };
+        {
+            Id = tableId,
+            OutletId = OutletId,
+            TableNumber = $"{bulkPrefix}{Tables.Count + 1}",
+            Capacity = 4,
+            Section = "Main Dining",
+            IsActive = true
+        };
 
         var parameters = new DialogParameters
-            {
-                ["Table"] = newTable,
-                ["EditMode"] = false
-            };
+        {
+            ["Table"] = newTable,
+            ["EditMode"] = false
+        };
 
         var dialog = await DialogService.ShowAsync<TableDialog>("Add Table", parameters);
         var result = await dialog.Result;
 
         if (!result.Canceled && result.Data is TableInfo table)
         {
-            Tables.Add(table);
-            await TablesChanged.InvokeAsync(Tables);
-            Snackbar.Add("Table added successfully", Severity.Success);
+            try
+            {
+                await JS.InvokeVoidAsync("console.log", $"Creating new table {table}");
+                
+                if (UseApiIntegration)
+                {
+                    // Create via API
+                    var createRequest = new CreateTableRequest
+                    {
+                        TableNumber = table.TableNumber,
+                        Capacity = table.Capacity,
+                        Section = table.Section,
+                        IsActive = table.IsActive
+                    };
+                    
+                    var createdTable = await TableService.CreateTableAsync(OutletId, createRequest);
+                    Tables.Add(createdTable);
+                }
+                else
+                {
+                    // Just update local state (outlet creation mode)
+                    await JS.InvokeVoidAsync("console.log", $"Adding table locally (outlet creation mode): {table.TableNumber}");
+                    Tables.Add(table);
+                }
+                
+                await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
+                Snackbar.Add("Table added successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error adding table: {ex.Message}");
+                Snackbar.Add($"Error adding table: {ex.Message}", Severity.Error);
+            }
         }
     }
 
     private async Task OpenEditTableDialog(TableInfo tableToEdit)
     {
+        if (OutletId == Guid.Empty)
+        {
+            Snackbar.Add("No outlet selected. Please select an outlet first.", Severity.Warning);
+            return;
+        }
+
         // Create a copy of the table to edit
         var tableCopy = new TableInfo
-            {
-                TableNumber = tableToEdit.TableNumber,
-                Capacity = tableToEdit.Capacity,
-                Section = tableToEdit.Section,
-                IsActive = tableToEdit.IsActive
-            };
+        {
+            Id = tableToEdit.Id,
+            OutletId = tableToEdit.OutletId,
+            TableNumber = tableToEdit.TableNumber,
+            Capacity = tableToEdit.Capacity,
+            Section = tableToEdit.Section,
+            IsActive = tableToEdit.IsActive
+        };
 
         var parameters = new DialogParameters
-            {
-                ["Table"] = tableCopy,
-                ["EditMode"] = true
-            };
+        {
+            ["Table"] = tableCopy,
+            ["EditMode"] = true
+        };
 
         var dialog = await DialogService.ShowAsync<TableDialog>("Edit Table", parameters);
         var result = await dialog.Result;
 
         if (!result.Canceled && result.Data is TableInfo updatedTable)
         {
-            // Remove the old table and add the updated one
-            var index = Tables.IndexOf(tableToEdit);
-            if (index >= 0)
+            try
             {
-                Tables[index] = updatedTable;
+                await JS.InvokeVoidAsync("console.log", $"Updating table: {updatedTable.TableNumber}, ID: {updatedTable.Id}");
+                
+                if (UseApiIntegration)
+                {
+                    // Update via API
+                    var updateRequest = new UpdateTableRequest
+                    {
+                        TableNumber = updatedTable.TableNumber,
+                        Capacity = updatedTable.Capacity,
+                        Section = updatedTable.Section,
+                        IsActive = updatedTable.IsActive
+                    };
+                    
+                    var apiUpdatedTable = await TableService.UpdateTableAsync(OutletId, updatedTable.Id, updateRequest);
+                    
+                    // Update in the local list
+                    var index = Tables.IndexOf(tableToEdit);
+                    if (index >= 0)
+                    {
+                        Tables[index] = apiUpdatedTable;
+                    }
+                }
+                else
+                {
+                    // Just update local state (outlet creation mode)
+                    await JS.InvokeVoidAsync("console.log", $"Updating table locally (outlet creation mode): {updatedTable.TableNumber}");
+                    var index = Tables.IndexOf(tableToEdit);
+                    if (index >= 0)
+                    {
+                        Tables[index] = updatedTable;
+                    }
+                }
+                
                 await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after update");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
                 Snackbar.Add("Table updated successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error updating table: {ex.Message}");
+                Snackbar.Add($"Error updating table: {ex.Message}", Severity.Error);
             }
         }
     }
@@ -149,37 +275,205 @@
     private async Task RemoveTable(TableInfo table)
     {
         var parameters = new DialogParameters
-            {
-                ["ContentText"] = $"Are you sure you want to remove table {table.TableNumber}?",
-                ["ButtonText"] = "Delete",
-                ["Color"] = Color.Error
-            };
+        {
+            ["ContentText"] = $"Are you sure you want to remove table '{table.TableNumber}'?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
 
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Table", parameters);
         var result = await dialog.Result;
 
         if (!result.Canceled)
         {
-            Tables.Remove(table);
-            await TablesChanged.InvokeAsync(Tables);
-            Snackbar.Add("Table removed successfully", Severity.Success);
+            try
+            {
+                await JS.InvokeVoidAsync("console.log", $"Removing table: {table.TableNumber}, ID: {table.Id}");
+                
+                if (UseApiIntegration)
+                {
+                    // Delete via API
+                    await TableService.DeleteTableAsync(OutletId, table.Id);
+                }
+                else
+                {
+                    // Just log in local mode
+                    await JS.InvokeVoidAsync("console.log", $"Removing table locally (outlet creation mode): {table.TableNumber}");
+                }
+                
+                // Remove from local list in both cases
+                Tables.Remove(table);
+                await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
+                
+                // Force immediate refresh in parent components
+                if (UseApiIntegration)
+                {
+                    await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after delete");
+                    await JS.InvokeVoidAsync("eval", @"
+                        if (window.refreshOutletManagement) {
+                            window.refreshOutletManagement();
+                        }
+                    ");
+                }
+                
+                Snackbar.Add("Table removed successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Error removing table: {ex.Message}");
+                Snackbar.Add($"Error removing table: {ex.Message}", Severity.Error);
+            }
         }
     }
 
     private async Task BulkAddTables()
     {
-        var startingNumber = Tables.Count + 1;
-        for (int i = 0; i < bulkCount; i++)
+        if (OutletId == Guid.Empty)
         {
-            Tables.Add(new TableInfo
-                {
-                    TableNumber = $"{bulkPrefix}{startingNumber + i}",
-                    Capacity = bulkCapacity,
-                    Section = bulkSection,
-                    IsActive = true
-                });
+            Snackbar.Add("No outlet selected. Please select an outlet first.", Severity.Warning);
+            return;
         }
-        await TablesChanged.InvokeAsync(Tables);
-        Snackbar.Add($"Added {bulkCount} tables successfully", Severity.Success);
+
+        if (bulkCount <= 0 || string.IsNullOrWhiteSpace(bulkPrefix) || string.IsNullOrWhiteSpace(bulkSection) || bulkCapacity <= 0)
+        {
+            Snackbar.Add("Please fill in all bulk add fields correctly.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            await JS.InvokeVoidAsync("console.log", $"Bulk adding {bulkCount} tables with prefix '{bulkPrefix}' in section '{bulkSection}' with capacity {bulkCapacity}");
+            
+            // Get current highest table number with this prefix for sequential numbering
+            var currentTables = Tables.Where(t => t.TableNumber.StartsWith(bulkPrefix)).ToList();
+            int startNumber = 1;
+            
+            if (currentTables.Any())
+            {
+                var highestNumber = currentTables
+                    .Select(t => int.TryParse(t.TableNumber.Substring(bulkPrefix.Length), out int num) ? num : 0)
+                    .Max();
+                startNumber = highestNumber + 1;
+            }
+            
+            for (int i = 0; i < bulkCount; i++)
+            {
+                string tableNumber = $"{bulkPrefix}{startNumber + i}";
+                await JS.InvokeVoidAsync("console.log", $"Adding table {tableNumber}");
+                
+                if (UseApiIntegration)
+                {
+                    // Create via API
+                    var createRequest = new CreateTableRequest
+                    {
+                        TableNumber = tableNumber,
+                        Capacity = bulkCapacity,
+                        Section = bulkSection,
+                        IsActive = true
+                    };
+                    
+                    try
+                    {
+                        var createdTable = await TableService.CreateTableAsync(OutletId, createRequest);
+                        Tables.Add(createdTable);
+                    }
+                    catch (Exception ex)
+                    {
+                        await JS.InvokeVoidAsync("console.log", $"Error creating table {tableNumber}: {ex.Message}");
+                        // Continue with next table
+                    }
+                }
+                else
+                {
+                    // Add locally (outlet creation mode)
+                    var newTable = new TableInfo
+                    {
+                        Id = Guid.NewGuid(),
+                        OutletId = OutletId,
+                        TableNumber = tableNumber,
+                        Capacity = bulkCapacity,
+                        Section = bulkSection,
+                        IsActive = true
+                    };
+                    
+                    Tables.Add(newTable);
+                    await JS.InvokeVoidAsync("console.log", $"Added table locally: {tableNumber}");
+                }
+            }
+            
+            await TablesChanged.InvokeAsync(Tables);
+            await OnTablesUpdated.InvokeAsync(Tables);
+            
+            // Force immediate refresh in parent components
+            if (UseApiIntegration)
+            {
+                await JS.InvokeVoidAsync("console.log", "Triggering immediate parent refresh after bulk add");
+                await JS.InvokeVoidAsync("eval", @"
+                    if (window.refreshOutletManagement) {
+                        window.refreshOutletManagement();
+                    }
+                ");
+            }
+            
+            Snackbar.Add($"Added {bulkCount} tables successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error in bulk add: {ex.Message}");
+            Snackbar.Add($"Error adding tables: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestApiConnectivity()
+    {
+        try 
+        {
+            await JS.InvokeVoidAsync("console.log", $"Testing API connectivity for outlet: {OutletId}");
+            if (OutletId == Guid.Empty)
+            {
+                Snackbar.Add("No outlet ID specified. Please select an outlet first.", Severity.Warning);
+                return;
+            }
+            
+            Snackbar.Add("Sending test request to API...", Severity.Info);
+            
+            var testTable = new CreateTableRequest
+            {
+                TableNumber = $"TEST-{DateTime.Now.ToString("hhmmss")}",
+                Capacity = 2,
+                Section = "Test Section",
+                IsActive = true
+            };
+            
+            await JS.InvokeVoidAsync("console.log", "Test request payload:", testTable);
+            
+            try
+            {
+                var result = await TableService.CreateTableAsync(OutletId, testTable);
+                await JS.InvokeVoidAsync("console.log", "API test successful. Created table:", result);
+                Snackbar.Add("API connection test successful!", Severity.Success);
+                
+                // Add the test table to the local collection
+                Tables.Add(result);
+                await TablesChanged.InvokeAsync(Tables);
+                await OnTablesUpdated.InvokeAsync(Tables);
+            }
+            catch (Exception ex)
+            {
+                await JS.InvokeVoidAsync("console.log", "API test failed with error:", ex.Message);
+                Snackbar.Add($"API test failed: {ex.Message}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", "Error testing API:", ex.Message);
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
     }
 }

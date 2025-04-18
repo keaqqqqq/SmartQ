@@ -1,18 +1,19 @@
 services:
-  # Database
+  # Primary Database
   mariadb:
     image: mariadb:latest
-    container_name: fb_reservation_db
+    container_name: fb_reservation_db_primary
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${DB_DATABASE:-fb_reservation}
+      MYSQL_DATABASE: ${DB_DATABASE:-fnbreservation}
       MYSQL_USER: ${DB_USERNAME:-fbuser}
       MYSQL_PASSWORD: ${DB_PASSWORD:-fbpassword}
     ports:
       - "${DB_PORT:-3310}:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
+      - ./db/primary:/etc/mysql/conf.d
       - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - fb_reservation_network
@@ -22,29 +23,112 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
 
-  # API
+  # Read Replica Database
+  mariadb-replica:
+    image: mariadb:latest
+    container_name: fb_reservation_db_replica
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-fnbreservation}
+      MYSQL_USER: ${DB_USERNAME:-fbuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fbpassword}
+    ports:
+      - "${DB_REPLICA_PORT:-3311}:3306"
+    volumes:
+      - mariadb_replica_data:/var/lib/mysql
+      - ./db/replica:/etc/mysql/conf.d
+      - ./init-scripts/replica-init.sh:/docker-entrypoint-initdb.d/replica-init.sh
+      - ./init-scripts/restart-replication.sh:/docker-entrypoint-initdb.d/restart-replication.sh
+    networks:
+      - fb_reservation_network
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: --server-id=2 --log-bin=mysql-bin --binlog-format=ROW --read-only=1 --skip-slave-start=0
+
+     # Redis for distributed caching and session state
+  redis:
+    image: redis:alpine
+    container_name: fb_reservation_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fb_reservation_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
       dockerfile: FNBReservation.MainAPI/Dockerfile
-    container_name: fb_reservation_api
     restart: unless-stopped
+    deploy:
+      replicas: ${API_REPLICAS:-2}  # Default to 2 replicas, adjust with environment variable
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     depends_on:
       mariadb:
         condition: service_healthy
-    ports:
-      - "${API_PORT:-5000}:80"
-      - "${API_HTTPS_PORT:-5001}:443"
+      mariadb-replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
-      - ASPNETCORE_URLS=http://+:80; #in production, Obtain a valid SSL certificate
+      - ConnectionStrings__ReadOnlyConnection=Server=mariadb-replica;Port=3306;Database=fnbreservation;User=fbuser;Password=fbpassword
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - ASPNETCORE_URLS=http://+:80
       - WhatsAppApi__Enabled=${WHATSAPP_API_ENABLED:-false}
       - WhatsAppApi__Token=${WHATSAPP_API_TOKEN:-}
       - WhatsAppApi__PhoneNumberId=${WHATSAPP_API_PHONE_ID:-}
+      # Unique identifier for each instance
+      - INSTANCE_ID=api-{{.Task.Slot}}
     networks:
       - fb_reservation_network
+    # Removed direct port mapping since nginx will handle it
+
+      # Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: fb_reservation_loadbalancer
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    ports:
+      - "${API_PORT:-5000}:80"
+      - "${API_HTTPS_PORT:-5001}:443"
+    depends_on:
+      - api
+    networks:
+      - fb_reservation_network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   # Portal
   portal:
@@ -54,12 +138,12 @@ services:
       container_name: fb_reservation_portal
       restart: unless-stopped
       depends_on:
-        - api
+        - nginx
       ports:
         - "${PORTAL_HTTPS_PORT:-5003}:80"
       environment:
         - ASPNETCORE_ENVIRONMENT=${ENVIRONMENT:-Development}
-        - API_BASE_URL=http://api
+        - API_BASE_URL=http://nginx
         - ASPNETCORE_URLS=http://+:80
       networks:
         - fb_reservation_network
@@ -70,4 +154,8 @@ networks:
 
 volumes:
   mariadb_data:
+    driver: local
+  mariadb_replica_data:
+    driver: local
+  redis_data:
     driver: local

@@ -413,7 +413,7 @@
                         Notes = reservation.Notes,
                         Status = reservation.Status,
                         Source = reservation.Source,
-                        Tables = reservation.TableAssignments
+                        Tables = reservation.TableNumbers
                     };
 
                 await LoadTablesForOutlet(reservationModel.OutletId);
@@ -629,40 +629,22 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    public class ReservationFormModel
+    private class ReservationFormModel
     {
         public string OutletId { get; set; } = string.Empty;
-
-        [Required(ErrorMessage = "Date is required")]
-        public DateTime? ReservationDate { get; set; }
-
-        [Required(ErrorMessage = "Time is required")]
-        public TimeSpan? Time { get; set; }
-
-        [Required(ErrorMessage = "Party size is required")]
-        [Range(1, 20, ErrorMessage = "Party size must be between 1 and 20")]
-        public int PartySize { get; set; }
-
-        [Required(ErrorMessage = "Customer name is required")]
+        public DateTime? ReservationDate { get; set; } = DateTime.Now.Date;
+        public TimeSpan? Time { get; set; } = TimeSpan.FromHours(18); // Default to 6:00 PM
+        public int PartySize { get; set; } = 2;
         public string CustomerName { get; set; } = string.Empty;
-
-        [Required(ErrorMessage = "Phone number is required")]
         public string CustomerPhone { get; set; } = string.Empty;
-
-        [EmailAddress(ErrorMessage = "Invalid email format")]
         public string? CustomerEmail { get; set; }
-
         public string? SpecialRequests { get; set; }
-
         public string? Notes { get; set; }
-
-        public List<string> Tables { get; set; } = new List<string>();
-
-        [Required(ErrorMessage = "Status is required")]
         public string Status { get; set; } = "Confirmed";
-
-        [Required(ErrorMessage = "Source is required")]
         public string Source { get; set; } = "Website";
+        
+        // Changed to List<string> for table numbers, not the full TableAssignment objects
+        public List<string> Tables { get; set; } = new List<string>();
     }
 
     public class ModelValidationContext

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQueue } from "../../contexts/QueueContext";
+import OutletService from "../../services/OutletService";
 
 // Reusable Input Component
 const FormInput = ({ label, type, name, value, onChange, required, placeholder, className }) => (
@@ -32,32 +33,81 @@ const QueueForm = () => {
 
     // State for the form
     const [formData, setFormData] = useState({
-        outletId: outletIdFromQR || "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5",
+        outletId: outletIdFromQR || "",
         customerName: "",
         customerPhone: "",
-        customerEmail: "", // Added email field
+        customerEmail: "",
         partySize: 2,
         specialRequests: ""
     });
 
     // State for outlet data
-    const [outlets, setOutlets] = useState([
-        { id: "3f1417c7-ac1f-4cd2-9c42-2a858271c2f5", name: "Main Branch", address: "123 Main Street" },
-        { id: "8a2417c7-bc1f-4cd2-9c42-2a858271c2f5", name: "Downtown Location", address: "456 Center Ave" },
-        { id: "9c3417c7-cc1f-4cd2-9c42-2a858271c2f5", name: "Riverside Branch", address: "789 River Road" }
-    ]);
+    const [outlets, setOutlets] = useState([]);
+    
+    // State for loading outlets
+    const [loadingOutlets, setLoadingOutlets] = useState(true);
+    const [outletError, setOutletError] = useState(null);
 
     // Local state for validation
     const [hasEstimation, setHasEstimation] = useState(false);
+    const [estimationError, setEstimationError] = useState(null);
+
+    // Fetch outlets from the API
+    useEffect(() => {
+        const fetchOutlets = async () => {
+            try {
+                setLoadingOutlets(true);
+                const response = await OutletService.getAllOutlets();
+                if (response && response.data) {
+                    setOutlets(response.data);
+                    
+                    // If no outlet selected yet, select the first one
+                    if (!formData.outletId && response.data.length > 0) {
+                        setFormData(prev => ({
+                            ...prev,
+                            outletId: response.data[0].id
+                        }));
+                    }
+                }
+                setOutletError(null);
+            } catch (error) {
+                console.error("Error fetching outlets:", error);
+                setOutletError("Failed to load restaurants. Please try again later.");
+                
+                // Fallback to mock data if API fails
+                const mockData = OutletService.getMockOutlets();
+                if (mockData && mockData.outlets) {
+                    setOutlets(mockData.outlets);
+                    
+                    // If no outlet selected yet, select the first one
+                    if (!formData.outletId && mockData.outlets.length > 0) {
+                        setFormData(prev => ({
+                            ...prev,
+                            outletId: mockData.outlets[0].id
+                        }));
+                    }
+                }
+            } finally {
+                setLoadingOutlets(false);
+            }
+        };
+
+        fetchOutlets();
+    }, []);
 
     // Get wait time estimation when party size or outlet changes
     useEffect(() => {
         const fetchEstimation = async () => {
+            if (!formData.outletId || !formData.partySize) return;
+            
             try {
+                setEstimationError(null);
                 await getQueueEstimation(formData.outletId, formData.partySize);
                 setHasEstimation(true);
             } catch (error) {
                 console.error("Error fetching estimation:", error);
+                setEstimationError("Failed to get wait time estimation. Please try again.");
+                setHasEstimation(false);
             }
         };
 
@@ -81,10 +131,11 @@ const QueueForm = () => {
 
         try {
             const response = await joinQueue(formData);
-            // Navigate to the queue status page with the queue ID
-            navigate(`/queue/status/${response.id}`);
+            // Navigate to the queue status page with the queue code
+            navigate(`/queue/status/${response.queueCode}`);
         } catch (error) {
             console.error("Error joining queue:", error);
+            // Error is handled by the context
         }
     };
 
@@ -109,6 +160,13 @@ const QueueForm = () => {
                     </div>
                 )}
 
+                {/* Outlet Error Message */}
+                {outletError && (
+                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6" role="alert">
+                        <span className="block sm:inline">{outletError}</span>
+                    </div>
+                )}
+
                 {/* Main Form */}
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                     <h2 className="text-2xl font-bold mb-6">Join Our Queue</h2>
@@ -120,15 +178,25 @@ const QueueForm = () => {
                                 <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="font-medium">Current Wait Time: approximately {queueEstimation.estimatedWaitTime} minutes</span>
+                                <span className="font-medium">Current Wait Time: approximately {queueEstimation.estimatedWaitMinutes || queueEstimation.estimatedWaitTime} minutes</span>
                             </div>
-                            <p className="text-sm">There are currently {queueEstimation.currentQueueLength} parties in the queue.</p>
+                            
+                            {queueEstimation.currentQueueLength && (
+                                <p className="text-sm">There are currently {queueEstimation.currentQueueLength} parties in the queue.</p>
+                            )}
 
                             {queueEstimation.isHighDemand && (
                                 <p className="text-sm text-red-600 mt-2">
                                     This is a busy time with high demand. Wait times may be longer than usual.
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {/* Wait Time Estimation Error */}
+                    {estimationError && (
+                        <div className="mb-6 p-4 rounded-lg bg-yellow-50 border border-yellow-200">
+                            <p className="text-sm text-yellow-800">{estimationError}</p>
                         </div>
                     )}
 
@@ -139,18 +207,27 @@ const QueueForm = () => {
                                 <label htmlFor="outletId" className="block text-sm font-medium text-gray-700 mb-1">
                                     Restaurant <span className="text-red-500">*</span>
                                 </label>
-                                <select
-                                    id="outletId"
-                                    name="outletId"
-                                    value={formData.outletId}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                                    required
-                                >
-                                    {outlets.map(outlet => (
-                                        <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
-                                    ))}
-                                </select>
+                                {loadingOutlets ? (
+                                    <div className="w-full px-3 py-2 border rounded-md bg-gray-100">
+                                        Loading restaurants...
+                                    </div>
+                                ) : (
+                                    <select
+                                        id="outletId"
+                                        name="outletId"
+                                        value={formData.outletId}
+                                        onChange={handleChange}
+                                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        required
+                                    >
+                                        {outlets.length === 0 && (
+                                            <option value="">No restaurants available</option>
+                                        )}
+                                        {outlets.map(outlet => (
+                                            <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
                         )}
 
@@ -158,7 +235,7 @@ const QueueForm = () => {
                         {outletIdFromQR && (
                             <div className="mb-4 bg-gray-50 p-4 rounded-lg">
                                 <p className="text-gray-600">
-                                    <strong>Restaurant:</strong> {outlets.find(o => o.id === outletIdFromQR)?.name || "Selected Restaurant"}
+                                    <strong>Restaurant:</strong> {loadingOutlets ? 'Loading...' : (outlets.find(o => o.id === outletIdFromQR)?.name || "Selected Restaurant")}
                                 </p>
                             </div>
                         )}
@@ -203,64 +280,38 @@ const QueueForm = () => {
                             placeholder="+60 12-345 6789"
                         />
 
-                        {/* New Email Field */}
                         <FormInput
                             label="Email Address"
                             type="email"
                             name="customerEmail"
                             value={formData.customerEmail}
                             onChange={handleChange}
-                            required
                             placeholder="john@example.com"
                         />
 
+                        {/* Special Requests */}
                         <div className="mb-6">
                             <label htmlFor="specialRequests" className="block text-sm font-medium text-gray-700 mb-1">
-                                Special Requests (Optional)
+                                Special Requests
                             </label>
                             <textarea
                                 id="specialRequests"
                                 name="specialRequests"
                                 value={formData.specialRequests}
                                 onChange={handleChange}
-                                placeholder="Any special seating requests or dietary requirements?"
                                 rows="3"
+                                placeholder="Any special requests or preferences..."
                                 className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                             ></textarea>
-                        </div>
-
-                        {/* WhatsApp Notification Consent */}
-                        <div className="mb-6 bg-gray-50 p-4 rounded-lg">
-                            <h3 className="text-md font-medium mb-2">Notifications</h3>
-                            <p className="text-sm text-gray-600 mb-2">
-                                We'll send you WhatsApp notifications to keep you updated about your queue status.
-                                You'll be notified when:
-                            </p>
-                            <ul className="text-sm text-gray-600 list-disc pl-5 mb-2">
-                                <li>Your queue position changes significantly</li>
-                                <li>Your table is almost ready</li>
-                                <li>Your table is ready</li>
-                            </ul>
-                            <p className="text-sm text-gray-600">
-                                Make sure your phone number is correct to receive these updates.
-                            </p>
                         </div>
 
                         {/* Submit Button */}
                         <button
                             type="submit"
+                            className={`w-full py-3 px-4 rounded-md text-white font-semibold ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
                             disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
                         >
-                            {loading ? (
-                                <span className="flex items-center justify-center">
-                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Joining Queue...
-                                </span>
-                            ) : "Join Queue"}
+                            {loading ? 'Joining Queue...' : 'Join Queue'}
                         </button>
                     </form>
                 </div>
