@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FNB Reservation Queue Testing Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background-color: #3f6ad8;
+            color: white;
+            padding: 20px;
+            border-radius: 8px 8px 0 0;
+            margin-bottom: 0;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .tab-container {
+            display: flex;
+            background-color: #dde2eb;
+            border-left: 1px solid #cfd8dc;
+            border-right: 1px solid #cfd8dc;
+        }
+        .tab {
+            padding: 15px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom-color: #3f6ad8;
+        }
+        .tab:hover:not(.active) {
+            background-color: #e9ecef;
+        }
+        .connection-panel {
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #cfd8dc;
+            margin-bottom: 20px;
+            border-radius: 0 0 8px 8px;
+        }
+        .content-panel {
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #cfd8dc;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .panel-section {
+            display: none;
+            width: 100%;
+        }
+        .panel-section.active {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .form-column {
+            flex: 1;
+            min-width: 300px;
+            padding-right: 20px;
+        }
+        .result-column {
+            flex: 1;
+            min-width: 300px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+        button {
+            background-color: #3f6ad8;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2952b3;
+        }
+        button:disabled {
+            background-color: #a9b6d3;
+            cursor: not-allowed;
+        }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-container {
+            margin-top: 20px;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .log-header {
+            background-color: #e9ecef;
+            padding: 10px 15px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-header button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        #log {
+            height: 300px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .timestamp {
+            color: #6c757d;
+            margin-right: 8px;
+        }
+        .event-title {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .api-event {
+            color: #007bff;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .result-container {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .result-header {
+            font-weight: 600;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        code {
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .connection-cards {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .connection-card {
+            flex: 1;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .card-header {
+            font-weight: 600;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .sub-tab {
+            display: none;
+        }
+        .sub-tab.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>FNB Reservation Queue Testing Client</h1>
+        </div>
+        
+        <!-- SignalR Connection Panel -->
+        <div class="connection-panel">
+            <h2>SignalR Connection</h2>
+            <div class="connection-cards">
+                <div class="connection-card">
+                    <div class="card-header">Connection Status</div>
+                    <div id="connectionStatus" class="status disconnected">Disconnected</div>
+                    <div class="button-group">
+                        <button id="connectButton" onclick="connectToHub()">Connect</button>
+                        <button id="disconnectButton" onclick="disconnectFromHub()">Disconnect</button>
+                    </div>
+                </div>
+                
+                <div class="connection-card">
+                    <div class="card-header">Join Outlet Group</div>
+                    <div class="form-group">
+                        <label for="outletIdInput">Outlet ID:</label>
+                        <input id="outletIdInput" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                    </div>
+                    <button onclick="joinOutletGroup(event)">Join Outlet Group</button>
+                </div>
+                
+                <div class="connection-card">
+                    <div class="card-header">Register for Queue Updates</div>
+                    <div class="form-group">
+                        <label for="queueCodeInput">Queue Code:</label>
+                        <input id="queueCodeInput" placeholder="e.g. Q001">
+                    </div>
+                    <button onclick="registerQueueEntry(event)">Register for Updates</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <div class="tab active" onclick="showTab('customerPanel', event)">Customer Endpoints</div>
+            <div class="tab" onclick="showTab('staffPanel', event)">Staff Endpoints</div>
+            <div class="tab" onclick="showTab('adminPanel', event)">Admin Endpoints</div>
+            <div class="tab" onclick="showTab('queueManagementPanel', event)">Queue Management</div>
+        </div>
+        
+        <!-- Content Panel -->
+        <div class="content-panel">
+            <!-- Customer Endpoints Panel -->
+            <div id="customerPanel" class="panel-section active">
+                <div class="form-column">
+                    <h2>Customer Queue Operations</h2>
+                    
+                    <div class="tab-container" style="margin-bottom: 20px;">
+                        <div class="tab active" onclick="showSubTab('createQueueTab', event)">Create Entry</div>
+                        <div class="tab" onclick="showSubTab('updateQueueTab', event)">Update Entry</div>
+                        <div class="tab" onclick="showSubTab('getQueueEntryTab', event)">Get Entry</div>
+                        <div class="tab" onclick="showSubTab('getWaitTimeTab', event)">Get Wait Time</div>
+                        <div class="tab" onclick="showSubTab('exitQueueTab', event)">Exit Queue</div>
+                    </div>
+                    
+                    <!-- Create Queue Entry Form -->
+                    <div id="createQueueTab" class="sub-tab active">
+                        <h3>Create Queue Entry</h3>
+                        <div class="form-group">
+                            <label for="createOutletId">Outlet ID:</label>
+                            <input id="createOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="customerName">Customer Name:</label>
+                            <input id="customerName" placeholder="e.g. John Smith">
+                        </div>
+                        <div class="form-group">
+                            <label for="customerPhone">Customer Phone:</label>
+                            <input id="customerPhone" placeholder="e.g. +12345678901">
+                        </div>
+                        <div class="form-group">
+                            <label for="partySize">Party Size:</label>
+                            <input id="partySize" type="number" min="1" max="50" value="2">
+                        </div>
+                        <div class="form-group">
+                            <label for="specialRequests">Special Requests:</label>
+                            <textarea id="specialRequests" placeholder="Any special requests"></textarea>
+                        </div>
+                        <button onclick="createQueueEntry()">Create Queue Entry</button>
+                    </div>
+                    
+                    <!-- Update Queue Entry Form -->
+                    <div id="updateQueueTab" class="sub-tab">
+                        <h3>Update Queue Entry</h3>
+                        <div class="form-group">
+                            <label for="updateQueueCode">Queue Code:</label>
+                            <input id="updateQueueCode" placeholder="e.g. Q001">
+                        </div>
+                        <div class="form-group">
+                            <label for="updateCustomerName">Customer Name (Optional):</label>
+                            <input id="updateCustomerName" placeholder="e.g. John Smith">
+                        </div>
+                        <div class="form-group">
+                            <label for="updateCustomerPhone">Customer Phone (Optional):</label>
+                            <input id="updateCustomerPhone" placeholder="e.g. +12345678901">
+                        </div>
+                        <div class="form-group">
+                            <label for="updatePartySize">Party Size (Optional):</label>
+                            <input id="updatePartySize" type="number" min="1" max="50" placeholder="Leave empty to keep current value">
+                        </div>
+                        <div class="form-group">
+                            <label for="updateSpecialRequests">Special Requests (Optional):</label>
+                            <textarea id="updateSpecialRequests" placeholder="Any special requests"></textarea>
+                        </div>
+                        <button onclick="updateQueueEntry()">Update Queue Entry</button>
+                    </div>
+                    
+                    <!-- Get Queue Entry Form -->
+                    <div id="getQueueEntryTab" class="sub-tab">
+                        <h3>Get Queue Entry</h3>
+                        <div class="form-group">
+                            <label for="getQueueCode">Queue Code:</label>
+                            <input id="getQueueCode" placeholder="e.g. Q001">
+                        </div>
+                        <button onclick="getQueueEntryByCode()">Get Queue Entry</button>
+                    </div>
+                    
+                    <!-- Get Wait Time Form -->
+                    <div id="getWaitTimeTab" class="sub-tab">
+                        <h3>Get Estimated Wait Time</h3>
+                        <div class="form-group">
+                            <label for="waitTimeOutletId">Outlet ID:</label>
+                            <input id="waitTimeOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="waitTimePartySize">Party Size:</label>
+                            <input id="waitTimePartySize" type="number" min="1" max="50" value="2">
+                        </div>
+                        <button onclick="getEstimatedWaitTime()">Get Wait Time</button>
+                    </div>
+                    
+                    <!-- Exit Queue Form -->
+                    <div id="exitQueueTab" class="sub-tab">
+                        <h3>Exit Queue</h3>
+                        <div class="form-group">
+                            <label for="exitQueueCode">Queue Code:</label>
+                            <input id="exitQueueCode" placeholder="e.g. Q001">
+                        </div>
+                        <button onclick="exitQueue()">Exit Queue</button>
+                    </div>
+                </div>
+                
+                <div class="result-column">
+                    <div class="result-container">
+                        <div class="result-header">API Response</div>
+                        <div id="customerApiResult">
+                            <code>No results yet. Submit a request to see the response.</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Staff Endpoints Panel -->
+            <div id="staffPanel" class="panel-section">
+                <div class="form-column">
+                    <h2>Staff Queue Operations</h2>
+                    
+                    <div class="tab-container" style="margin-bottom: 20px;">
+                        <div class="tab active" onclick="showSubTab('getQueueEntriesTab', event)">Get Entries</div>
+                        <div class="tab" onclick="showSubTab('callNextTab', event)">Call Next</div>
+                        <div class="tab" onclick="showSubTab('assignTableTab', event)">Assign Table</div>
+                        <div class="tab" onclick="showSubTab('tableRecommendationTab', event)">Table Recommendation</div>
+                        <div class="tab" onclick="showSubTab('statusUpdateTab', event)">Status Updates</div>
+                    </div>
+                    
+                    <!-- Get Queue Entries Form -->
+                    <div id="getQueueEntriesTab" class="sub-tab active">
+                        <h3>Get Queue Entries</h3>
+                        <div class="form-group">
+                            <label for="listOutletId">Outlet ID:</label>
+                            <input id="listOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="listType">List Type:</label>
+                            <select id="listType">
+                                <option value="all">All Entries</option>
+                                <option value="waiting">Waiting Entries Only</option>
+                                <option value="held">Held Entries Only</option>
+                                <option value="summary">Queue Summary</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="filtersGroup">
+                            <label for="statusFilter">Status Filter (comma-separated):</label>
+                            <input id="statusFilter" placeholder="e.g. Waiting,Called,Seated">
+                            <label for="searchTerm">Search Term:</label>
+                            <input id="searchTerm" placeholder="Search by name, phone, or queue code">
+                            <label for="pageNumber">Page Number:</label>
+                            <input id="pageNumber" type="number" min="1" value="1">
+                            <label for="pageSize">Page Size:</label>
+                            <input id="pageSize" type="number" min="1" max="100" value="20">
+                        </div>
+                        <button onclick="getQueueEntries()">Get Queue Entries</button>
+                    </div>
+                    
+                    <!-- Call Next Customer Form -->
+                    <div id="callNextTab" class="sub-tab">
+                        <h3>Call Next Customer</h3>
+                        <div class="form-group">
+                            <label for="callNextOutletId">Outlet ID:</label>
+                            <input id="callNextOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="callNextTableId">Table ID:</label>
+                            <input id="callNextTableId" placeholder="e.g. 87654321-4321-4321-4321-210987654321">
+                        </div>
+                        <button onclick="callNextCustomer()">Call Next Customer</button>
+                    </div>
+                    
+                    <!-- Assign Table Form -->
+                    <div id="assignTableTab" class="sub-tab">
+                        <h3>Assign Table</h3>
+                        <div class="form-group">
+                            <label for="assignOutletId">Outlet ID:</label>
+                            <input id="assignOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="assignQueueEntryId">Queue Entry ID:</label>
+                            <input id="assignQueueEntryId" placeholder="e.g. 12345678-1234-1234-1234-123456789012">
+                        </div>
+                        <div class="form-group">
+                            <label for="assignTableId">Table ID:</label>
+                            <input id="assignTableId" placeholder="e.g. 87654321-4321-4321-4321-210987654321">
+                        </div>
+                        <button onclick="assignTable()">Assign Table</button>
+                    </div>
+                    
+                    <!-- Table Recommendation Form -->
+                    <div id="tableRecommendationTab" class="sub-tab">
+                        <h3>Get Table Recommendation</h3>
+                        <div class="form-group">
+                            <label for="recommendOutletId">Outlet ID:</label>
+                            <input id="recommendOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="recommendTableId">Table ID:</label>
+                            <input id="recommendTableId" placeholder="e.g. 87654321-4321-4321-4321-210987654321">
+                        </div>
+                        <button onclick="getTableRecommendation()">Get Recommendation</button>
+                    </div>
+                    
+                    <!-- Status Updates Form -->
+                    <div id="statusUpdateTab" class="sub-tab">
+                        <h3>Update Queue Entry Status</h3>
+                        <div class="form-group">
+                            <label for="statusOutletId">Outlet ID:</label>
+                            <input id="statusOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                        </div>
+                        <div class="form-group">
+                            <label for="statusQueueEntryId">Queue Entry ID:</label>
+                            <input id="statusQueueEntryId" placeholder="e.g. 12345678-1234-1234-1234-123456789012">
+                        </div>
+                        <div class="form-group">
+                            <label for="statusAction">Action:</label>
+                            <select id="statusAction">
+                                <option value="seated">Mark as Seated</option>
+                                <option value="completed">Mark as Completed</option>
+                                <option value="no-show">Mark as No Show</option>
+                                <option value="cancel">Cancel Entry</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cancelReasonGroup">
+                            <label for="cancelReason">Reason:</label>
+                            <textarea id="cancelReason" placeholder="Reason for cancellation"></textarea>
+                        </div>
+                        <button onclick="updateStatus()">Update Status</button>
+                    </div>
+                </div>
+                
+                <div class="result-column">
+                    <div class="result-container">
+                        <div class="result-header">API Response</div>
+                        <div id="staffApiResult">
+                            <code>No results yet. Submit a request to see the response.</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Admin Endpoints Panel -->
+            <div id="adminPanel" class="panel-section">
+                <div class="form-column">
+                    <h2>Admin Queue Operations</h2>
+                    
+                    <div class="form-group">
+                        <label for="adminOutletId">Outlet ID:</label>
+                        <input id="adminOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                    </div>
+                    
+                    <div class="tab-container" style="margin-bottom: 20px;">
+                        <div class="tab active" onclick="showSubTab('adminSummaryTab', event)">Queue Summary</div>
+                        <div class="tab" onclick="showSubTab('adminListTab', event)">List All Entries</div>
+                        <div class="tab" onclick="showSubTab('adminDeleteTab', event)">Delete Entry</div>
+                    </div>
+                    
+                    <!-- Admin Summary Tab -->
+                    <div id="adminSummaryTab" class="sub-tab active">
+                        <h3>Get Queue Summary</h3>
+                        <button onclick="getAdminQueueSummary()">Get Summary</button>
+                    </div>
+                    
+                    <!-- Admin List Tab -->
+                    <div id="adminListTab" class="sub-tab">
+                        <h3>List All Queue Entries</h3>
+                        <div class="form-group">
+                            <label for="adminStatusFilter">Status Filter (comma-separated):</label>
+                            <input id="adminStatusFilter" placeholder="e.g. Waiting,Called,Seated">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminSearchTerm">Search Term:</label>
+                            <input id="adminSearchTerm" placeholder="Search by name, phone, or queue code">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminPageNumber">Page Number:</label>
+                            <input id="adminPageNumber" type="number" min="1" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminPageSize">Page Size:</label>
+                            <input id="adminPageSize" type="number" min="1" max="100" value="20">
+                        </div>
+                        <button onclick="getAllQueueEntries()">Get All Entries</button>
+                    </div>
+                    
+                    <!-- Admin Delete Tab -->
+                    <div id="adminDeleteTab" class="sub-tab">
+                        <h3>Delete Queue Entry</h3>
+                        <div class="form-group">
+                            <label for="deleteQueueEntryId">Queue Entry ID:</label>
+                            <input id="deleteQueueEntryId" placeholder="e.g. 12345678-1234-1234-1234-123456789012">
+                        </div>
+                        <button onclick="deleteQueueEntry()">Delete Entry</button>
+                    </div>
+                </div>
+                
+                <div class="result-column">
+                    <div class="result-container">
+                        <div class="result-header">API Response</div>
+                        <div id="adminApiResult">
+                            <code>No results yet. Submit a request to see the response.</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Queue Management Panel -->
+            <div id="queueManagementPanel" class="panel-section">
+                <div class="form-column">
+                    <h2>Queue Management Operations</h2>
+                    <div class="form-group">
+                        <label for="queueMgmtOutletId">Outlet ID:</label>
+                        <input id="queueMgmtOutletId" placeholder="e.g. 3f1417c7-ac1f-4cd2-9c42-2a858271c2f5">
+                    </div>
+                    
+                    <div class="tab-container" style="margin-bottom: 20px;">
+                        <div class="tab active" onclick="showSubTab('reorderQueueTab', event)">Reorder Queue</div>
+                        <div class="tab" onclick="showSubTab('updateWaitTimesTab', event)">Update Wait Times</div>
+                        <div class="tab" onclick="showSubTab('prioritizeHeldTab', event)">Prioritize Held Entry</div>
+                    </div>
+                    
+                    <!-- Reorder Queue Tab -->
+                    <div id="reorderQueueTab" class="sub-tab active">
+                        <h3>Reorder Queue</h3>
+                        <p>This will reorder the queue for the specified outlet based on the priority rules.</p>
+                        <button onclick="reorderQueue()">Reorder Queue</button>
+                    </div>
+                    
+                    <!-- Update Wait Times Tab -->
+                    <div id="updateWaitTimesTab" class="sub-tab">
+                        <h3>Update Wait Times</h3>
+                        <p>This will recalculate the estimated wait times for all customers in the queue.</p>
+                        <button onclick="updateWaitTimes()">Update Wait Times</button>
+                    </div>
+                    
+                    <!-- Prioritize Held Entry Tab -->
+                    <div id="prioritizeHeldTab" class="sub-tab">
+                        <h3>Prioritize Held Entry</h3>
+                        <div class="form-group">
+                            <label for="prioritizeQueueEntryId">Queue Entry ID:</label>
+                            <input id="prioritizeQueueEntryId" placeholder="e.g. 12345678-1234-1234-1234-123456789012">
+                        </div>
+                        <button onclick="prioritizeHeldEntry()">Prioritize Entry</button>
+                    </div>
+                </div>
+                
+                <div class="result-column">
+                    <div class="result-container">
+                        <div class="result-header">API Response</div>
+                        <div id="queueMgmtApiResult">
+                            <code>No results yet. Submit a request to see the response.</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Event Log -->
+        <div class="log-container">
+            <div class="log-header">
+                <span>Event Log</span>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const apiBaseUrl = "http://localhost:5000/api/v1";
+        // You can replace this with your actual token or get it dynamically
+        let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIzYTEyYzk3OS1jNWFmLTRlNjYtYTgxOS0zMzE1MWEzZWI0MDMiLCJ1bmlxdWVfbmFtZSI6ImtlYSBxaXUyIiwiZW1haWwiOiJrZWFxaXUyQGdtYWlsLmNvbSIsInJvbGUiOiJPdXRsZXRTdGFmZiIsIlVzZXJJZCI6IlNUQUZGRUZDMkM3MUEiLCJPdXRsZXRJZCI6IjNmMTQxN2M3LWFjMWYtNGNkMi05YzQyLTJhODU4MjcxYzJmNSIsIm5iZiI6MTc0NDg3OTMzOCwiZXhwIjoxNzQ0ODgwMjM4LCJpYXQiOjE3NDQ4NzkzMzgsImlzcyI6IkZOQlJlc2VydmF0aW9uU3lzdGVtIiwiYXVkIjoiRk5CUmVzZXJ2YXRpb25DbGllbnRzIn0.p2B-KxG2t688mQqSpWLLCD2nF2otb1UYLkFhXF9LL-c";
+        
+        // SignalR Connection
+        let connection;
+        
+        // Logging Functions
+        function log(message, type = "") {
+            try {
+                const logElement = document.getElementById('log');
+                if (!logElement) {
+                    console.error("Log element not found");
+                    return;
+                }
+                
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                
+                if (type === "error") {
+                    logEntry.className += ' error';
+                    logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="error">ERROR:</span> ${message}`;
+                } else {
+                    logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+                }
+                
+                // Add new entry at the top
+                logElement.insertBefore(logEntry, logElement.firstChild);
+                
+                // Log to console too
+                const consoleMsg = `[${timestamp}] ${message.replace(/<\/?[^>]+(>|$)/g, "")}`;
+                if (type === "error") {
+                    console.error(consoleMsg);
+                } else {
+                    console.log(consoleMsg);
+                }
+            } catch (error) {
+                console.error("Error in logging function:", error);
+            }
+        }
+        
+        function clearLog() {
+            try {
+                const logElement = document.getElementById('log');
+                if (logElement) {
+                    logElement.innerHTML = '';
+                    console.clear();
+                }
+            } catch (error) {
+                console.error("Error clearing log:", error);
+            }
+        }
+        
+        function updateConnectionStatus(status, isConnected = false, isError = false) {
+            try {
+                const statusElement = document.getElementById('connectionStatus');
+                if (!statusElement) return;
+                
+                statusElement.textContent = status;
+                
+                statusElement.className = 'status ';
+                if (isConnected) {
+                    statusElement.className += 'connected';
+                    document.getElementById('connectButton').disabled = true;
+                    document.getElementById('disconnectButton').disabled = false;
+                } else if (isError) {
+                    statusElement.className += 'disconnected';
+                    document.getElementById('connectButton').disabled = false;
+                    document.getElementById('disconnectButton').disabled = true;
+                } else {
+                    statusElement.className += 'connecting';
+                    document.getElementById('connectButton').disabled = true;
+                    document.getElementById('disconnectButton').disabled = false;
+                }
+            } catch (error) {
+                console.error("Error updating connection status:", error);
+            }
+        }
+        
+        function showApiResult(elementId, result, isSuccess = true) {
+            try {
+                const element = document.getElementById(elementId);
+                if (!element) {
+                    console.error(`Result element not found: ${elementId}`);
+                    return;
+                }
+                
+                if (typeof result === 'object') {
+                    result = JSON.stringify(result, null, 2);
+                }
+                
+                element.innerHTML = `<code class="${isSuccess ? 'success' : 'error'}">${result}</code>`;
+            } catch (error) {
+                console.error("Error showing API result:", error);
+            }
+        }
+        
+        // UI Helper Functions
+        function showTab(tabId, event) {
+            try {
+                // Hide all panel sections
+                document.querySelectorAll('.panel-section').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+                
+                // Deactivate all tabs
+                document.querySelectorAll('.tab-container > .tab').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                
+                // Show the selected panel
+                const targetPanel = document.getElementById(tabId);
+                if (!targetPanel) {
+                    console.error(`Target panel not found: ${tabId}`);
+                    return;
+                }
+                targetPanel.classList.add('active');
+                
+                // Activate the clicked tab
+                if (event && event.currentTarget) {
+                    event.currentTarget.classList.add('active');
+                } else if (event === undefined) {
+                    // If event is not passed, find the tab by related ID and make it active
+                    const tabElement = document.querySelector(`.tab[onclick*="${tabId}"]`);
+                    if (tabElement) {
+                        tabElement.classList.add('active');
+                    }
+                }
+            } catch (error) {
+                console.error("Error in showTab:", error);
+            }
+        }
+        
+        function showSubTab(tabId, event) {
+            try {
+                // Find the parent section
+                let parent;
+                if (event && event.currentTarget) {
+                    parent = event.currentTarget.closest('.panel-section');
+                } else {
+                    // If event is not passed, find parent by the tabId
+                    const targetTab = document.getElementById(tabId);
+                    if (targetTab) {
+                        parent = targetTab.closest('.panel-section');
+                    }
+                }
+                
+                if (parent) {
+                    // Hide all sub-tabs in this section
+                    parent.querySelectorAll('.sub-tab').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    
+                    // Deactivate all tab buttons in this section
+                    parent.querySelectorAll('.tab-container .tab').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    
+                    // Show the selected sub-tab
+                    const targetSubTab = document.getElementById(tabId);
+                    if (targetSubTab) {
+                        targetSubTab.classList.add('active');
+                    } else {
+                        console.error(`Target sub-tab not found: ${tabId}`);
+                        return;
+                    }
+                    
+                    // Activate the clicked tab button
+                    if (event && event.currentTarget) {
+                        event.currentTarget.classList.add('active');
+                    } else if (event === undefined) {
+                        // Find the tab button by related ID and make it active
+                        const tabButton = parent.querySelector(`.tab[onclick*="${tabId}"]`);
+                        if (tabButton) {
+                            tabButton.classList.add('active');
+                        }
+                    }
+                    
+                    // Handle special cases
+                    handleSpecialTabCases(tabId);
+                }
+            } catch (error) {
+                console.error("Error in showSubTab:", error);
+            }
+        }
+        
+        function handleSpecialTabCases(tabId) {
+            // Special case for filters group
+            if (tabId === 'getQueueEntriesTab') {
+                const filtersGroup = document.getElementById('filtersGroup');
+                if (filtersGroup) {
+                    filtersGroup.style.display = 'block';
+                }
+            } else {
+                const filtersGroup = document.getElementById('filtersGroup');
+                if (filtersGroup) {
+                    filtersGroup.style.display = 'none';
+                }
+            }
+            
+            // Special case for cancel reason group
+            if (tabId === 'statusUpdateTab') {
+                const statusAction = document.getElementById('statusAction');
+                const cancelReasonGroup = document.getElementById('cancelReasonGroup');
+                
+                if (statusAction && cancelReasonGroup) {
+                    // Setup event listener if not already done
+                    if (!statusAction.hasAttribute('data-listener-attached')) {
+                        statusAction.addEventListener('change', function() {
+                            cancelReasonGroup.style.display = 
+                                this.value === 'cancel' ? 'block' : 'none';
+                        });
+                        statusAction.setAttribute('data-listener-attached', 'true');
+                    }
+                    
+                    // Set initial visibility
+                    cancelReasonGroup.style.display = 
+                        statusAction.value === 'cancel' ? 'block' : 'none';
+                }
+            }
+        }
+        
+        // SignalR Connection Functions
+        function connectToHub() {
+            if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                log("Already connected to hub!");
+                return;
+            }
+            
+            if (connection) {
+                // If connection exists but in different state, stop it first
+                connection.stop().then(() => {
+                    log("Previous connection stopped");
+                    initializeConnection();
+                }).catch(err => {
+                    log(`Error stopping previous connection: ${err}`);
+                    initializeConnection();
+                });
+            } else {
+                initializeConnection();
+            }
+        }
+        
+        function initializeConnection() {
+            log("Creating SignalR connection...");
+            updateConnectionStatus("Connecting...");
+            
+            // Create the connection
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(`http://localhost:5000/queuehub?access_token=${token}`, {
+                    skipNegotiation: true,
+                    transport: signalR.HttpTransportType.WebSockets
+                })
+                .withAutomaticReconnect([0, 2000, 5000, 10000, 30000]) // Retry with increasing delays
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+                
+            // Set up event handlers
+            connection.on("QueueUpdated", () => {
+                log(`<span class="event-title">EVENT: QueueUpdated</span> - Queue has been updated`);
+            });
+            
+            connection.on("StatusUpdated", (data) => {
+                log(`<span class="event-title">EVENT: StatusUpdated</span> - ${JSON.stringify(data)}`);
+            });
+            
+            connection.on("TableReady", (data) => {
+                log(`<span class="event-title">EVENT: TableReady</span> - ${JSON.stringify(data)}`);
+            });
+            
+            // Set up connection lifecycle events
+            connection.onreconnecting(error => {
+                log(`Connection lost. Reconnecting: ${error ? error.message : "Unknown error"}`);
+                updateConnectionStatus("Reconnecting...");
+            });
+            
+            connection.onreconnected(connectionId => {
+                log(`Reconnected with ID: ${connectionId}`);
+                updateConnectionStatus("Connected", true);
+                
+                // Rejoin groups after reconnect
+                const outletId = document.getElementById("outletIdInput").value;
+                if (outletId) {
+                    connection.invoke("JoinOutletGroup", outletId)
+                        .catch(err => log(`Error rejoining outlet group: ${err}`));
+                }
+                
+                const queueCode = document.getElementById("queueCodeInput").value;
+                if (queueCode) {
+                    connection.invoke("RegisterQueueEntry", queueCode)
+                        .catch(err => log(`Error re-registering queue entry: ${err}`));
+                }
+            });
+            
+            connection.onclose(error => {
+                log(`Connection closed: ${error ? error.message : "No error"}`);
+                updateConnectionStatus("Disconnected", false, true);
+                connection = null;
+            });
+            
+            // Start the connection
+            log("Starting connection...");
+            connection.start()
+                .then(() => {
+                    log(`Connected to SignalR hub. Connection ID: ${connection.connectionId}`);
+                    updateConnectionStatus("Connected", true);
+                })
+                .catch(err => {
+                    log(`Connection error: ${err}`);
+                    updateConnectionStatus("Connection Failed", false, true);
+                    connection = null;
+                });
+        }
+        
+        function disconnectFromHub() {
+            if (!connection) {
+                log("Not connected!", "error");
+                updateConnectionStatus("Disconnected", false, true);
+                return;
+            }
+            
+            log("Disconnecting from SignalR hub...");
+            updateConnectionStatus("Disconnecting...");
+            
+            connection.stop()
+                .then(() => {
+                    log("Disconnected successfully");
+                    updateConnectionStatus("Disconnected", false, true);
+                    connection = null;
+                })
+                .catch(err => {
+                    log(`Error disconnecting: ${err}`, "error");
+                    updateConnectionStatus("Disconnection Error", false, true);
+                    // Force reset connection state
+                    connection = null;
+                });
+        }
+        
+        function joinOutletGroup(event) {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log("Not connected to hub! Please connect first.", "error");
+                return;
+            }
+            
+            const outletId = document.getElementById("outletIdInput").value;
+            if (!outletId) {
+                log("Please enter an Outlet ID", "error");
+                return;
+            }
+            
+            log(`Joining outlet group: ${outletId}`);
+            
+            connection.invoke("JoinOutletGroup", outletId)
+                .then(() => {
+                    log("Successfully joined outlet group");
+                    // Copy to other outlet ID fields
+                    document.querySelectorAll('input[id$="OutletId"]').forEach(input => {
+                        input.value = outletId;
+                    });
+                })
+                .catch(err => {
+                    log(`Error joining outlet group: ${err}`, "error");
+                });
+        }
+        
+        function registerQueueEntry(event) {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log("Not connected to hub! Please connect first.", "error");
+                return;
+            }
+            
+            const queueCode = document.getElementById("queueCodeInput").value;
+            if (!queueCode) {
+                log("Please enter a Queue Code", "error");
+                return;
+            }
+            
+            log(`Registering for queue entry updates: ${queueCode}`);
+            
+            connection.invoke("RegisterQueueEntry", queueCode)
+                .then(() => {
+                    log("Successfully registered for queue entry updates");
+                    // Update relevant fields
+                    document.getElementById("updateQueueCode").value = queueCode;
+                    document.getElementById("getQueueCode").value = queueCode;
+                    document.getElementById("exitQueueCode").value = queueCode;
+                })
+                .catch(err => {
+                    log(`Error registering for queue entry: ${err}`, "error");
+                });
+        }
+        
+        // API Helper Function
+        async function makeApiRequest(url, method, body = null) {
+            try {
+                log(`<span class="api-event">API REQUEST:</span> ${method} ${url}`, "api");
+                if (body) {
+                    log(`<span class="api-event">REQUEST BODY:</span> ${JSON.stringify(body)}`, "api");
+                }
+                
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                };
+                
+                const options = {
+                    method: method,
+                    headers: headers,
+                    mode: 'cors' // Explicitly set CORS mode
+                };
+                
+                if (body && (method === 'POST' || method === 'PUT')) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(url, options);
+                
+                // Try to parse JSON, but handle if response is not JSON
+                let data;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    data = await response.json();
+                } else {
+                    data = await response.text();
+                    try {
+                        // See if text is actually JSON
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        // Keep as text if not JSON
+                    }
+                }
+                
+                log(`<span class="api-event">API RESPONSE:</span> Status ${response.status} ${response.statusText}`, "api");
+                log(`<span class="api-event">RESPONSE BODY:</span> ${typeof data === 'object' ? JSON.stringify(data) : data}`, "api");
+                
+                return {
+                    success: response.ok,
+                    status: response.status,
+                    data: data
+                };
+            } catch (error) {
+                log(`<span class="api-event">API ERROR:</span> ${error.message}`, "api");
+                return {
+                    success: false,
+                    status: 0,
+                    error: error.message
+                };
+            }
+        }
+        
+        // Customer Endpoints
+        async function createQueueEntry() {
+            const outletId = document.getElementById("createOutletId").value;
+            const customerName = document.getElementById("customerName").value;
+            const customerPhone = document.getElementById("customerPhone").value;
+            const partySize = parseInt(document.getElementById("partySize").value);
+            const specialRequests = document.getElementById("specialRequests").value;
+            
+            if (!outletId || !customerName || !customerPhone || isNaN(partySize)) {
+                showApiResult("customerApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const body = {
+                outletId: outletId,
+                customerName: customerName,
+                customerPhone: customerPhone,
+                partySize: partySize,
+                specialRequests: specialRequests
+            };
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/queue`, 'POST', body);
+            
+            if (result.success) {
+                showApiResult("customerApiResult", result.data);
+                // Update queue code field
+                if (result.data.queueCode) {
+                    document.getElementById("queueCodeInput").value = result.data.queueCode;
+                    document.getElementById("updateQueueCode").value = result.data.queueCode;
+                    document.getElementById("getQueueCode").value = result.data.queueCode;
+                    document.getElementById("exitQueueCode").value = result.data.queueCode;
+                }
+            } else {
+                showApiResult("customerApiResult", result.error || "Failed to create queue entry", false);
+            }
+        }
+        
+        async function updateQueueEntry() {
+            const queueCode = document.getElementById("updateQueueCode").value;
+            const customerName = document.getElementById("updateCustomerName").value;
+            const customerPhone = document.getElementById("updateCustomerPhone").value;
+            const partySize = document.getElementById("updatePartySize").value ? 
+                parseInt(document.getElementById("updatePartySize").value) : null;
+            const specialRequests = document.getElementById("updateSpecialRequests").value;
+            
+            if (!queueCode) {
+                showApiResult("customerApiResult", "Please enter a Queue Code", false);
+                return;
+            }
+            
+            const body = {};
+            if (customerName) body.customerName = customerName;
+            if (customerPhone) body.customerPhone = customerPhone;
+            if (partySize !== null) body.partySize = partySize;
+            if (specialRequests !== null) body.specialRequests = specialRequests;
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/queue/${queueCode}`, 'PUT', body);
+            
+            if (result.success) {
+                showApiResult("customerApiResult", result.data);
+            } else {
+                showApiResult("customerApiResult", result.error || "Failed to update queue entry", false);
+            }
+        }
+        
+        async function getQueueEntryByCode() {
+            const queueCode = document.getElementById("getQueueCode").value;
+            
+            if (!queueCode) {
+                showApiResult("customerApiResult", "Please enter a Queue Code", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/queue/code/${queueCode}`, 'GET');
+            
+            if (result.success) {
+                showApiResult("customerApiResult", result.data);
+            } else {
+                showApiResult("customerApiResult", result.error || "Failed to get queue entry", false);
+            }
+        }
+        
+        async function getEstimatedWaitTime() {
+            const outletId = document.getElementById("waitTimeOutletId").value;
+            const partySize = document.getElementById("waitTimePartySize").value;
+            
+            if (!outletId || !partySize) {
+                showApiResult("customerApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/queue/wait-time/${outletId}/${partySize}`, 'GET');
+            
+            if (result.success) {
+                showApiResult("customerApiResult", result.data);
+            } else {
+                showApiResult("customerApiResult", result.error || "Failed to get estimated wait time", false);
+            }
+        }
+        
+        async function exitQueue() {
+            const queueCode = document.getElementById("exitQueueCode").value;
+            
+            if (!queueCode) {
+                showApiResult("customerApiResult", "Please enter a Queue Code", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/queue/exit/${queueCode}`, 'POST');
+            
+            if (result.success) {
+                showApiResult("customerApiResult", result.data);
+            } else {
+                showApiResult("customerApiResult", result.error || "Failed to exit queue", false);
+            }
+        }
+        
+        // Staff Endpoints
+        async function getQueueEntries() {
+            const outletId = document.getElementById("listOutletId").value;
+            const listType = document.getElementById("listType").value;
+            
+            if (!outletId) {
+                showApiResult("staffApiResult", "Please enter an Outlet ID", false);
+                return;
+            }
+            
+            let url;
+            let queryParams = [];
+            
+            switch (listType) {
+                case 'waiting':
+                    url = `${apiBaseUrl}/outlets/${outletId}/queue/waiting`;
+                    break;
+                case 'held':
+                    url = `${apiBaseUrl}/outlets/${outletId}/queue/held`;
+                    break;
+                case 'summary':
+                    url = `${apiBaseUrl}/outlets/${outletId}/queue/summary`;
+                    break;
+                default: // all
+                    url = `${apiBaseUrl}/outlets/${outletId}/queue`;
+                    
+                    // Add filters for 'all' type
+                    const statusFilter = document.getElementById("statusFilter").value;
+                    const searchTerm = document.getElementById("searchTerm").value;
+                    const pageNumber = document.getElementById("pageNumber").value;
+                    const pageSize = document.getElementById("pageSize").value;
+                    
+                    if (statusFilter) {
+                        const statuses = statusFilter.split(',').map(s => s.trim());
+                        statuses.forEach(status => {
+                            queryParams.push(`statuses=${encodeURIComponent(status)}`);
+                        });
+                    }
+                    
+                    if (searchTerm) {
+                        queryParams.push(`searchTerm=${encodeURIComponent(searchTerm)}`);
+                    }
+                    
+                    if (pageNumber) {
+                        queryParams.push(`page=${encodeURIComponent(pageNumber)}`);
+                    }
+                    
+                    if (pageSize) {
+                        queryParams.push(`pageSize=${encodeURIComponent(pageSize)}`);
+                    }
+            }
+            
+            if (queryParams.length > 0) {
+                url += `?${queryParams.join('&')}`;
+            }
+            
+            const result = await makeApiRequest(url, 'GET');
+            
+            if (result.success) {
+                showApiResult("staffApiResult", result.data);
+            } else {
+                showApiResult("staffApiResult", result.error || "Failed to get queue entries", false);
+            }
+        }
+        
+        async function callNextCustomer() {
+            const outletId = document.getElementById("callNextOutletId").value;
+            const tableId = document.getElementById("callNextTableId").value;
+            
+            if (!outletId || !tableId) {
+                showApiResult("staffApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const body = {
+                tableId: tableId
+            };
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/call-next`, 'POST', body);
+            
+            if (result.success) {
+                showApiResult("staffApiResult", result.data);
+                // Update queue entry ID field if needed
+                if (result.data && result.data.id) {
+                    document.getElementById("statusQueueEntryId").value = result.data.id;
+                }
+            } else {
+                showApiResult("staffApiResult", result.error || "Failed to call next customer", false);
+            }
+        }
+        
+        async function assignTable() {
+            const outletId = document.getElementById("assignOutletId").value;
+            const queueEntryId = document.getElementById("assignQueueEntryId").value;
+            const tableId = document.getElementById("assignTableId").value;
+            
+            if (!outletId || !queueEntryId || !tableId) {
+                showApiResult("staffApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const body = {
+                queueEntryId: queueEntryId,
+                tableId: tableId
+            };
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/assign-table`, 'POST', body);
+            
+            if (result.success) {
+                showApiResult("staffApiResult", result.data);
+                // Update queue entry ID field if needed
+                document.getElementById("statusQueueEntryId").value = queueEntryId;
+            } else {
+                showApiResult("staffApiResult", result.error || "Failed to assign table", false);
+            }
+        }
+        
+        async function getTableRecommendation() {
+            const outletId = document.getElementById("recommendOutletId").value;
+            const tableId = document.getElementById("recommendTableId").value;
+            
+            if (!outletId || !tableId) {
+                showApiResult("staffApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/table-recommendation/${tableId}`, 'GET');
+            
+            if (result.success) {
+                showApiResult("staffApiResult", result.data);
+                // Update assign table fields if needed
+                if (result.data && result.data.queueEntryId && result.data.tableId) {
+                    document.getElementById("assignOutletId").value = outletId;
+                    document.getElementById("assignQueueEntryId").value = result.data.queueEntryId;
+                    document.getElementById("assignTableId").value = result.data.tableId;
+                }
+            } else {
+                showApiResult("staffApiResult", result.error || "Failed to get table recommendation", false);
+            }
+        }
+        
+        async function updateStatus() {
+            const outletId = document.getElementById("statusOutletId").value;
+            const queueEntryId = document.getElementById("statusQueueEntryId").value;
+            const statusAction = document.getElementById("statusAction").value;
+            
+            if (!outletId || !queueEntryId) {
+                showApiResult("staffApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            let url = `${apiBaseUrl}/outlets/${outletId}/queue/${queueEntryId}`;
+            let body = null;
+            
+            switch (statusAction) {
+                case 'seated':
+                    url += '/seated';
+                    break;
+                case 'completed':
+                    url += '/completed';
+                    break;
+                case 'no-show':
+                    url += '/no-show';
+                    break;
+                case 'cancel':
+                    url += '/cancel';
+                    const reason = document.getElementById("cancelReason").value;
+                    if (!reason) {
+                        showApiResult("staffApiResult", "Please provide a reason for cancellation", false);
+                        return;
+                    }
+                    body = { reason: reason };
+                    break;
+            }
+            
+            const result = await makeApiRequest(url, 'POST', body);
+            
+            if (result.success) {
+                showApiResult("staffApiResult", result.data);
+            } else {
+                showApiResult("staffApiResult", result.error || `Failed to update status to ${statusAction}`, false);
+            }
+        }
+        
+        // Admin Endpoints
+        async function getAdminQueueSummary() {
+            const outletId = document.getElementById("adminOutletId").value;
+            
+            if (!outletId) {
+                showApiResult("adminApiResult", "Please enter an Outlet ID", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/admin/queue/summary/${outletId}`, 'GET');
+            
+            if (result.success) {
+                showApiResult("adminApiResult", result.data);
+            } else {
+                showApiResult("adminApiResult", result.error || "Failed to get queue summary", false);
+            }
+        }
+        
+        async function getAllQueueEntries() {
+            const outletId = document.getElementById("adminOutletId").value;
+            
+            if (!outletId) {
+                showApiResult("adminApiResult", "Please enter an Outlet ID", false);
+                return;
+            }
+            
+            let queryParams = [];
+            const statusFilter = document.getElementById("adminStatusFilter").value;
+            const searchTerm = document.getElementById("adminSearchTerm").value;
+            const pageNumber = document.getElementById("adminPageNumber").value;
+            const pageSize = document.getElementById("adminPageSize").value;
+            
+            if (statusFilter) {
+                const statuses = statusFilter.split(',').map(s => s.trim());
+                statuses.forEach(status => {
+                    queryParams.push(`statuses=${encodeURIComponent(status)}`);
+                });
+            }
+            
+            if (searchTerm) {
+                queryParams.push(`searchTerm=${encodeURIComponent(searchTerm)}`);
+            }
+            
+            if (pageNumber) {
+                queryParams.push(`page=${encodeURIComponent(pageNumber)}`);
+            }
+            
+            if (pageSize) {
+                queryParams.push(`pageSize=${encodeURIComponent(pageSize)}`);
+            }
+            
+            let url = `${apiBaseUrl}/admin/queue/all/${outletId}`;
+            if (queryParams.length > 0) {
+                url += `?${queryParams.join('&')}`;
+            }
+            
+            const result = await makeApiRequest(url, 'GET');
+            
+            if (result.success) {
+                showApiResult("adminApiResult", result.data);
+            } else {
+                showApiResult("adminApiResult", result.error || "Failed to get all queue entries", false);
+            }
+        }
+        
+        async function deleteQueueEntry() {
+            const outletId = document.getElementById("adminOutletId").value;
+            const queueEntryId = document.getElementById("deleteQueueEntryId").value;
+            
+            if (!outletId || !queueEntryId) {
+                showApiResult("adminApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/admin/queue/${queueEntryId}`, 'DELETE');
+            
+            if (result.success) {
+                showApiResult("adminApiResult", result.data);
+            } else {
+                showApiResult("adminApiResult", result.error || "Failed to delete queue entry", false);
+            }
+        }
+        
+        // Queue Management Endpoints
+        async function reorderQueue() {
+            const outletId = document.getElementById("queueMgmtOutletId").value;
+            
+            if (!outletId) {
+                showApiResult("queueMgmtApiResult", "Please enter an Outlet ID", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/reorder`, 'POST');
+            
+            if (result.success) {
+                showApiResult("queueMgmtApiResult", result.data);
+            } else {
+                showApiResult("queueMgmtApiResult", result.error || "Failed to reorder queue", false);
+            }
+        }
+        
+        async function updateWaitTimes() {
+            const outletId = document.getElementById("queueMgmtOutletId").value;
+            
+            if (!outletId) {
+                showApiResult("queueMgmtApiResult", "Please enter an Outlet ID", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/update-wait-times`, 'POST');
+            
+            if (result.success) {
+                showApiResult("queueMgmtApiResult", result.data);
+            } else {
+                showApiResult("queueMgmtApiResult", result.error || "Failed to update wait times", false);
+            }
+        }
+        
+        async function prioritizeHeldEntry() {
+            const outletId = document.getElementById("queueMgmtOutletId").value;
+            const queueEntryId = document.getElementById("prioritizeQueueEntryId").value;
+            
+            if (!outletId || !queueEntryId) {
+                showApiResult("queueMgmtApiResult", "Please fill in all required fields", false);
+                return;
+            }
+            
+            const result = await makeApiRequest(`${apiBaseUrl}/outlets/${outletId}/queue/${queueEntryId}/prioritize`, 'POST');
+            
+            if (result.success) {
+                showApiResult("queueMgmtApiResult", result.data);
+            } else {
+                showApiResult("queueMgmtApiResult", result.error || "Failed to prioritize held entry", false);
+            }
+        }
+        
+        // Initialize UI and event listeners on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                log("Initializing application...");
+                
+                // Initialize UI elements
+                document.querySelectorAll('select, input, textarea').forEach(element => {
+                    if (element.id) {
+                        console.log(`Initializing element: ${element.id}`);
+                    }
+                });
+                
+                // Initialize for statusAction select
+                const statusAction = document.getElementById('statusAction');
+                if (statusAction) {
+                    statusAction.addEventListener('change', function() {
+                        const cancelReasonGroup = document.getElementById('cancelReasonGroup');
+                        if (cancelReasonGroup) {
+                            cancelReasonGroup.style.display = 
+                                this.value === 'cancel' ? 'block' : 'none';
+                        }
+                    });
+                }
+                
+                // Initialize for listType select
+                const listType = document.getElementById('listType');
+                if (listType) {
+                    listType.addEventListener('change', function() {
+                        const filtersGroup = document.getElementById('filtersGroup');
+                        if (filtersGroup) {
+                            filtersGroup.style.display = 
+                                this.value === 'all' ? 'block' : 'none';
+                        }
+                    });
+                }
+                
+                // Set initial visibility states
+                const cancelReasonGroup = document.getElementById('cancelReasonGroup');
+                if (cancelReasonGroup) {
+                    cancelReasonGroup.style.display = 'none';
+                }
+                
+                // Set initial button states
+                document.getElementById('disconnectButton').disabled = true;
+                
+                log("Application initialized successfully");
+            } catch (error) {
+                log(`Error during initialization: ${error.message}`, "error");
+                console.error("Initialization error:", error);
+            }
+        });
+    </script>
+</body>
+</html>
