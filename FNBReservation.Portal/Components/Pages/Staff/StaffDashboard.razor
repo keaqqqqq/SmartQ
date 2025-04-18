@@ -536,7 +536,7 @@
                                                                 }
                                                                 <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
                                                                            Class="quick-action-btn" Size="Size.Small"
-                                                                           OnClick="@(() => RemoveFromQueue(_waitingQueue.FindIndex(q => q.QueueId == queueInfo.QueueId)))">
+                                                                               OnClick="@(() => HandleCancel(queueInfo.QueueId))">
                                                                     Cancel
                                                                 </MudButton>
                                                             </div>
@@ -1170,14 +1170,27 @@
 
     private async Task RemoveFromQueue(int queueIndex)
     {
-        if (queueIndex < 0 || queueIndex >= _waitingQueue.Count) return;
+        if (queueIndex < 0 || queueIndex >= _waitingQueue.Count) 
+        {
+            Snackbar.Add("Invalid queue entry", Severity.Error);
+            return;
+        }
         
         var queueEntry = _waitingQueue[queueIndex];
         
         try
         {
+            // Show loading message
+            Snackbar.Add("Processing cancellation...", Severity.Info);
+            
             // Use outletId as fallback if outletUUID is empty
             var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            if (string.IsNullOrEmpty(effectiveOutletId))
+            {
+                Snackbar.Add("Error: Outlet ID not found", Severity.Error);
+                return;
+            }
             
             await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {effectiveOutletId}, queueId: {queueEntry.QueueId}, reason: No-show");
             
@@ -1189,7 +1202,12 @@
                 // If API call successful, remove from local list and notify
                 _waitingQueue.RemoveAt(queueIndex);
                 Snackbar.Add($"{queueEntry.CustomerName} has been removed from the queue.", Severity.Success);
-                StateHasChanged();
+                
+                // Force refresh of the component
+                await InvokeAsync(StateHasChanged);
+                
+                // Refresh the queue data to ensure consistency
+                await LoadQueueData();
             }
             else
             {
@@ -1667,6 +1685,91 @@
         catch (Exception ex)
         {
             await JS.InvokeVoidAsync("console.log", $"Error marking as seated: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleCancel(string queueId)
+    {
+        try
+        {
+            // Show loading message
+            Snackbar.Add("Processing cancellation...", Severity.Info);
+            
+            // Use outletId as fallback if outletUUID is empty
+            var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
+            
+            if (string.IsNullOrEmpty(effectiveOutletId))
+            {
+                Snackbar.Add("Error: Outlet ID not found", Severity.Error);
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(queueId))
+            {
+                Snackbar.Add("Error: Queue ID not found", Severity.Error);
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {effectiveOutletId}, queueId: {queueId}, reason: No-show");
+            
+            // Call API to cancel queue entry with the "No-show" reason
+            bool success = await QueueService.CancelQueueEntryAsync(effectiveOutletId, queueId, "No-show");
+            
+            if (success)
+            {
+                // Find the table this customer was assigned to
+                string assignedTableId = null;
+                foreach (var kvp in _queueTableOccupancy)
+                {
+                    if (kvp.Value.QueueId == queueId)
+                    {
+                        assignedTableId = kvp.Key;
+                        break;
+                    }
+                }
+                
+                // Remove from occupancy tracking
+                if (assignedTableId != null)
+                {
+                    _queueTableOccupancy.Remove(assignedTableId);
+                    
+                    // Update the persistence service
+                    TableOccupancyService.MarkTableAsAvailable(effectiveOutletId, assignedTableId);
+                    
+                    // Update table status to available
+                    var tableInfo = _queueTables.FirstOrDefault(t => t.TableId == assignedTableId);
+                    if (tableInfo != null)
+                    {
+                        tableInfo.Status = "available";
+                        await JS.InvokeVoidAsync("console.log", $"Marked table {tableInfo.TableNumber} as available");
+                    }
+                }
+                
+                // Remove from waiting queue if still present
+                int queueIndex = _waitingQueue.FindIndex(q => q.QueueId == queueId);
+                if (queueIndex >= 0)
+                {
+                    _waitingQueue.RemoveAt(queueIndex);
+                    await JS.InvokeVoidAsync("console.log", $"Removed cancelled customer from waiting queue");
+                }
+                
+                Snackbar.Add("Customer has been removed from the queue and table", Severity.Success);
+                
+                // Update UI immediately
+                StateHasChanged();
+                
+                // Load only queue data to update status
+                await LoadQueueData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to remove customer from queue", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error removing from queue: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
     }
