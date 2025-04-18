@@ -16,6 +16,12 @@ namespace FNBReservation.Portal.Services
     {
         Task<List<QueueEntryDto>> GetWaitingQueueByOutletIdAsync(string outletId);
         Task<bool> CancelQueueEntryAsync(string outletId, string queueId, string reason = "No-show");
+        Task<QueueEntryDto> CallNextInQueueAsync(string outletId, string tableId);
+        Task<List<TableRecommendationDto>> GetTableRecommendationsAsync(string outletId, string queueId);
+        Task<bool> AssignTableToQueueAsync(string outletId, string queueId, string tableId);
+        Task<bool> MarkQueueAsSeatedAsync(string outletId, string queueId);
+        Task<bool> MarkQueueAsCompletedAsync(string outletId, string queueId);
+        Task<List<TableTypeInfo>> GetQueueTablesAsync(string outletId);
     }
     
     public class QueueService : IQueueService
@@ -182,6 +188,221 @@ namespace FNBReservation.Portal.Services
             {
                 _logger?.LogError(ex, $"Failed to cancel queue entry {queueId} for outlet {outletId}");
                 return false;
+            }
+        }
+
+        public async Task<QueueEntryDto> CallNextInQueueAsync(string outletId, string tableId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/call-next";
+                _logger?.LogInformation($"Calling next in queue: {url} with tableId: {tableId}");
+                
+                // Create JSON content with tableId
+                var content = new StringContent(
+                    JsonSerializer.Serialize(new { tableId = tableId }), 
+                    System.Text.Encoding.UTF8, 
+                    "application/json");
+                
+                var response = await _httpClient.PostAsync(url, content);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return null;
+                }
+                
+                try
+                {
+                    var queueEntry = await response.Content.ReadFromJsonAsync<QueueEntryDto>();
+                    _logger?.LogInformation($"Successfully called next queue entry: ID={queueEntry?.QueueId}, Customer={queueEntry?.CustomerName}");
+                    return queueEntry;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed to deserialize queue entry response");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to call next in queue for outlet {outletId}");
+                return null;
+            }
+        }
+
+        public async Task<List<TableRecommendationDto>> GetTableRecommendationsAsync(string outletId, string queueId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/table-recommendation/{queueId}";
+                _logger?.LogInformation($"Getting table recommendations: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return new List<TableRecommendationDto>();
+                }
+                
+                try
+                {
+                    var recommendations = await response.Content.ReadFromJsonAsync<List<TableRecommendationDto>>();
+                    _logger?.LogInformation($"Successfully retrieved {recommendations?.Count ?? 0} table recommendations");
+                    return recommendations ?? new List<TableRecommendationDto>();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed to deserialize table recommendations response");
+                    return new List<TableRecommendationDto>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to get table recommendations for queue {queueId} in outlet {outletId}");
+                return new List<TableRecommendationDto>();
+            }
+        }
+
+        public async Task<bool> AssignTableToQueueAsync(string outletId, string queueId, string tableId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/assign-table";
+                _logger?.LogInformation($"Assigning table to queue: {url}");
+                
+                var content = new StringContent(
+                    JsonSerializer.Serialize(new { queueId = queueId, tableId = tableId }), 
+                    System.Text.Encoding.UTF8, 
+                    "application/json");
+                
+                var response = await _httpClient.PostAsync(url, content);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return false;
+                }
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to assign table {tableId} to queue {queueId} for outlet {outletId}");
+                return false;
+            }
+        }
+
+        public async Task<bool> MarkQueueAsSeatedAsync(string outletId, string queueId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/{queueId}/seated";
+                _logger?.LogInformation($"Marking queue as seated: {url}");
+                
+                var response = await _httpClient.PostAsync(url, null);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return false;
+                }
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to mark queue {queueId} as seated for outlet {outletId}");
+                return false;
+            }
+        }
+
+        public async Task<bool> MarkQueueAsCompletedAsync(string outletId, string queueId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/{queueId}/completed";
+                _logger?.LogInformation($"Marking queue as completed: {url}");
+                
+                var response = await _httpClient.PostAsync(url, null);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return false;
+                }
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to mark queue {queueId} as completed for outlet {outletId}");
+                return false;
+            }
+        }
+
+        public async Task<List<TableTypeInfo>> GetQueueTablesAsync(string outletId)
+        {
+            try
+            {
+                await EnsureAuthorizationHeaderAsync();
+                
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/table-types/queue";
+                _logger?.LogInformation($"Fetching queue tables from: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"API returned error: {errorContent}");
+                    return new List<TableTypeInfo>();
+                }
+                
+                try
+                {
+                    var tables = await response.Content.ReadFromJsonAsync<List<TableTypeInfo>>();
+                    _logger?.LogInformation($"Successfully retrieved {tables?.Count ?? 0} queue tables");
+                    return tables ?? new List<TableTypeInfo>();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed to deserialize queue tables response");
+                    return new List<TableTypeInfo>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to get queue tables for outlet {outletId}");
+                return new List<TableTypeInfo>();
             }
         }
     }

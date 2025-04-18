@@ -1,0 +1,118 @@
+@inject IJSRuntime JS
+@using MudBlazor.Utilities
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-2">Table Recommendations</MudText>
+        
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Recommended tables for @CustomerName:
+        </MudText>
+        
+        <MudPaper Elevation="0" Class="mb-3 pa-3" Style="background-color: #f5f5f5; border-radius: 8px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Best matches based on party size and availability:</MudText>
+            
+            @foreach (var recommendation in Recommendations.OrderByDescending(r => r.RecommendationScore))
+            {
+                <MudPaper Elevation="2" Class="mb-2 pa-3 rounded-lg" Style="@($"cursor: pointer; border-left: 4px solid {GetScoreColorHex(recommendation.RecommendationScore)}; background-color: {(SelectedTableId == recommendation.TableId ? "#e3f2fd" : "white")}")"
+                         @onclick="@(() => SelectTable(recommendation.TableId))">
+                    <div class="d-flex justify-space-between align-center">
+                        <div>
+                            <MudText Typo="Typo.h6">Table @recommendation.TableNumber</MudText>
+                            <MudText Typo="Typo.caption" Class="d-flex align-center mt-1">
+                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
+                                Capacity: @recommendation.Capacity seats
+                            </MudText>
+                            @if (!string.IsNullOrEmpty(recommendation.Location))
+                            {
+                                <MudText Typo="Typo.caption" Class="d-flex align-center mt-1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Class="mr-1" />
+                                    @recommendation.Location
+                                </MudText>
+                            }
+                            <MudText Typo="Typo.caption" Class="mt-2">
+                                @recommendation.MatchReason
+                            </MudText>
+                        </div>
+                        <div>
+                            <MudChip Color="@GetScoreColor(recommendation.RecommendationScore)" Size="Size.Small" Label="true" T="string">
+                                @(Math.Round(recommendation.RecommendationScore * 100))% Match
+                            </MudChip>
+                        </div>
+                    </div>
+                </MudPaper>
+            }
+        </MudPaper>
+        
+        @if (Recommendations.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="my-2">No table recommendations available</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit" Variant="Variant.Filled" Color="Color.Primary" 
+                   Disabled="@(string.IsNullOrEmpty(SelectedTableId))">
+            Assign Selected Table
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter] public List<TableRecommendationDto> Recommendations { get; set; } = new List<TableRecommendationDto>();
+    [Parameter] public string QueueId { get; set; }
+    [Parameter] public string CustomerName { get; set; } = "Customer";
+    
+    private string SelectedTableId { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("console.log", $"TableRecommendationsDialog initialized with {Recommendations.Count} recommendations");
+        
+        if (Recommendations.Count > 0)
+        {
+            // Auto-select the highest scoring recommendation
+            var highestScore = Recommendations.OrderByDescending(r => r.RecommendationScore).FirstOrDefault();
+            if (highestScore != null)
+            {
+                SelectedTableId = highestScore.TableId;
+                await JS.InvokeVoidAsync("console.log", $"Auto-selected table with highest score: {highestScore.TableNumber} ({highestScore.RecommendationScore * 100}%)");
+            }
+        }
+    }
+    
+    private void SelectTable(string tableId)
+    {
+        SelectedTableId = tableId;
+    }
+    
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(SelectedTableId));
+    }
+    
+    private Color GetScoreColor(double score)
+    {
+        if (score >= 0.8) return Color.Success;
+        if (score >= 0.6) return Color.Primary;
+        if (score >= 0.4) return Color.Info;
+        if (score >= 0.2) return Color.Warning;
+        return Color.Error;
+    }
+    
+    private string GetScoreColorHex(double score)
+    {
+        if (score >= 0.8) return "#2e7d32";
+        if (score >= 0.6) return "#1976d2";
+        if (score >= 0.4) return "#0288d1";
+        if (score >= 0.2) return "#ff9800";
+        return "#d32f2f";
+    }
+} 

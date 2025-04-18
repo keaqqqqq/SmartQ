@@ -57,8 +57,14 @@ namespace FNBReservation.Portal.Models
         [JsonPropertyName("heldSince")]
         public DateTime? HeldSince { get; set; }
         
+        [JsonPropertyName("assignedTableId")]
+        public string AssignedTableId { get; set; }
+        
         [JsonPropertyName("tableAssignments")]
         public List<QueueTableAssignment> TableAssignments { get; set; } = new List<QueueTableAssignment>();
+        
+        [JsonIgnore]
+        public string AssignedTableNumber => TableAssignments?.Count > 0 ? TableAssignments[0].TableNumber : string.Empty;
     }
 
     public class QueueTableAssignment
