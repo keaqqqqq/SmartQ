@@ -33,6 +33,9 @@ namespace FNBReservation.Portal.Services
         Task<List<CustomerDto>> GetOutletBannedCustomersAsync(string outletId, string? searchTerm = null);
         Task<CustomerDto?> GetOutletCustomerByIdAsync(string outletId, string customerId);
         Task<List<ApiReservation>> GetOutletCustomerReservationsAsync(string outletId, string customerId);
+        
+        // New admin-specific method for getting customer reservations
+        Task<List<ApiReservation>> GetCustomerReservationsAsync(string customerId);
     }
 
     public class MockCustomerService : ICustomerService
@@ -308,6 +311,38 @@ namespace FNBReservation.Portal.Services
                 SpecialRequests = r.Notes
             }).ToList();
             
+            return Task.FromResult(reservations);
+        }
+
+        public Task<List<ApiReservation>> GetCustomerReservationsAsync(string customerId)
+        {
+            // For mock data, we'll return a list of sample reservations
+            var reservations = new List<ApiReservation>
+            {
+                new ApiReservation
+                {
+                    ReservationId = Guid.NewGuid(),
+                    ReservationCode = "RES-001",
+                    Date = DateTime.Now.AddDays(-7),
+                    OutletId = Guid.NewGuid(),
+                    OutletName = "Main Restaurant",
+                    PartySize = 4,
+                    Status = "Completed",
+                    SpecialRequests = "Window seat preferred"
+                },
+                new ApiReservation
+                {
+                    ReservationId = Guid.NewGuid(),
+                    ReservationCode = "RES-002",
+                    Date = DateTime.Now.AddDays(-14),
+                    OutletId = Guid.NewGuid(),
+                    OutletName = "Main Restaurant",
+                    PartySize = 2,
+                    Status = "Completed",
+                    SpecialRequests = "Quiet table"
+                }
+            };
+
             return Task.FromResult(reservations);
         }
 

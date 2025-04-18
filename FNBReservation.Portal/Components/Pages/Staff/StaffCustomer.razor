@@ -170,9 +170,6 @@
                                 <MudStack Row="true">
                                     <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info"
                                                    OnClick="@(() => ViewCustomerDetails(customer))" />
-
-                                    <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error"
-                                                   OnClick="@(() => OpenBanCustomerDialog(customer))" />
                                 </MudStack>
                             </MudTd>
                         </RowTemplate>
@@ -331,7 +328,7 @@
         };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<CustomerDetailsDialog>("Customer Details", parameters, options);
+        var dialog = await DialogService.ShowAsync<StaffCustomerDetailsDialog>("Customer Details", parameters, options);
         var result = await dialog.Result;
 
         // Refresh data after dialog is closed in case any changes were made

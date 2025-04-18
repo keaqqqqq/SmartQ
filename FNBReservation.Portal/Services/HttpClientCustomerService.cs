@@ -140,6 +140,7 @@ namespace FNBReservation.Portal.Services
             {
                 await LogToConsoleAsync("log", $"Getting customer by ID: {customerId}");
                 
+                // Changed from outlet-specific endpoint to admin endpoint
                 string url = $"{_baseUrl}/api/v1/admin/customers/{customerId}";
                 await LogToConsoleAsync("log", $"Calling API URL: {url}");
                 
@@ -1091,6 +1092,26 @@ namespace FNBReservation.Portal.Services
             return 0;
         }
 
+        private Guid GetGuidProperty(JsonElement element, params string[] possibleNames)
+        {
+            foreach (var name in possibleNames)
+            {
+                if (element.TryGetProperty(name, out var prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.String && 
+                        Guid.TryParse(prop.GetString(), out var guid))
+                    {
+                        return guid;
+                    }
+                    else if (prop.TryGetGuid(out var g))
+                    {
+                        return g;
+                    }
+                }
+            }
+            return Guid.Empty;
+        }
+
         public async Task<CustomerDto?> GetOutletCustomerByIdAsync(string outletId, string customerId)
         {
             try
@@ -1318,6 +1339,55 @@ namespace FNBReservation.Portal.Services
             public int DurationDays { get; set; }
             public DateTime? EndsAt { get; set; }
             public string BannedByName { get; set; } = string.Empty;
+        }
+
+        public async Task<List<ApiReservation>> GetCustomerReservationsAsync(string customerId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"/api/v1/admin/customers/{customerId}/reservations");
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+                var root = JsonDocument.Parse(content).RootElement;
+
+                var reservations = new List<ApiReservation>();
+                
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in root.EnumerateArray())
+                    {
+                        try
+                        {
+                            var date = GetDateTimeProperty(element, "date", "reservationDate", "reservation_date");
+                            var reservation = new ApiReservation
+                            {
+                                ReservationId = GetGuidProperty(element, "id", "reservationId", "reservation_id"),
+                                ReservationCode = GetStringProperty(element, "code", "reservationCode", "reservation_code"),
+                                Date = date ?? DateTime.MinValue,
+                                OutletId = GetGuidProperty(element, "outletId", "outlet_id"),
+                                OutletName = GetStringProperty(element, "outletName", "outlet_name"),
+                                PartySize = GetIntProperty(element, "partySize", "party_size", "guests"),
+                                Status = GetStringProperty(element, "status"),
+                                SpecialRequests = GetStringProperty(element, "specialRequests", "special_requests", "notes")
+                            };
+                            
+                            reservations.Add(reservation);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error parsing reservation: {ex.Message}");
+                        }
+                    }
+                }
+
+                return reservations;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting customer reservations: {ex.Message}");
+                return new List<ApiReservation>();
+            }
         }
     }
 } 

@@ -1,4 +1,4 @@
-﻿@using FNBReservation.Portal.Models
+@using FNBReservation.Portal.Models
 @using FNBReservation.Portal.Services
 @using FNBReservation.Portal.Components.Dialogs
 @inject ICustomerService CustomerService
@@ -215,13 +215,7 @@
         }
     </DialogContent>
     <DialogActions>
-        @if (customer != null && !customer.IsBanned)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="BanCustomer" Class="mr-auto">
-                BAN CUSTOMER
-            </MudButton>
-        }
+        
         <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="Close">CLOSE</MudButton>
     </DialogActions>
 </MudDialog>
@@ -241,13 +235,32 @@
 
     private CustomerDto? customer;
     private bool isLoading = true;
-    private string newNote = string.Empty;
     private string? outletId;
 
     protected override async Task OnInitializedAsync()
     {
         outletId = await GetCurrentOutletId();
         await LoadCustomerDetailsAsync();
+    }
+
+    private async Task<string> GetCurrentOutletId()
+    {
+        try
+        {
+            var outletId = await CurrentUserService.GetCurrentOutletIdAsync();
+            if (!string.IsNullOrEmpty(outletId))
+            {
+                return outletId;
+            }
+            
+            // If we can't get a valid outlet ID, use the sample outlet ID from the requirements
+            return "73a3ef70-e570-4edd-85d5-f7a2802bc008";
+        }
+        catch
+        {
+            // Fallback to sample outlet ID
+            return "73a3ef70-e570-4edd-85d5-f7a2802bc008";
+        }
     }
 
     private async Task LoadCustomerDetailsAsync()
@@ -257,19 +270,18 @@
             isLoading = true;
             StateHasChanged();
 
-            // Check if we're in admin view (no outletId) or staff view (has outletId)
             if (string.IsNullOrEmpty(outletId))
             {
-                customer = await CustomerService.GetCustomerByIdAsync(CustomerId);
+                Snackbar.Add("Outlet ID is required", Severity.Error);
+                MudDialog.Close();
+                return;
             }
-            else
-            {
-                customer = await CustomerService.GetOutletCustomerByIdAsync(outletId, CustomerId);
-            }
+
+            customer = await CustomerService.GetOutletCustomerByIdAsync(outletId, CustomerId);
 
             if (customer == null)
             {
-                Snackbar.Add("Customer not found", Severity.Error);
+                Snackbar.Add("Customer not found in outlet", Severity.Error);
                 MudDialog.Close();
                 return;
             }
@@ -277,7 +289,7 @@
             // Load reservation history
             if (customer.ReservationHistory == null || !customer.ReservationHistory.Any())
             {
-                var reservations = await CustomerService.GetCustomerReservationsAsync(CustomerId);
+                var reservations = await CustomerService.GetOutletCustomerReservationsAsync(outletId, CustomerId);
                 if (reservations != null)
                 {
                     customer.ReservationHistory = reservations.Select(r => new ReservationHistoryItem
@@ -304,27 +316,6 @@
             StateHasChanged();
         }
     }
-    
-    private async Task<string> GetCurrentOutletId()
-    {
-        try
-        {
-            // Use the injected CurrentUserService directly
-            var outletId = await CurrentUserService.GetCurrentOutletIdAsync();
-            if (!string.IsNullOrEmpty(outletId))
-            {
-                return outletId;
-            }
-            
-            // If we can't get a valid outlet ID, use the sample outlet ID from the requirements
-            return "73a3ef70-e570-4edd-85d5-f7a2802bc008";
-        }
-        catch
-        {
-            // Fallback to sample outlet ID
-            return "73a3ef70-e570-4edd-85d5-f7a2802bc008";
-        }
-    }
 
     private Color GetReservationStatusColor(string status)
     {
@@ -337,39 +328,6 @@
             "pending" => Color.Default,
             _ => Color.Default
         };
-    }
-
-    private string FormatNotes(string notes)
-    {
-        if (string.IsNullOrEmpty(notes))
-            return string.Empty;
-
-        // Remove any duplicate timestamps that appear right after each other
-        // Pattern: finds a timestamp followed immediately by another timestamp
-        var cleanedNotes = System.Text.RegularExpressions.Regex.Replace(
-            notes,
-            @"(\[\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\]\s+)\[\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\]",
-            "$1"
-        );
-
-        // Format timestamps and ban notes with different colors
-        var formattedNotes = System.Text.RegularExpressions.Regex.Replace(
-            cleanedNotes,
-            @"\[(.*?)\]",
-            match => $"<span style='color: #666666;'>{match.Value}</span>"
-        );
-
-        // Format ban notes with red color
-        formattedNotes = System.Text.RegularExpressions.Regex.Replace(
-            formattedNotes,
-            @"\[Ban Note\]",
-            match => $"<span style='color: #d32f2f;'>{match.Value}</span>"
-        );
-
-        // Replace newlines with <br> tags
-        formattedNotes = formattedNotes.Replace("\n", "<br />");
-
-        return formattedNotes;
     }
 
     private async Task BanCustomer()
@@ -393,43 +351,5 @@
         }
     }
 
-    private async Task SaveNote()
-    {
-        if (customer == null || string.IsNullOrWhiteSpace(newNote)) return;
-
-        try
-        {
-            // Create a formatted note with a single timestamp
-            string timestamp = DateTime.Now.ToString("d/M/yyyy h:mm:ss tt");
-            string formattedNote = $"[{timestamp}] {newNote}";
-
-            // In a real application, you'd send the note to the server
-            // Here we're just updating the local data
-            var success = await CustomerService.AddCustomerNoteAsync(customer.CustomerId, formattedNote);
-
-            if (success)
-            {
-                Snackbar.Add("Note saved successfully", Severity.Success);
-
-                // Reload the entire customer data to ensure we have the latest notes
-                customer = await CustomerService.GetCustomerByIdAsync(customer.CustomerId);
-
-                // Clear the note input
-                newNote = string.Empty;
-
-                // Force UI update
-                StateHasChanged();
-            }
-            else
-            {
-                Snackbar.Add("Failed to save note", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-    }
-
     private void Close() => MudDialog.Close();
-}
+} 

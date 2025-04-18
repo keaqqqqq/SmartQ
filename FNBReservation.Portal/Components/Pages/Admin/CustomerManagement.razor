@@ -528,7 +528,7 @@
             };
 
         var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<CustomerDetailsDialog>("Customer Details", parameters, options);
+        var dialog = await DialogService.ShowAsync<AdminCustomerDetailsDialog>("Customer Details", parameters, options);
         var result = await dialog.Result;
 
         // Refresh data after dialog is closed in case any changes were made
