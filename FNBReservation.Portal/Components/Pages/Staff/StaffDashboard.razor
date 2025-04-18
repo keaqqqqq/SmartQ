@@ -1392,7 +1392,7 @@
     {
         try
         {
-            // Show dialog to select from waiting queue
+            // Check if there are any customers in the queue
             if (_waitingQueue.Count == 0)
             {
                 Snackbar.Add("No customers in waiting queue", Severity.Info);
@@ -1406,44 +1406,63 @@
                 return;
             }
             
-            // Get the first customer in queue
-            var nextInQueue = _waitingQueue.FirstOrDefault();
-            if (nextInQueue == null)
-            {
-                Snackbar.Add("No customers in queue", Severity.Info);
-                return;
-            }
-            
             // Use outletId as fallback if outletUUID is empty
             var effectiveOutletId = !string.IsNullOrEmpty(_outletUUID) ? _outletUUID : _outletId;
             
-            await JS.InvokeVoidAsync("console.log", $"API CALL: GetTableRecommendationsAsync with outletId: {effectiveOutletId}, queueId: {nextInQueue.QueueId}");
+            Snackbar.Add("Analyzing best match for this table...", Severity.Info);
             
-            _currentRecommendations = await QueueService.GetTableRecommendationsAsync(effectiveOutletId, nextInQueue.QueueId);
-            
-            if (_currentRecommendations.Count > 0)
-            {
-                await JS.InvokeVoidAsync("console.log", $"Received {_currentRecommendations.Count} table recommendations");
+            // Find the most suitable customer based on party size match to table capacity
+            // Sort by the absolute difference between party size and table capacity
+            var optimalCustomer = _waitingQueue
+                .OrderBy(q => Math.Abs(q.PartySize - _selectedTable.Capacity))
+                .FirstOrDefault();
                 
-                // Get the best recommended table (first one in the list)
-                var bestRecommendation = _currentRecommendations.FirstOrDefault();
-                if (bestRecommendation != null)
-                {
-                    // Assign the recommended table to the customer
-                    await AssignTableToQueue(bestRecommendation.TableId, nextInQueue.QueueId);
-                    Snackbar.Add($"Assigned recommended table {bestRecommendation.TableNumber} to {nextInQueue.CustomerName}", Severity.Success);
-                }
-                else
-                {
-                    // If no recommendations, use the originally selected table
-                    await AssignTableToQueue(tableId, nextInQueue.QueueId);
-                }
+            if (optimalCustomer == null)
+            {
+                Snackbar.Add("No suitable customers found in the queue", Severity.Warning);
+                return;
+            }
+            
+            // Create a recommendation object
+            var recommendation = new
+            {
+                queueEntryId = optimalCustomer.QueueId,
+                queueCode = optimalCustomer.QueueCode,
+                customerName = optimalCustomer.CustomerName,
+                partySize = optimalCustomer.PartySize,
+                tableId = _selectedTable.TableId,
+                tableNumber = _selectedTable.TableNumber,
+                tableCapacity = _selectedTable.Capacity,
+                recommendationType = GetRecommendationType(optimalCustomer.PartySize, _selectedTable.Capacity),
+                recommendationMessage = GetRecommendationMessage(optimalCustomer.CustomerName, optimalCustomer.PartySize, _selectedTable.TableNumber, _selectedTable.Capacity)
+            };
+            
+            // Log the recommendation
+            await JS.InvokeVoidAsync("console.log", "Best match recommendation:", recommendation);
+            
+            // Show a confirmation dialog with the recommendation
+            var parameters = new DialogParameters
+            {
+                ["ContentText"] = recommendation.recommendationMessage,
+                ["ButtonText"] = "Assign Table",
+                ["Color"] = Color.Primary
+            };
+            
+            var dialog = await DialogService.ShowAsync<ConfirmDialog>("Table Recommendation", parameters);
+            var result = await dialog.Result;
+            
+            if (!result.Canceled)
+            {
+                // User accepted the recommendation
+                await JS.InvokeVoidAsync("console.log", $"User accepted recommendation, assigning table {_selectedTable.TableId} to customer {optimalCustomer.CustomerName}");
+                
+                // Assign the selected table to the customer
+                await AssignTableToQueue(_selectedTable.TableId, optimalCustomer.QueueId);
             }
             else
             {
-                Snackbar.Add("No suitable tables found for this customer. Using selected table instead.", Severity.Warning);
-                // Use the originally selected table
-                await AssignTableToQueue(tableId, nextInQueue.QueueId);
+                await JS.InvokeVoidAsync("console.log", "User rejected recommendation");
+                Snackbar.Add("Table assignment canceled", Severity.Info);
             }
         }
         catch (Exception ex)
@@ -1451,6 +1470,34 @@
             await JS.InvokeVoidAsync("console.log", $"Error in HandleTableRecommendation: {ex.Message}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
+    }
+    
+    private string GetRecommendationType(int partySize, int tableCapacity)
+    {
+        int diff = Math.Abs(partySize - tableCapacity);
+        
+        if (diff == 0)
+            return "Optimal";
+        else if (partySize <= tableCapacity && diff <= 2)
+            return "Good";
+        else if (partySize > tableCapacity && diff <= 1)
+            return "Tight";
+        else
+            return "Suboptimal";
+    }
+    
+    private string GetRecommendationMessage(string customerName, int partySize, string tableNumber, int tableCapacity)
+    {
+        int diff = Math.Abs(partySize - tableCapacity);
+        
+        if (diff == 0)
+            return $"Perfect match: {customerName} (party of {partySize}) perfectly fits table {tableNumber} capacity ({tableCapacity})";
+        else if (partySize < tableCapacity)
+            return $"Good match: {customerName} (party of {partySize}) can be seated at table {tableNumber} (capacity {tableCapacity})";
+        else if (partySize > tableCapacity && diff <= 1)
+            return $"Tight fit: {customerName} (party of {partySize}) might be a tight fit for table {tableNumber} (capacity {tableCapacity})";
+        else
+            return $"Suboptimal match: {customerName} (party of {partySize}) doesn't match well with table {tableNumber} (capacity {tableCapacity})";
     }
     
     private async Task AssignTableToQueue(string tableId, string queueId)

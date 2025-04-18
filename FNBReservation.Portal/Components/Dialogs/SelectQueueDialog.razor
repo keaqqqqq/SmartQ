@@ -1,43 +1,44 @@
+@using FNBReservation.Portal.Models
 @inject IJSRuntime JS
 @using MudBlazor.Utilities
 
 <MudDialog>
     <DialogContent>
-        <MudText Typo="Typo.h6" Class="mb-3">Select Customer for Recommendations</MudText>
-        
-        <MudText Typo="Typo.body2" Class="mb-4">
-            Select a customer to get table recommendations:
-        </MudText>
-        
-        <MudList Dense="true" DisableGutters="true" Class="pa-0" T="string">
-            @foreach (var queueEntry in WaitingQueue)
-            {
-                <MudListItem OnClick="@(() => SelectQueueEntry(queueEntry.QueueId))" Class="rounded-lg pa-2 mb-2" T="string"
-                            Style="@($"cursor: pointer; background-color: {(SelectedQueueId == queueEntry.QueueId ? "#f0f7ff" : "white")}")">
-                    <div class="d-flex align-center">
-                        <MudAvatar Color="Color.Primary" Class="mr-2">
-                            @queueEntry.CustomerName?.Substring(0, 1)
-                        </MudAvatar>
-                        <div>
-                            <MudText Typo="Typo.subtitle1">@queueEntry.CustomerName</MudText>
-                            <div class="d-flex align-center">
-                                <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                <MudText Typo="Typo.caption" Class="mr-3">@queueEntry.PartySize guests</MudText>
-                                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                <MudText Typo="Typo.caption">
-                                    Waiting: @GetQueueWaitingTime(queueEntry.QueuedAt)
-                                </MudText>
+        <MudContainer Style="max-width: 400px;">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">
+                Select a customer to get table recommendations
+            </MudText>
+            
+            <MudList Dense="false" Clickable="true" T="string">
+                @foreach (var queueEntry in WaitingQueue)
+                {
+                    <MudListItem OnClick="@(() => SelectQueueEntry(queueEntry.QueueId))" Class="rounded-lg pa-2 mb-2" T="string"
+                                Selected="@(SelectedQueueId == queueEntry.QueueId)">
+                        <div class="d-flex align-center">
+                            <MudAvatar Color="Color.Warning" Class="mr-3">
+                                @((!string.IsNullOrEmpty(queueEntry.CustomerName)) ? queueEntry.CustomerName.Substring(0, 1) : "?")
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.subtitle1">@queueEntry.CustomerName</MudText>
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Class="mr-1" />
+                                    <MudText Typo="Typo.caption" Class="mr-3">@queueEntry.PartySize guests</MudText>
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                    <MudText Typo="Typo.caption">
+                                        Waiting: @GetQueueWaitingTime(queueEntry.QueuedAt)
+                                    </MudText>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </MudListItem>
+                    </MudListItem>
+                }
+            </MudList>
+            
+            @if (WaitingQueue.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="my-2">No customers in waiting queue</MudAlert>
             }
-        </MudList>
-        
-        @if (WaitingQueue.Count == 0)
-        {
-            <MudAlert Severity="Severity.Info" Class="my-2">No customers in waiting queue</MudAlert>
-        }
+        </MudContainer>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
