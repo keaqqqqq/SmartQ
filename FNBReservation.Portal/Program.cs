@@ -163,13 +163,15 @@ builder.Services.AddScoped<IOutletService>(sp => {
     var jsRuntime = sp.GetRequiredService<IJSRuntime>();
     var configuration = sp.GetRequiredService<IConfiguration>();
     var peakHourService = sp.GetRequiredService<IPeakHourService>();
+    var tableService = sp.GetRequiredService<ITableService>();
     
     return new HttpClientOutletService(
         httpClientFactory.CreateClient("API"),
         jwtTokenService,
         jsRuntime,
         configuration,
-        peakHourService
+        peakHourService,
+        tableService
     );
 });
 

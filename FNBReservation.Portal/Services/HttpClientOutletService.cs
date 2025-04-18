@@ -15,15 +15,17 @@ namespace FNBReservation.Portal.Services
         private readonly string _baseUrl;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly IPeakHourService _peakHourService;
+        private readonly ITableService _tableService;
 
         public HttpClientOutletService(HttpClient httpClient, JwtTokenService jwtTokenService, 
-            IJSRuntime jsRuntime, IConfiguration configuration, IPeakHourService peakHourService)
+            IJSRuntime jsRuntime, IConfiguration configuration, IPeakHourService peakHourService, ITableService tableService)
         {
             _httpClient = httpClient;
             _jwtTokenService = jwtTokenService;
             _jsRuntime = jsRuntime;
             _baseUrl = configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5000/";
             _peakHourService = peakHourService;
+            _tableService = tableService;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -272,29 +274,54 @@ namespace FNBReservation.Portal.Services
                 {
                     await _jsRuntime.InvokeVoidAsync("console.log", "Outlet created successfully");
                     
-                    // If any peak hours were included, create them too
-                    if (outlet.PeakHours != null && outlet.PeakHours.Any())
+                    // Get the newly created outlet ID from the response
+                    var createdOutlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
+                    if (createdOutlet != null && !string.IsNullOrEmpty(createdOutlet.id))
                     {
-                        try
+                        // Create tables if any were included
+                        if (outlet.Tables != null && outlet.Tables.Any())
                         {
-                            // First get the newly created outlet ID from the response
-                            var createdOutlet = await response.Content.ReadFromJsonAsync<OutletDto>(_jsonOptions);
-                            if (createdOutlet != null && !string.IsNullOrEmpty(createdOutlet.id))
+                            try
                             {
-                                await _jsRuntime.InvokeVoidAsync("console.log", $"New outlet ID: {createdOutlet.id}, creating {outlet.PeakHours.Count} peak hours");
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"New outlet ID: {createdOutlet.id}, creating {outlet.Tables.Count} tables");
+                                
+                                foreach (var table in outlet.Tables)
+                                {
+                                    // Ensure the table is associated with the new outlet
+                                    table.OutletId = Guid.Parse(createdOutlet.id);
+                                    await _tableService.CreateTableAsync(Guid.Parse(createdOutlet.id), new CreateTableRequest
+                                    {
+                                        TableNumber = table.TableNumber,
+                                        Capacity = table.Capacity,
+                                        Section = table.Section,
+                                        IsActive = table.IsActive
+                                    });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating tables: {ex.Message}");
+                                // Don't fail the whole operation if table creation fails
+                            }
+                        }
+                        
+                        // If any peak hours were included, create them too
+                        if (outlet.PeakHours != null && outlet.PeakHours.Any())
+                        {
+                            try
+                            {
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"Creating {outlet.PeakHours.Count} peak hours");
                                 
                                 foreach (var peakHour in outlet.PeakHours)
                                 {
-                                    // Ensure the peak hour is associated with the new outlet
-                                    //peakHour.OutletId = createdOutlet.id;
                                     await _peakHourService.CreatePeakHourAsync(createdOutlet.id, peakHour);
                                 }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating peak hours: {ex.Message}");
-                            // Don't fail the whole operation if peak hours creation fails
+                            catch (Exception ex)
+                            {
+                                await _jsRuntime.InvokeVoidAsync("console.log", $"Error creating peak hours: {ex.Message}");
+                                // Don't fail the whole operation if peak hours creation fails
+                            }
                         }
                     }
                     
