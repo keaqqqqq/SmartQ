@@ -18,37 +18,33 @@ using FNBReservation.Modules.Queue.Infrastructure.Data;
 using FNBReservation.Modules.Queue.Infrastructure.Hubs;
 using FNBReservation.Modules.Notification.Infrastructure.Extensions;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-// Remove reference to non-existent class
-// using FNBReservation.SharedKernel.Health;
-using Microsoft.Extensions.Diagnostics.HealthChecks; // Added for HealthCheckOptions
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks; 
 using System.Text.Json;
+using StackExchange.Redis;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging first
-builder.Logging.ClearProviders(); // Clear default providers
-builder.Logging.AddConsole(); // Add console logger explicitly
-builder.Logging.AddDebug(); // Also log to debug output window
+builder.Logging.ClearProviders(); 
+builder.Logging.AddConsole(); 
+builder.Logging.AddDebug(); 
 
-// Set minimum log level to Information or Debug for more detailed logs
 builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-// Add custom console logger configuration
 builder.Services.Configure<ConsoleLoggerOptions>(options =>
 {
-    options.IncludeScopes = true; // Include log scopes
-    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] "; // Add timestamps to logs
+    options.IncludeScopes = true; 
+    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] "; 
 });
 
-// Configure appsettings.json logging (make sure this section exists in your appsettings.json)
-// This can be used to override log levels for specific categories
 builder.Configuration.GetSection("Logging");
 
-// Create a simple test log to verify configuration is working
 var startupLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger("Startup");
 startupLogger.LogInformation("======== APPLICATION STARTING ========");
 startupLogger.LogDebug("Debug logging is enabled");
+startupLogger.LogInformation("Instance ID: {InstanceId}",
+    Environment.GetEnvironmentVariable("INSTANCE_ID") ?? "local-dev");
 
 builder.Services.AddControllers();
 
@@ -56,10 +52,38 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
-    options.MaximumReceiveMessageSize = 102400; // 100 KB
+    options.MaximumReceiveMessageSize = 102400;
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
     options.KeepAliveInterval = TimeSpan.FromSeconds(30);
     options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+})
+.AddStackExchangeRedis(builder.Configuration.GetConnectionString("Redis"), options =>
+ {
+     options.Configuration.ChannelPrefix = "fnbreservation";
+ });
+
+// Add distributed cache with Redis
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "fnbreservation:";
+});
+
+// Add rate limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        return RateLimitPartition.GetFixedWindowLimiter("GlobalLimiter",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1)
+            });
+    });
 });
 
 // Add HttpContextAccessor for accessing HttpContext in services
@@ -214,11 +238,16 @@ builder.Services.AddCors(options =>
 
 // Add DB Contexts
 builder.Services.AddDbContext<FNBDbContext>(options =>
+{
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
-    )
-);
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection")),
+        mySqlOptions => mySqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null)
+    );
+});
 
 // Register modules
 builder.Services.AddAuthenticationModule(builder.Configuration);
@@ -246,7 +275,28 @@ builder.Services.AddHealthChecks()
             return HealthCheckResult.Unhealthy("Database connection failed", ex);
         }
     },
-    tags: new[] { "ready", "db" });
+    tags: new[] { "ready", "db" })
+    .AddCheck("redis", () =>
+     {
+         try
+         {
+             var redisConnection = builder.Configuration.GetConnectionString("Redis");
+             if (string.IsNullOrEmpty(redisConnection))
+             {
+                 return HealthCheckResult.Degraded("Redis connection string is not configured");
+             }
+
+             var redis = ConnectionMultiplexer.Connect(redisConnection);
+             var db = redis.GetDatabase();
+             // Simple ping test
+             db.Ping();
+             return HealthCheckResult.Healthy("Redis connection is healthy");
+         }
+         catch (Exception ex)
+         {
+             return HealthCheckResult.Unhealthy("Redis connection failed", ex);
+         }
+     }, tags: new[] { "ready", "cache" });
 
 // Build the application
 var app = builder.Build();
@@ -362,6 +412,7 @@ app.Use(async (context, next) =>
         throw;
     }
 });
+app.UseRateLimiter();
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");

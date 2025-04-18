@@ -1,32 +1,31 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
-
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.0" />
-    <PackageReference Include="AspNetCore.HealthChecks.UI.Client" Version="8.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.2" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Controllers\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\FNBReservation.Modules.Authentication.API\FNBReservation.Modules.Authentication.API.csproj" />
-    <ProjectReference Include="..\FNBReservation.Modules.Customer.API\FNBReservation.Modules.Customer.API.csproj" />
-    <ProjectReference Include="..\FNBReservation.Modules.Outlet.API\FNBReservation.Modules.Outlet.API.csproj" />
-	<ProjectReference Include="..\FNBReservation.Modules.Reservation.API\FNBReservation.Modules.Reservation.API.csproj" />
-	<ProjectReference Include="..\FNBReservation.Modules.Queue.API\FNBReservation.Modules.Queue.API.csproj" />
-  </ItemGroup>
-
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="AspNetCore.HealthChecks.MySql" Version="8.0.0" />
+		<PackageReference Include="AspNetCore.HealthChecks.UI.Client" Version="8.0.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.2" />
+		<PackageReference Include="StackExchange.Redis" Version="2.8.31" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.1" />
+		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.0" />
+	</ItemGroup>
+	<ItemGroup>
+		<Folder Include="Controllers\" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\FNBReservation.Modules.Authentication.API\FNBReservation.Modules.Authentication.API.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Customer.API\FNBReservation.Modules.Customer.API.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Outlet.API\FNBReservation.Modules.Outlet.API.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Reservation.API\FNBReservation.Modules.Reservation.API.csproj" />
+		<ProjectReference Include="..\FNBReservation.Modules.Queue.API\FNBReservation.Modules.Queue.API.csproj" />
+	</ItemGroup>
 </Project>
