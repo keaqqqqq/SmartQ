@@ -11,6 +11,7 @@
 @inject CurrentUserService CurrentUserService
 @inject IOutletService OutletService
 @inject ITableService TableService
+@inject IQueueService QueueService
 @rendermode InteractiveServer
 
 
@@ -494,18 +495,18 @@
                     {
                         @for (int i = 0; i < _waitingQueue.Count; i++)
                         {
-                            var customer = _waitingQueue[i];
+                            var queueEntry = _waitingQueue[i];
                             var index = i; // Capture for lambda
 
                             <MudPaper Elevation="3" Class="mb-3 rounded-lg overflow-hidden" Style="background-color: #FFF6E5;">
                                 <div class="position-relative">
                                     <!-- Queue Number and Tag -->
                                     <div class="d-flex align-center px-3 py-2" Style="background-color: #FFA726;">
-                                        <MudText Typo="Typo.h6" Style="color: white;">@customer.CustomerName</MudText>
+                                        <MudText Typo="Typo.h6" Style="color: white;">@queueEntry.CustomerName</MudText>
                                         <MudSpacer />
                                         <div class="d-flex align-center">
                                             <MudChip Size="Size.Small" T="string" Color="Color.Default" Style="background-color: white; color: #212121; font-weight: bold;">
-                                                @customer.QueueNumber
+                                                @queueEntry.QueueCode
                                             </MudChip>
                                             @if (i == 0)
                                             {
@@ -519,24 +520,35 @@
                                         <div class="d-flex justify-space-between align-center mb-2">
                                             <div class="d-flex align-center">
                                                 <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="mr-1" />
-                                                <MudText Typo="Typo.body1">@customer.PartySize guests</MudText>
+                                                <MudText Typo="Typo.body1">@queueEntry.PartySize guests</MudText>
                                             </div>
                                             <div class="d-flex align-center">
                                                 <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
-                                                <MudText Typo="Typo.body1" Style="font-weight: bold; color: #E65100;">@customer.WaitTime</MudText>
+                                                <MudText Typo="Typo.body1" Style="font-weight: bold; color: #E65100;">
+                                                    @GetQueueWaitingTime(queueEntry.QueuedAt) / @queueEntry.EstimatedWaitMinutes min
+                                                </MudText>
                                             </div>
                                         </div>
 
                                         <div class="d-flex align-center">
                                             <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-1" />
-                                            <MudText Typo="Typo.body2">@customer.PhoneNumber</MudText>
+                                            <MudText Typo="Typo.body2">@queueEntry.CustomerPhone</MudText>
                                         </div>
 
-                                        <div class="d-flex justify-end gap-2 mt-2">
-                                            <MudIconButton Icon="@Icons.Material.Filled.Message" Color="Color.Primary" Size="Size.Small"
-                                                           OnClick="@(() => SendMessage(index))" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                                           OnClick="@(() => RemoveFromQueue(index))" />
+                                        @if (!string.IsNullOrEmpty(queueEntry.Notes))
+                                        {
+                                            <div class="d-flex align-center mt-2">
+                                                <MudIcon Icon="@Icons.Material.Filled.Notes" Size="Size.Small" Class="mr-1" />
+                                                <MudText Typo="Typo.caption" Style="font-style: italic;">@queueEntry.Notes</MudText>
+                                            </div>
+                                        }
+
+                                        <div class="d-flex justify-end mt-2">
+                                            <MudButton Variant="Variant.Filled" Color="Color.Error" 
+                                                      Size="Size.Small" StartIcon="@Icons.Material.Filled.Delete"
+                                                      OnClick="@(() => RemoveFromQueue(index))">
+                                                Remove
+                                            </MudButton>
                                         </div>
                                     </div>
                                 </div>
@@ -562,7 +574,7 @@
     private int _totalTables = 20; // Default value
     private List<ReservationDto> _todayReservations = new List<ReservationDto>();
     private List<TableTypeInfo> _reservationTables = new List<TableTypeInfo>();
-    private List<QueueCustomer> _waitingQueue = new List<QueueCustomer>();
+    private List<QueueEntryDto> _waitingQueue = new List<QueueEntryDto>();
     private bool _isFirstRender = true;
     private Exception _loadingError = null;
     
@@ -742,12 +754,15 @@
                 
                 // Refresh table data
                 await LoadTables();
+                
+                // Refresh queue data
+                await LoadQueueData();
             }
         }
         catch (Exception ex)
         {
             await JS.InvokeVoidAsync("console.log", $"Error refreshing data: {ex.Message}");
-            Snackbar.Add($"Error loading reservation data: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -760,7 +775,16 @@
     {
         if (checkInTime == null) return "Unknown";
         
-        var elapsed = DateTime.Now - checkInTime.Value;
+        // Subtract 8 hours from current time for time zone adjustment
+        var adjustedCurrentTime = DateTime.Now.AddHours(-8);
+        var elapsed = adjustedCurrentTime - checkInTime.Value;
+        
+        // Handle negative elapsed time
+        if (elapsed.TotalSeconds < 0)
+        {
+            return "0h 0m";
+        }
+        
         return $"{elapsed.Hours}h {elapsed.Minutes}m";
     }
     
@@ -827,55 +851,98 @@
         if (_waitingQueue.Count == 0) return "0m";
 
         int totalMinutes = 0;
-        foreach (var customer in _waitingQueue)
+        foreach (var entry in _waitingQueue)
         {
-            totalMinutes += int.Parse(customer.WaitTime.TrimEnd('m'));
+            totalMinutes += entry.EstimatedWaitMinutes;
         }
 
         return $"{totalMinutes / _waitingQueue.Count}m";
     }
 
-    private async Task SendMessage(int queueIndex)
+    private async Task RemoveFromQueue(int queueIndex)
     {
         if (queueIndex < 0 || queueIndex >= _waitingQueue.Count) return;
         
-        var customer = _waitingQueue[queueIndex];
+        var queueEntry = _waitingQueue[queueIndex];
         
-        var parameters = new DialogParameters
+        try
         {
-            { "PhoneNumber", customer.PhoneNumber },
-            { "CustomerName", customer.CustomerName }
-        };
-        
-        var options = new DialogOptions 
-        { 
-            CloseOnEscapeKey = true,
-            MaxWidth = MaxWidth.Small,
-            FullWidth = true 
-        };
-        
-        
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {_outletId}, queueId: {queueEntry.QueueId}");
+            
+            // Call API to cancel queue entry
+            bool success = await QueueService.CancelQueueEntryAsync(_outletId, queueEntry.QueueId);
+            
+            if (success)
+            {
+                // If API call successful, remove from local list and notify
+                _waitingQueue.RemoveAt(queueIndex);
+                Snackbar.Add($"{queueEntry.CustomerName} has been removed from the queue.", Severity.Success);
+        StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Failed to remove customer from queue. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error removing from queue: {ex.Message}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
     }
 
-    private void RemoveFromQueue(int queueIndex)
+    // Add new method to load queue data
+    private async Task LoadQueueData()
     {
-        if (queueIndex < 0 || queueIndex >= _waitingQueue.Count) return;
-        
-        var customer = _waitingQueue[queueIndex];
-        _waitingQueue.RemoveAt(queueIndex);
-        
-        Snackbar.Add($"{customer.CustomerName} has been removed from the queue.", Severity.Info);
-        StateHasChanged();
+        try
+        {
+            // Use outletId instead of outletUUID for API calls to maintain consistency
+            if (string.IsNullOrEmpty(_outletId))
+            {
+                await JS.InvokeVoidAsync("console.log", "Outlet ID is null or empty, cannot load queue data.");
+                return;
+            }
+            
+            await JS.InvokeVoidAsync("console.log", $"API CALL: GetWaitingQueueByOutletIdAsync with outletId: {_outletId}");
+            
+            // Call the API to get waiting queue using outletId
+            var queueEntries = await QueueService.GetWaitingQueueByOutletIdAsync(_outletId);
+            
+            await JS.InvokeVoidAsync("console.log", $"API RESPONSE: Received {queueEntries.Count} queue entries");
+            
+            // Update waiting queue list
+            _waitingQueue = queueEntries;
+            
+            // Log the first queue entry if there are any
+            if (_waitingQueue.Count > 0)
+            {
+                await JS.InvokeVoidAsync("console.log", $"First queue entry: ID={_waitingQueue[0].QueueId}, Customer={_waitingQueue[0].CustomerName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.log", $"Error loading queue data: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                await JS.InvokeVoidAsync("console.log", $"Inner exception: {ex.InnerException.Message}");
+            }
+            Snackbar.Add($"Error loading queue data: {ex.Message}", Severity.Error);
+        }
     }
-    
-    // Model class for the queue
-    public class QueueCustomer
+
+    // Add new method to calculate waiting time from QueuedAt
+    private string GetQueueWaitingTime(DateTime queuedAt)
     {
-        public string CustomerName { get; set; } = string.Empty;
-        public string PhoneNumber { get; set; } = string.Empty;
-        public int PartySize { get; set; }
-        public string QueueNumber { get; set; } = string.Empty;
-        public string? SeatedTime { get; set; }
-        public string WaitTime { get; set; } = string.Empty;
+        // Subtract 8 hours from current time for time zone adjustment
+        var adjustedCurrentTime = DateTime.Now.AddHours(-8);
+        var elapsed = adjustedCurrentTime - queuedAt;
+        
+        // Handle negative elapsed time
+        if (elapsed.TotalSeconds < 0)
+        {
+            return "0h 0m";
+        }
+        
+        return $"{elapsed.Hours}h {elapsed.Minutes}m";
     }
 }

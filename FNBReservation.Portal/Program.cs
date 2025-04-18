@@ -202,6 +202,18 @@ builder.Services.AddScoped<ITableService>(sp =>
     return new TableService(httpClientFactory.CreateClient("API"), configuration, jwtTokenService, logger);
 });
 
+// Register QueueService
+builder.Services.AddScoped<IQueueService>(sp =>
+{
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var jwtTokenService = sp.GetRequiredService<JwtTokenService>();
+    var logger = sp.GetRequiredService<ILogger<QueueService>>();
+    
+    // Use the API client that has the auth handler configured
+    return new QueueService(httpClientFactory.CreateClient("API"), configuration, jwtTokenService, logger);
+});
+
 // Register other mock services
 builder.Services.AddScoped<IStaffService>(sp => {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
