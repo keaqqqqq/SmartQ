@@ -15,7 +15,7 @@ namespace FNBReservation.Portal.Services
     public interface IQueueService
     {
         Task<List<QueueEntryDto>> GetWaitingQueueByOutletIdAsync(string outletId);
-        Task<bool> CancelQueueEntryAsync(string outletId, string queueId);
+        Task<bool> CancelQueueEntryAsync(string outletId, string queueId, string reason = "No-show");
     }
     
     public class QueueService : IQueueService
@@ -149,17 +149,23 @@ namespace FNBReservation.Portal.Services
             }
         }
         
-        public async Task<bool> CancelQueueEntryAsync(string outletId, string queueId)
+        public async Task<bool> CancelQueueEntryAsync(string outletId, string queueId, string reason = "No-show")
         {
             try
             {
                 await EnsureAuthorizationHeaderAsync();
                 
-                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/{queueId}";
-                _logger?.LogInformation($"Canceling queue entry: {url}");
+                var url = $"{_baseApiUrl}/api/v1/outlets/{outletId}/queue/{queueId}/cancel";
+                _logger?.LogInformation($"Canceling queue entry: {url} with reason: {reason}");
                 
-                var request = new HttpRequestMessage(HttpMethod.Delete, url);
-                var response = await _httpClient.SendAsync(request);
+                // Create content with reason
+                var content = new StringContent(
+                    JsonSerializer.Serialize(new { reason = reason }), 
+                    System.Text.Encoding.UTF8, 
+                    "application/json");
+                
+                // Use POST instead of DELETE for the cancel endpoint
+                var response = await _httpClient.PostAsync(url, content);
                 
                 _logger?.LogInformation($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
                 

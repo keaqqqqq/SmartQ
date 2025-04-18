@@ -867,17 +867,17 @@
         
         try
         {
-            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {_outletId}, queueId: {queueEntry.QueueId}");
+            await JS.InvokeVoidAsync("console.log", $"API CALL: CancelQueueEntryAsync with outletId: {_outletId}, queueId: {queueEntry.QueueId}, reason: No-show");
             
-            // Call API to cancel queue entry
-            bool success = await QueueService.CancelQueueEntryAsync(_outletId, queueEntry.QueueId);
+            // Call API to cancel queue entry with the "No-show" reason
+            bool success = await QueueService.CancelQueueEntryAsync(_outletId, queueEntry.QueueId, "No-show");
             
             if (success)
             {
                 // If API call successful, remove from local list and notify
                 _waitingQueue.RemoveAt(queueIndex);
                 Snackbar.Add($"{queueEntry.CustomerName} has been removed from the queue.", Severity.Success);
-        StateHasChanged();
+                StateHasChanged();
             }
             else
             {
